@@ -1,0 +1,41 @@
+import fs from 'fs';
+import path from 'path';
+import OpenAI from 'openai';
+
+const accountSid = process.env.TWILIO_ACCOUNT_SID || '';
+const authToken = process.env.TWILIO_AUTH_TOKEN || '';
+
+function extensionFromContentType(contentType: string | undefined): string {
+  if (!contentType) return '';
+  if (contentType.includes('jpeg')) return '.jpg';
+  if (contentType.includes('png')) return '.png';
+  if (contentType.includes('webp')) return '.webp';
+  if (contentType.includes('gif')) return '.gif';
+  return '';
+}
+
+export async function downloadTwilioMedia(url: string, dir: string, suggestedExt?: string): Promise<string> {
+  if (!accountSid || !authToken) throw new Error('Twilio credentials missing');
+  const authHeader = 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+  const res = await fetch(url, { headers: { Authorization: authHeader } });
+  if (!res.ok) throw new Error(`Failed to download media: ${res.status}`);
+  const ct = res.headers.get('content-type') || undefined;
+  const ext = suggestedExt || extensionFromContentType(ct) || path.extname(new URL(url).pathname) || '';
+  const filename = `twilio_${Date.now()}${ext}`;
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const filePath = path.join(dir, filename);
+  const buf = Buffer.from(await res.arrayBuffer());
+  fs.writeFileSync(filePath, buf);
+  return filePath;
+}
+
+export async function uploadImageToOpenAI(filePath: string): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
+  const client = new OpenAI({ apiKey });
+  const stream = fs.createReadStream(filePath);
+  const uploaded = await client.files.create({ file: stream as any, purpose: 'vision' as any });
+  return (uploaded as any).id as string;
+}
+
+

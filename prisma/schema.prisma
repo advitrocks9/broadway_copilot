@@ -1,0 +1,106 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String          @id @default(cuid())
+  waId          String          @unique
+  createdAt     DateTime        @default(now())
+  uploads       Upload[]
+  wardrobe      WardrobeItem[]
+  turns         Turn[]
+
+  // Inferred profile
+  inferredGender  String?
+
+  // Confirmed profile
+  confirmedGender  String?
+
+  // Activity timestamps
+  lastVibeCheckAt     DateTime?
+  lastColorAnalysisAt DateTime?
+}
+
+model Turn {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  role      String
+  text      String?
+  imagePath String?
+  fileId    String?
+  intent    String?
+  choices   Json?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model Upload {
+  id         String   @id @default(cuid())
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String
+  imagePath  String
+  fileId     String?
+  createdAt  DateTime @default(now())
+  vibeCheck  VibeCheck?
+  color      ColorAnalysis?
+}
+
+model VibeCheck {
+  id        String  @id @default(cuid())
+  upload    Upload  @relation(fields: [uploadId], references: [id])
+  uploadId  String  @unique
+  fit_silhouette      Float?
+  color_harmony       Float?
+  styling_details     Float?
+  accessories_texture Float?
+  context_confidence  Float?
+  overall_score       Float?
+  comment             String
+  rawJson             Json
+}
+
+model ColorAnalysis {
+  id        String  @id @default(cuid())
+  upload    Upload  @relation(fields: [uploadId], references: [id])
+  uploadId  String  @unique
+  skin_tone String?
+  eye_color String?
+  hair_color String?
+  top3_colors Json
+  avoid3_colors Json
+  rawJson   Json
+}
+
+model WardrobeItem {
+  id        String  @id @default(cuid())
+  user      User    @relation(fields: [userId], references: [id])
+  userId    String
+  name      String
+  nameLower String
+  category  String
+  colors    Json
+  type      String
+  subtype   String?
+  attributes Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, nameLower, category])
+}
+// add some user/turn id
+model ModelTrace {
+  id          String  @id @default(cuid())
+  uploadId    String?
+  kind        String
+  rawRequest  Json
+  rawResponse Json
+  createdAt   DateTime @default(now())
+}
+
