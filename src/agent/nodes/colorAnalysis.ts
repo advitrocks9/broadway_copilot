@@ -1,28 +1,29 @@
 import { RunInput } from '../state';
 import prisma from '../../db/client';
 import { loadPrompt } from '../../utils/prompts';
-import { ChatOpenAI } from '@langchain/openai';
 import { z } from 'zod';
 import { ColorAnalysis, ColorAnalysisSchema } from '../../types/contracts';
 import { formatColorReplySummary } from '../../utils/text';
-import { uploadImageToOpenAI } from '../../services/mediaService';
+import { getVisionLLM } from '../../utils/llm';
+import { ensureVisionFileId, persistUpload } from '../../utils/media';
 
 /**
  * Performs color analysis from a portrait and returns a text reply; logs and persists results.
  */
 
 export async function colorAnalysisNode(state: { input: RunInput; intent?: string }): Promise<{ reply: { reply_type: 'text'; reply_text: string }; postAction: 'followup' }>{
-  const llm = new ChatOpenAI({ model: "gpt-5", useResponsesApi: true, reasoning: { effort: "minimal" } });
+  const llm = getVisionLLM();
   const { input, intent } = state;
   const imagePath = input.imagePath as string;
-  const ensuredFileId = input.fileId || (imagePath ? await uploadImageToOpenAI(imagePath) : undefined);
-  const upload = await prisma.upload.create({ data: { userId: input.userId, imagePath, fileId: ensuredFileId || null } });
+  const ensuredFileId = await ensureVisionFileId(imagePath, input.fileId);
+  const upload = await persistUpload(input.userId, imagePath, ensuredFileId);
   const schema = ColorAnalysisSchema as unknown as z.ZodType<ColorAnalysis>;
   const prompt = loadPrompt('color_analysis.txt');
   type VisionPart = { type: 'input_text'; text: string } | { type: 'input_image'; file_id: string; detail?: 'auto' | 'low' | 'high' };
   type VisionContent = string | VisionPart[];
   const content: Array<{ role: 'system' | 'user'; content: VisionContent }> = [
     { role: 'system', content: prompt },
+    { role: 'system', content: `UserGender: ${input.gender ?? 'unknown'} (adjust color guidance if relevant).` },
     { role: 'system', content: `Intent: ${intent || 'color_analysis'}` },
     { role: 'user', content: [ { type: 'input_image', file_id: ensuredFileId as string, detail: 'high' } ] },
   ];

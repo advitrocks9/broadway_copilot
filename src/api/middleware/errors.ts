@@ -15,7 +15,7 @@ export function errorHandler(err: any, _req: Request, res: Response, _next: Next
     const stack = err?.stack || '';
     console.error('Express error handler:', { status, message, stack, err });
   } catch (_) {
-    // no-op
+    
   }
   res.status(status).json({ error: { status, message } });
 }

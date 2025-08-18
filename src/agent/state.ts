@@ -18,11 +18,10 @@ export type RunInput = {
   userId: string;
   waId: string;
   text?: string;
-  // Local path where we stored the image, not used for model input
   imagePath?: string;
-  // OpenAI Files API id for the uploaded image
   fileId?: string;
   buttonPayload?: string;
+  gender?: 'male' | 'female' | null;
 };
 
 export type RunOutput = { replyText: string; mode?: 'text' | 'menu' | 'card' };

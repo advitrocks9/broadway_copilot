@@ -1,14 +1,14 @@
-import { ChatOpenAI } from '@langchain/openai';
 import { RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
+import { getNanoLLM } from '../../utils/llm';
 
 /**
  * Suggests actionable style improvements; outputs text reply_type.
  */
 
 export async function handleSuggestNode(state: { input: RunInput; messages?: unknown[]; intent?: string }): Promise<{ reply: { reply_type: 'text'; reply_text: string }; postAction: 'followup' }>{
-  const llm = new ChatOpenAI({ model: 'gpt-5-nano', useResponsesApi: true , reasoning: { effort: "minimal" }  });
+  const llm = getNanoLLM();
   const { input } = state;
   const messages = (state.messages as unknown[]) || [];
   const question = input.text || 'Suggestions to improve the outfit?';
@@ -16,6 +16,7 @@ export async function handleSuggestNode(state: { input: RunInput; messages?: unk
   const systemPrompt = loadPrompt('handle_suggest.txt');
   const prompt: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: systemPrompt },
+    { role: 'system', content: `UserGender: ${input.gender ?? 'unknown'} (recommendations should reflect this when relevant).` },
     { role: 'system', content: `Intent: ${intent || 'suggest'}` },
     { role: 'system', content: `Conversation: ${JSON.stringify(messages)}` },
     { role: 'user', content: question },

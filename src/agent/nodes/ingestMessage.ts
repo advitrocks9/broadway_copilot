@@ -1,16 +1,13 @@
 import prisma from '../../db/client';
 import { getOrCreateUserByWaId } from '../../services/userService';
-import { downloadTwilioMedia, uploadImageToOpenAI } from '../../services/mediaService';
+import { downloadTwilioMedia } from '../../services/mediaService';
 import { userUploadDir } from '../../utils/paths';
 import { RunInput } from '../state';
 import { fetchLatestConversationMessages } from '../tools';
+import { ensureVisionFileId } from '../../utils/media';
 
 /**
- * Ingests the verified Twilio webhook payload and normalizes it into the agent's internal RunInput.
- * - Ensures the user exists
- * - Downloads media (if present)
- * - Creates a 'user' turn
- * - Returns { input: RunInput, userTurnId }
+ * Normalizes Twilio webhook payload into RunInput and records a user turn.
  */
 type IngestState = { input: Record<string, unknown> };
 
@@ -35,7 +32,7 @@ export async function ingestMessageNode(state: IngestState): Promise<{ input?: R
     try {
       const dir = userUploadDir(waId.replace(/[^\w+]/g, '_'));
       imagePath = await downloadTwilioMedia(mediaUrl0, dir);
-      fileId = await uploadImageToOpenAI(imagePath);
+      fileId = await ensureVisionFileId(imagePath);
     } catch (err) {
       return { reply: 'I had a problem downloading the image. Please try again.' };
     }
@@ -58,9 +55,9 @@ export async function ingestMessageNode(state: IngestState): Promise<{ input?: R
     imagePath,
     fileId,
     buttonPayload,
+    gender: (user.confirmedGender as 'male' | 'female' | null) ?? (user.inferredGender as 'male' | 'female' | null) ?? null,
   };
 
-  // Hydrate last 6 user + 6 assistant messages once for the whole graph
   const { messages } = await fetchLatestConversationMessages(user.id);
 
   return { input: normalized, userTurnId: userTurn.id, messages };

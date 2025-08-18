@@ -12,6 +12,7 @@ import { checkImageNode } from './nodes/checkImage';
 import { handleGeneralNode } from './nodes/handleGeneral';
 import { wardrobeIndexNode } from './nodes/wardrobeIndex';
 import { ingestMessageNode } from './nodes/ingestMessage';
+import { inferProfileNode } from './nodes/inferProfile';
 import { handleSuggestNode } from './nodes/handleSuggest';
 import { sendReplyNode } from './nodes/sendReply';
 
@@ -33,6 +34,7 @@ let compiledApp: any | null = null;
 export function buildAgentGraph() {
   const graph = new StateGraph(GraphAnnotation)
     .addNode('ingest_message', ingestMessageNode)
+    .addNode('infer_profile', inferProfileNode)
     .addNode('route_intent', routeIntent)
     .addNode('ask_user_info', askUserInfoNode)
     .addNode('handle_occasion', handleOccasionNode)
@@ -47,7 +49,8 @@ export function buildAgentGraph() {
     .addNode('handle_general', handleGeneralNode)
     .addNode('send_reply', sendReplyNode)
     .addEdge(START, 'ingest_message')
-    .addEdge('ingest_message', 'route_intent')
+    .addEdge('ingest_message', 'infer_profile')
+    .addEdge('infer_profile', 'route_intent')
     .addConditionalEdges('route_intent', (s: any) => s.next || 'handle_general', {
       handle_general: 'handle_general',
       handle_occasion: 'handle_occasion',

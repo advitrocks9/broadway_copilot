@@ -1,4 +1,4 @@
-import { ChatOpenAI } from '@langchain/openai';
+import { getNanoLLM } from '../../utils/llm';
 import { IntentLabel, RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
@@ -10,7 +10,7 @@ import { z } from 'zod';
 type RouterOutput = { intent: IntentLabel; gender_required: boolean };
 
 export async function routeIntent(state: { input: RunInput; messages?: unknown[] }): Promise<{ intent: IntentLabel; missingProfileFields: Array<'gender'>; next: string }>{
-  const llm = new ChatOpenAI({ model: 'gpt-5-nano', useResponsesApi: true , reasoning: { effort: "minimal" }  });
+  const llm = getNanoLLM();
   const input = state.input;
   const systemPrompt = loadPrompt('route_intent.txt');
 
@@ -32,7 +32,8 @@ export async function routeIntent(state: { input: RunInput; messages?: unknown[]
   console.log('🧭 [ROUTE_INTENT:OUTPUT]', res);
 
   const { intent, gender_required } = res;
-  const missingProfileFields = gender_required ? (['gender'] as Array<'gender'>) : [];
+  const hasGender = input.gender === 'male' || input.gender === 'female';
+  const missingProfileFields = gender_required && !hasGender ? (['gender'] as Array<'gender'>) : [];
 
   let next = 'handle_general';
   if (missingProfileFields.length > 0) {

@@ -1,14 +1,14 @@
-import { ChatOpenAI } from '@langchain/openai';
 import { RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
+import { getNanoLLM } from '../../utils/llm';
 
 /**
  * Asks the user for required profile fields and returns a text reply.
  */
 
 export async function askUserInfoNode(state: { input: RunInput; messages?: unknown[]; intent?: string; missingProfileFields?: Array<'gender'> }): Promise<{ reply: { reply_type: 'text'; reply_text: string } }>{
-  const llm = new ChatOpenAI({ model: 'gpt-5-nano', useResponsesApi: true , reasoning: { effort: "minimal" }  });
+  const llm = getNanoLLM();
   const { input } = state;
   const missing: Array<'gender'> = state.missingProfileFields || [];
   const convo = (state.messages as unknown[]) || [];

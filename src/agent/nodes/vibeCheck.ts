@@ -1,26 +1,27 @@
 import { RunInput } from '../state';
 import prisma from '../../db/client';
 import { loadPrompt } from '../../utils/prompts';
-import { ChatOpenAI } from '@langchain/openai';
 import { z } from 'zod';
 import { OutfitRatingGood, OutfitRatingGoodSchema } from '../../types/contracts';
-import { uploadImageToOpenAI } from '../../services/mediaService';
+import { getVisionLLM } from '../../utils/llm';
+import { ensureVisionFileId, persistUpload } from '../../utils/media';
 
 /**
  * Rates outfit from an image and returns a concise text summary; logs and persists results.
  */
 export async function vibeCheckNode(state: { input: RunInput; intent?: string }): Promise<{ reply: { reply_type: 'text'; reply_text: string }; postAction: 'followup' }>{
-  const llm = new ChatOpenAI({ model: 'gpt-5', useResponsesApi: true , reasoning: { effort: "minimal" }  });
+  const llm = getVisionLLM();
   const { input, intent } = state;
   const imagePath = input.imagePath as string;
-  const ensuredFileId = input.fileId || (imagePath ? await uploadImageToOpenAI(imagePath) : undefined);
-  const upload = await prisma.upload.create({ data: { userId: input.userId, imagePath, fileId: ensuredFileId || null } });
+  const ensuredFileId = await ensureVisionFileId(imagePath, input.fileId);
+  const upload = await persistUpload(input.userId, imagePath, ensuredFileId);
   const schema = OutfitRatingGoodSchema as unknown as z.ZodType<OutfitRatingGood>;
   const prompt = loadPrompt('vibe_check.txt');
   type VisionPart = { type: 'input_text'; text: string } | { type: 'input_image'; file_id: string; detail?: 'auto' | 'low' | 'high' };
   type VisionContent = string | VisionPart[];
   const content: Array<{ role: 'system' | 'user'; content: VisionContent }> = [
     { role: 'system', content: prompt },
+    { role: 'system', content: `UserGender: ${input.gender ?? 'unknown'} (reflect in fit notes when applicable).` },
     { role: 'system', content: `Intent: ${intent || 'vibe_check'}` },
     { role: 'user', content: [ { type: 'input_image', file_id: ensuredFileId as string, detail: 'high' } ] },
   ];

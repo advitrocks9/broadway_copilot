@@ -10,8 +10,9 @@ export async function fetchRecentTurns(userId: string, limit = 12) {
   return turns.reverse();
 }
 
-
-// Tool 1: Query the user's wardrobe items as JSON
+/**
+ * Returns wardrobe items for a user.
+ */
 export async function queryWardrobe(userId: string) {
   const items = await prisma.wardrobeItem.findMany({
     where: { userId },
@@ -30,7 +31,9 @@ export async function queryWardrobe(userId: string) {
   return { items };
 }
 
-// Tool 2: Query the user's latest color analysis as JSON (if any)
+/**
+ * Returns the latest color analysis for a user, if any.
+ */
 export async function queryColors(userId: string) {
   const uploadsWithColor = await prisma.upload.findMany({
     where: { userId, color: { isNot: null } },
@@ -42,7 +45,9 @@ export async function queryColors(userId: string) {
   return { latestColorAnalysis: latest };
 }
 
-// Tool 3: Fetch latest conversation messages for model consumption.
+/**
+ * Builds a compact transcript of the last 6 user and 6 assistant messages.
+ */
 export async function fetchLatestConversationMessages(userId: string) {
   const recent = await prisma.turn.findMany({
     where: { userId },
@@ -80,9 +85,7 @@ export async function fetchLatestConversationMessages(userId: string) {
     if (userCount >= 6 && assistantCount >= 6) break;
   }
 
-  // Sort chronologically before returning
   collected.sort((a, b) => new Date(a.createdAt as Date).getTime() - new Date(b.createdAt as Date).getTime());
-  // Strip createdAt from final payload to keep it model-ready
   const messages = collected.map(({ createdAt: _c, ...rest }) => rest);
   return { messages };
 }
