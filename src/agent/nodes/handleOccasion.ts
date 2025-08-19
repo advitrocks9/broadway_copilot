@@ -7,7 +7,7 @@ import { getNanoLLM } from '../../utils/llm';
  * Crafts occasion-specific suggestions; outputs text reply_type.
  */
 
-export async function handleOccasionNode(state: { input: RunInput; messages?: unknown[]; intent?: string }): Promise<{ reply: { reply_type: 'text'; reply_text: string }; postAction: 'followup' }>{
+export async function handleOccasionNode(state: { input: RunInput; messages?: unknown[]; intent?: string }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
   const llm = getNanoLLM();
   const { input } = state;
   const messages = (state.messages as unknown[]) || [];
@@ -20,9 +20,11 @@ export async function handleOccasionNode(state: { input: RunInput; messages?: un
     { role: 'system', content: `Conversation: ${JSON.stringify(messages)}` },
     { role: 'user', content: input.text || 'Suggest an outfit for my occasion.' },
   ];
-  const Schema = z.object({ reply_text: z.string() });
+  const Schema = z.object({ reply_text: z.string(), followup_text: z.string().nullable() });
   console.log('🎯 [OCCASION:INPUT]', { userText: input.text || '', lastTurns: messages.slice(-4) });
   const resp = await llm.withStructuredOutput(Schema).invoke(prompt);
   console.log('🎯 [OCCASION:OUTPUT]', resp);
-  return { reply: { reply_type: 'text', reply_text: resp.reply_text }, postAction: 'followup' };
+  const replies: Array<{ reply_type: 'text'; reply_text: string }> = [{ reply_type: 'text', reply_text: resp.reply_text }];
+  if (resp.followup_text) replies.push({ reply_type: 'text', reply_text: resp.followup_text });
+  return { replies };
 }

@@ -10,6 +10,7 @@ import type { Reply } from '../state';
 type SendReplyState = {
   input?: { waId: string; userId: string };
   reply?: Reply | string;
+  replies?: Array<Reply | string>;
   intent?: string;
   userTurnId?: string;
 };
@@ -19,10 +20,12 @@ export async function sendReplyNode(state: SendReplyState): Promise<{ messages?:
   const waId = input?.waId;
   const userId = input?.userId;
   const replyObj: Reply | string | undefined = state.reply;
+  const repliesArray: Array<Reply | string> | undefined = state.replies;
   const intent: string | undefined = state.intent;
   const userTurnId: string | undefined = state.userTurnId;
 
-  if (!waId || !userId || !replyObj) {
+  const collected = Array.isArray(repliesArray) && repliesArray.length > 0 ? repliesArray : (replyObj ? [replyObj] : []);
+  if (!waId || !userId || collected.length === 0) {
     return {};
   }
 
@@ -30,35 +33,34 @@ export async function sendReplyNode(state: SendReplyState): Promise<{ messages?:
     await prisma.turn.update({ where: { id: userTurnId }, data: { intent } }).catch(() => {});
   }
 
-  const normalizedReply: Reply =
-    typeof replyObj === 'string'
-      ? { reply_type: 'text', reply_text: replyObj }
-      : replyObj;
+  const normalizedReplies: Reply[] = collected.slice(0, 2).map(r => typeof r === 'string' ? { reply_type: 'text', reply_text: r } : r);
 
-  const assistantTurn = await prisma.turn.create({
-    data: {
-      userId: userId,
-      role: 'assistant',
-      text: normalizedReply.reply_text,
-      intent: intent || null,
-      metadata: { engine: 'langgraph' },
-    },
-  });
+  const createData: any = {
+    userId: userId,
+    role: 'assistant',
+    text: normalizedReplies.map(r => r.reply_text).join('\n\n'),
+    intent: intent || null,
+    metadata: { engine: 'langgraph' },
+    replies: normalizedReplies,
+  };
+  const assistantTurn = await prisma.turn.create({ data: createData });
 
   try {
-    if (normalizedReply.reply_type === 'text') {
-      await sendText(waId, normalizedReply.reply_text);
-    } else if (normalizedReply.reply_type === 'menu') {
-      await sendMenu(waId, normalizedReply.reply_text);
-    } else if (normalizedReply.reply_type === 'card') {
-      await sendCard(waId, normalizedReply.reply_text);
+    for (const r of normalizedReplies) {
+      if (r.reply_type === 'text') {
+        await sendText(waId, r.reply_text);
+      } else if (r.reply_type === 'menu') {
+        await sendMenu(waId, r.reply_text);
+      } else if (r.reply_type === 'card') {
+        await sendCard(waId, r.reply_text);
+      }
     }
   } catch (err) {
     console.error('❌ [SEND_REPLY] Twilio send failed:', err);
   }
 
   return { messages: [
-    { id: assistantTurn.id, role: 'assistant', text: assistantTurn.text, intent: intent || null, mode: normalizedReply.reply_type, createdAt: assistantTurn.createdAt },
+    { id: assistantTurn.id, role: 'assistant', text: assistantTurn.text, intent: intent || null, mode: normalizedReplies[0].reply_type, createdAt: assistantTurn.createdAt },
   ] };
 }
 

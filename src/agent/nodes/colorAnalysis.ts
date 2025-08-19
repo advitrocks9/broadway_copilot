@@ -11,7 +11,7 @@ import { ensureVisionFileId, persistUpload } from '../../utils/media';
  * Performs color analysis from a portrait and returns a text reply; logs and persists results.
  */
 
-export async function colorAnalysisNode(state: { input: RunInput; intent?: string }): Promise<{ reply: { reply_type: 'text'; reply_text: string }; postAction: 'followup' }>{
+export async function colorAnalysisNode(state: { input: RunInput; intent?: string }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
   const llm = getVisionLLM();
   const { input, intent } = state;
   const imagePath = input.imagePath as string;
@@ -33,20 +33,17 @@ export async function colorAnalysisNode(state: { input: RunInput; intent?: strin
   await prisma.colorAnalysis.create({
     data: {
       uploadId: upload.id,
-      skin_tone: result.skin_tone ?? null,
-      eye_color: result.eye_color ?? null,
-      hair_color: result.hair_color ?? null,
+      skin_tone: result.skin_tone?.name ?? null,
+      eye_color: result.eye_color?.name ?? null,
+      hair_color: result.hair_color?.name ?? null,
       top3_colors: result.top3_colors as unknown as z.infer<typeof schema>['top3_colors'],
       avoid3_colors: result.avoid3_colors as unknown as z.infer<typeof schema>['avoid3_colors'],
       rawJson: result as unknown as z.infer<typeof schema>,
     },
   });
-  const replyText = formatColorReplySummary({
-    skin_tone: result.skin_tone ?? undefined,
-    eye_color: result.eye_color ?? undefined,
-    hair_color: result.hair_color ?? undefined,
-    top3_colors: result.top3_colors,
-    avoid3_colors: result.avoid3_colors,
-  });
-  return { reply: { reply_type: 'text', reply_text: replyText }, postAction: 'followup' };
+  const primary = result.reply_text;
+  const follow = result.followup_text || null;
+  const replies: Array<{ reply_type: 'text'; reply_text: string }> = [{ reply_type: 'text', reply_text: primary }];
+  if (follow) replies.push({ reply_type: 'text', reply_text: follow });
+  return { replies };
 }

@@ -37,6 +37,7 @@ model Turn {
   intent    String?
   choices   Json?
   metadata  Json?
+  replies   Json?
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])

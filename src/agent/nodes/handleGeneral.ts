@@ -7,7 +7,7 @@ import { getNanoLLM } from '../../utils/llm';
  * Handles general chat; may return text, menu, or card per prompt schema.
  */
 
-export async function handleGeneralNode(state: { input: RunInput; messages?: unknown[]; intent?: string }): Promise<{ reply: { reply_type: 'text' | 'menu' | 'card'; reply_text: string } }>{
+export async function handleGeneralNode(state: { input: RunInput; messages?: unknown[]; intent?: string }): Promise<{ replies: Array<{ reply_type: 'text' | 'menu' | 'card'; reply_text: string }> }>{
   const llm = getNanoLLM();
   const { input } = state;
   const messages = (state.messages as unknown[]) || [];
@@ -20,10 +20,15 @@ export async function handleGeneralNode(state: { input: RunInput; messages?: unk
     { role: 'system', content: `Conversation: ${JSON.stringify(messages)}` },
     { role: 'user', content: input.text || 'Help with style.' },
   ];
-  const Schema = z.object({ reply_type: z.enum(['text','menu','card']), reply_text: z.string() });
+  const Schema = z.object({ reply_type: z.enum(['text','menu','card']), reply_text: z.string(), followup_text: z.string().nullable() });
   console.log('💬 [GENERAL:INPUT]', { userText: input.text || '', lastTurns: messages.slice(-4) });
   const resp = await llm.withStructuredOutput(Schema).invoke(prompt);
   console.log('💬 [GENERAL:OUTPUT]', resp);
-  const reply = { reply_type: resp.reply_type, reply_text: resp.reply_text } as const;
-  return { reply };
+  const replies: Array<{ reply_type: 'text' | 'menu' | 'card'; reply_text: string }> = [
+    { reply_type: resp.reply_type, reply_text: resp.reply_text },
+  ];
+  if (resp.followup_text) {
+    replies.push({ reply_type: 'text', reply_text: resp.followup_text });
+  }
+  return { replies };
 }

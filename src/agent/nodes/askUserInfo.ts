@@ -7,7 +7,7 @@ import { getNanoLLM } from '../../utils/llm';
  * Asks the user for required profile fields and returns a text reply.
  */
 
-export async function askUserInfoNode(state: { input: RunInput; messages?: unknown[]; intent?: string; missingProfileFields?: Array<'gender'> }): Promise<{ reply: { reply_type: 'text'; reply_text: string } }>{
+export async function askUserInfoNode(state: { input: RunInput; messages?: unknown[]; intent?: string; missingProfileFields?: Array<'gender'> }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
   const llm = getNanoLLM();
   const { input } = state;
   const missing: Array<'gender'> = state.missingProfileFields || [];
@@ -26,5 +26,5 @@ export async function askUserInfoNode(state: { input: RunInput; messages?: unkno
   const resp = await llm.withStructuredOutput(AskSchema).invoke(promptMessages);
   console.log('🧩 [ASK_USER_INFO:OUTPUT]', resp);
   const replyText = resp.text;
-  return { reply: { reply_type: 'text', reply_text: replyText } };
+  return { replies: [{ reply_type: 'text', reply_text: replyText }] };
 }

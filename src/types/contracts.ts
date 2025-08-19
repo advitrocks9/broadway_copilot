@@ -1,28 +1,28 @@
 import { z } from 'zod';
 
-export const OutfitRatingGoodSchema = z.object({
-  fit_silhouette: z.number().min(0).max(10),
-  color_harmony: z.number().min(0).max(10),
-  styling_details: z.number().min(0).max(10),
-  accessories_texture: z.number().min(0).max(10),
-  context_confidence: z.number().min(0).max(10),
-  overall_score: z.number().min(0).max(10),
-  comment: z.string().min(1),
+export const VibeCheckResponseSchema = z.object({
+  reply: z.string(),
+  followup: z.string().nullable().optional(),
+  mode: z.enum(['full_ootd', 'selfie_look']).nullable().optional(),
+  overall_score: z.number().nullable().optional(),
+  scores: z.any().nullable().optional(),
 });
 
-export const OutfitRatingBadSchema = z.object({ bad_upload: z.any() });
+export type VibeCheckResponse = z.infer<typeof VibeCheckResponseSchema>;
 
-export const OutfitRatingSchema = z.union([OutfitRatingGoodSchema, OutfitRatingBadSchema]);
-
-export type OutfitRating = z.infer<typeof OutfitRatingSchema>;
-export type OutfitRatingGood = z.infer<typeof OutfitRatingGoodSchema>;
+export const ColorObjectSchema = z.object({ name: z.string(), hex: z.string().regex(/^#[0-9A-Fa-f]{6}$/) });
 
 export const ColorAnalysisSchema = z.object({
-  skin_tone: z.string().nullable(),
-  eye_color: z.string().nullable(),
-  hair_color: z.string().nullable(),
-  top3_colors: z.array(z.string()),
-  avoid3_colors: z.array(z.string()),
+  reply_text: z.string(),
+  followup_text: z.string().nullable().optional(),
+  skin_tone: ColorObjectSchema.nullable(),
+  eye_color: ColorObjectSchema.nullable(),
+  hair_color: ColorObjectSchema.nullable(),
+  undertone: z.enum(['Warm','Cool','Neutral']).nullable().optional(),
+  palette_name: z.enum(['Light Spring','True Spring','Bright Spring','Light Summer','True Summer','Soft Summer','Soft Autumn','True Autumn','Dark Autumn','Bright Winter','True Winter','Dark Winter']).nullable().optional(),
+  palette_comment: z.string().nullable().optional(),
+  top3_colors: z.array(ColorObjectSchema).default([]),
+  avoid3_colors: z.array(ColorObjectSchema).default([]),
 });
 
 export type ColorAnalysis = z.infer<typeof ColorAnalysisSchema>;

@@ -20,11 +20,9 @@ const GraphAnnotation = Annotation.Root({
   input: Annotation<RunInput>(),
   intent: Annotation<IntentLabel | undefined>(),
   reply: Annotation<Reply | string | undefined>(),
-  mode: Annotation<'text' | 'menu' | 'card' | undefined>(),
+  replies: Annotation<Array<Reply | string> | undefined>(),
   missingProfileFields: Annotation<Array<RequiredProfileField> | undefined>(),
-  postAction: Annotation<'followup' | 'complete' | undefined>(),
   next: Annotation<string | undefined>(),
-  pending: Annotation<'vibe_check' | 'color_analysis' | null | undefined>(),
   userTurnId: Annotation<string | undefined>(),
   messages: Annotation<ModelMessage[] | undefined>(),
 });
@@ -93,10 +91,12 @@ export async function runAgent(input: any): Promise<RunOutput & { intent?: Inten
     configurable: { thread_id: (input?.userId || input?.From || 'unknown') },
   });
   if (!result) return { replyText: 'I had a problem there. Please try again.' };
-  type FinalState = { reply?: string | Reply; mode?: 'text' | 'menu' | 'card'; intent?: IntentLabel; messages?: ModelMessage[] };
+  type FinalState = { reply?: string | Reply; replies?: Array<string | Reply>; mode?: 'text' | 'menu' | 'card'; intent?: IntentLabel; messages?: ModelMessage[] };
   const state = result as FinalState;
-  const finalReply = typeof state.reply === 'string' ? state.reply : state.reply?.reply_text ?? '';
-  const mode = state.mode as 'text' | 'menu' | undefined;
+  const arrayReplies = Array.isArray(state.replies) ? state.replies : (state.reply ? [state.reply] : []);
+  const first = arrayReplies[0];
+  const finalReply = typeof first === 'string' ? first : (first?.reply_text ?? '');
+  const mode = (typeof first === 'string' ? 'text' : first?.reply_type) as 'text' | 'menu' | 'card' | undefined;
   const intent = state.intent as IntentLabel | undefined;
   const messages = state.messages as ModelMessage[] | undefined;
   return { replyText: finalReply, mode, intent, messages };

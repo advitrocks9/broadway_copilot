@@ -10,8 +10,17 @@ import { z } from 'zod';
 type RouterOutput = { intent: IntentLabel; gender_required: boolean };
 
 export async function routeIntent(state: { input: RunInput; messages?: unknown[] }): Promise<{ intent: IntentLabel; missingProfileFields: Array<'gender'>; next: string }>{
-  const llm = getNanoLLM();
   const input = state.input;
+  const payload = (input.buttonPayload || '').toLowerCase();
+  if (payload === 'vibe_check' || payload === 'color_analysis') {
+    const intent = payload as IntentLabel;
+    const missingProfileFields: Array<'gender'> = [];
+    const next = 'check_image';
+    console.log('🧭 [ROUTE_INTENT:SKIP_LLM]', { input, intent, next });
+    return { intent, missingProfileFields, next };
+  }
+
+  const llm = getNanoLLM();
   const systemPrompt = loadPrompt('route_intent.txt');
 
   const messages = (state.messages as unknown[]) || [];

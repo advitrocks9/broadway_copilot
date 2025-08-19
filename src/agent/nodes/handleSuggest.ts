@@ -7,7 +7,7 @@ import { getNanoLLM } from '../../utils/llm';
  * Suggests actionable style improvements; outputs text reply_type.
  */
 
-export async function handleSuggestNode(state: { input: RunInput; messages?: unknown[]; intent?: string }): Promise<{ reply: { reply_type: 'text'; reply_text: string }; postAction: 'followup' }>{
+export async function handleSuggestNode(state: { input: RunInput; messages?: unknown[]; intent?: string }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
   const llm = getNanoLLM();
   const { input } = state;
   const messages = (state.messages as unknown[]) || [];
@@ -21,9 +21,11 @@ export async function handleSuggestNode(state: { input: RunInput; messages?: unk
     { role: 'system', content: `Conversation: ${JSON.stringify(messages)}` },
     { role: 'user', content: question },
   ];
-  const Schema = z.object({ reply_text: z.string() });
+  const Schema = z.object({ reply_text: z.string(), followup_text: z.string().nullable() });
   console.log('✨ [SUGGEST:INPUT]', { userText: question, lastTurns: messages.slice(-4) });
   const resp = await llm.withStructuredOutput(Schema).invoke(prompt);
   console.log('✨ [SUGGEST:OUTPUT]', resp);
-  return { reply: { reply_type: 'text', reply_text: resp.reply_text }, postAction: 'followup' };
+  const replies: Array<{ reply_type: 'text'; reply_text: string }> = [{ reply_type: 'text', reply_text: resp.reply_text }];
+  if (resp.followup_text) replies.push({ reply_type: 'text', reply_text: resp.followup_text });
+  return { replies };
 }
