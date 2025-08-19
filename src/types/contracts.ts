@@ -2,10 +2,12 @@ import { z } from 'zod';
 
 export const VibeCheckResponseSchema = z.object({
   reply: z.string(),
-  followup: z.string().nullable().optional(),
-  mode: z.enum(['full_ootd', 'selfie_look']).nullable().optional(),
-  overall_score: z.number().nullable().optional(),
-  scores: z.any().nullable().optional(),
+  followup: z.string().nullable(),
+  mode: z.enum(['full_ootd', 'selfie_look']).nullable(),
+  overall_score: z.number().nullable(),
+  scores: z
+    .record(z.string(), z.union([z.number(), z.string(), z.boolean(), z.null()]))
+    .nullable(),
 });
 
 export type VibeCheckResponse = z.infer<typeof VibeCheckResponseSchema>;
@@ -14,13 +16,13 @@ export const ColorObjectSchema = z.object({ name: z.string(), hex: z.string().re
 
 export const ColorAnalysisSchema = z.object({
   reply_text: z.string(),
-  followup_text: z.string().nullable().optional(),
+  followup_text: z.string().nullable(),
   skin_tone: ColorObjectSchema.nullable(),
   eye_color: ColorObjectSchema.nullable(),
   hair_color: ColorObjectSchema.nullable(),
-  undertone: z.enum(['Warm','Cool','Neutral']).nullable().optional(),
-  palette_name: z.enum(['Light Spring','True Spring','Bright Spring','Light Summer','True Summer','Soft Summer','Soft Autumn','True Autumn','Dark Autumn','Bright Winter','True Winter','Dark Winter']).nullable().optional(),
-  palette_comment: z.string().nullable().optional(),
+  undertone: z.enum(['Warm','Cool','Neutral']).nullable(),
+  palette_name: z.enum(['Light Spring','True Spring','Bright Spring','Light Summer','True Summer','Soft Summer','Soft Autumn','True Autumn','Dark Autumn','Bright Winter','True Winter','Dark Winter']).nullable(),
+  palette_comment: z.string().nullable(),
   top3_colors: z.array(ColorObjectSchema).default([]),
   avoid3_colors: z.array(ColorObjectSchema).default([]),
 });

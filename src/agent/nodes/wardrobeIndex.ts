@@ -4,7 +4,7 @@ import { RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
 import { toNameLower } from '../../utils/text';
 import { WardrobeIndexResponseSchema, WardrobeIndexResponse } from '../../types/contracts';
-import { getVisionLLM } from '../../utils/llm';
+import { callResponsesWithSchema } from '../../utils/openai';
 import { ensureVisionFileId } from '../../utils/media';
 import type { Prisma } from '@prisma/client';
 
@@ -13,7 +13,6 @@ import type { Prisma } from '@prisma/client';
  */
 
 export async function wardrobeIndexNode(state: { input: RunInput }): Promise<Record<string, never>> {
-  const llm = getVisionLLM();
   const { input } = state;
   const imagePath = input.imagePath as string;
   if (!imagePath) {
@@ -31,10 +30,18 @@ export async function wardrobeIndexNode(state: { input: RunInput }): Promise<Rec
   console.log('🗂️ [WARDROBE_INDEX:INPUT]', { hasImage: true });
   let result: WardrobeIndexResponse;
   try {
-    result = await llm.withStructuredOutput(schema).invoke(content) as WardrobeIndexResponse;
+    result = await callResponsesWithSchema<WardrobeIndexResponse>({
+      messages: content as any,
+      schema,
+      model: 'gpt-5',
+    });
   } catch (err: any) {
     console.error('🗂️ [WARDROBE_INDEX:ERROR]', { message: err?.message });
     return {};
+  }
+  if ((result as any).__tool_calls) {
+    const tc = (result as any).__tool_calls;
+    console.log('🗂️ [WARDROBE_INDEX:TOOLS]', { total: tc.total, names: tc.names });
   }
   if (result.status === 'bad_photo') {
     console.log('🗂️ [WARDROBE_INDEX:OUTPUT]', { status: 'bad_photo', itemsCount: 0 });

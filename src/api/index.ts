@@ -14,7 +14,10 @@ app.use(express.json());
 
 app.use('/uploads', express.static(staticUploadsMount()));
 
-app.post('/', async (req, res) => {
+/**
+ * Handles Twilio webhooks, validates requests, and runs the agent.
+ */
+app.post('/twilio/', async (req, res) => {
   try {
     const signature = req.header('X-Twilio-Signature') || req.header('x-twilio-signature');
     const protoHeader = (req.headers['x-forwarded-proto'] as string) || req.protocol;

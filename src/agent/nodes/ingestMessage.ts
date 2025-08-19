@@ -1,9 +1,8 @@
 import prisma from '../../db/client';
-import { getOrCreateUserByWaId } from '../../services/userService';
-import { downloadTwilioMedia } from '../../services/mediaService';
+import { getOrCreateUserByWaId } from '../../utils/user';
+import { downloadTwilioMedia } from '../../utils/media';
 import { userUploadDir } from '../../utils/paths';
 import { RunInput } from '../state';
-import { fetchLatestConversationMessages } from '../tools';
 import { ensureVisionFileId } from '../../utils/media';
 
 /**
@@ -11,7 +10,7 @@ import { ensureVisionFileId } from '../../utils/media';
  */
 type IngestState = { input: Record<string, unknown> };
 
-export async function ingestMessageNode(state: IngestState): Promise<{ input?: RunInput; userTurnId?: string; reply?: string; messages?: Array<any> }>{
+export async function ingestMessageNode(state: IngestState): Promise<{ input?: RunInput; reply?: string }>{
   const twilioBody = state.input as Record<string, unknown>;
   const from: string = (twilioBody?.From || '').toString();
   const bodyText: string | undefined = (twilioBody?.Body || '').toString() || undefined;
@@ -38,7 +37,7 @@ export async function ingestMessageNode(state: IngestState): Promise<{ input?: R
     }
   }
 
-  const userTurn = await prisma.turn.create({
+  await prisma.turn.create({
     data: {
       userId: user.id,
       role: 'user',
@@ -58,9 +57,7 @@ export async function ingestMessageNode(state: IngestState): Promise<{ input?: R
     gender: (user.confirmedGender as 'male' | 'female' | null) ?? (user.inferredGender as 'male' | 'female' | null) ?? null,
   };
 
-  const { messages } = await fetchLatestConversationMessages(user.id);
-
-  return { input: normalized, userTurnId: userTurn.id, messages };
+  return { input: normalized };
 }
 
 

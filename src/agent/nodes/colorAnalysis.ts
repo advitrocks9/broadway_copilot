@@ -3,8 +3,7 @@ import prisma from '../../db/client';
 import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
 import { ColorAnalysis, ColorAnalysisSchema } from '../../types/contracts';
-import { formatColorReplySummary } from '../../utils/text';
-import { getVisionLLM } from '../../utils/llm';
+import { callResponsesWithSchema } from '../../utils/openai';
 import { ensureVisionFileId, persistUpload } from '../../utils/media';
 
 /**
@@ -12,7 +11,6 @@ import { ensureVisionFileId, persistUpload } from '../../utils/media';
  */
 
 export async function colorAnalysisNode(state: { input: RunInput; intent?: string }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
-  const llm = getVisionLLM();
   const { input, intent } = state;
   const imagePath = input.imagePath as string;
   const ensuredFileId = await ensureVisionFileId(imagePath, input.fileId);
@@ -28,8 +26,16 @@ export async function colorAnalysisNode(state: { input: RunInput; intent?: strin
     { role: 'user', content: [ { type: 'input_image', file_id: ensuredFileId as string, detail: 'high' } ] },
   ];
   console.log('🎨 [COLOR_ANALYSIS:INPUT]', { hasImage: true });
-  const result = await llm.withStructuredOutput(schema).invoke(content) as ColorAnalysis;
+  const result = await callResponsesWithSchema<ColorAnalysis>({
+    messages: content as any,
+    schema,
+    model: 'gpt-5',
+  });
   console.log('🎨 [COLOR_ANALYSIS:OUTPUT]', result);
+  if ((result as any).__tool_calls) {
+    const tc = (result as any).__tool_calls;
+    console.log('🎨 [COLOR_ANALYSIS:TOOLS]', { total: tc.total, names: tc.names });
+  }
   await prisma.colorAnalysis.create({
     data: {
       uploadId: upload.id,

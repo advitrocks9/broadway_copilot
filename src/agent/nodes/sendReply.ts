@@ -12,26 +12,22 @@ type SendReplyState = {
   reply?: Reply | string;
   replies?: Array<Reply | string>;
   intent?: string;
-  userTurnId?: string;
 };
 
-export async function sendReplyNode(state: SendReplyState): Promise<{ messages?: Array<{ id: string; role: 'assistant'; text: string | null; intent: string | null; mode: Reply['reply_type']; createdAt: Date }> }> {
+export async function sendReplyNode(state: SendReplyState): Promise<Record<string, never>> {
   const input = state.input;
   const waId = input?.waId;
   const userId = input?.userId;
   const replyObj: Reply | string | undefined = state.reply;
   const repliesArray: Array<Reply | string> | undefined = state.replies;
   const intent: string | undefined = state.intent;
-  const userTurnId: string | undefined = state.userTurnId;
 
   const collected = Array.isArray(repliesArray) && repliesArray.length > 0 ? repliesArray : (replyObj ? [replyObj] : []);
   if (!waId || !userId || collected.length === 0) {
     return {};
   }
 
-  if (userTurnId && intent) {
-    await prisma.turn.update({ where: { id: userTurnId }, data: { intent } }).catch(() => {});
-  }
+  
 
   const normalizedReplies: Reply[] = collected.slice(0, 2).map(r => typeof r === 'string' ? { reply_type: 'text', reply_text: r } : r);
 
@@ -59,9 +55,7 @@ export async function sendReplyNode(state: SendReplyState): Promise<{ messages?:
     console.error('❌ [SEND_REPLY] Twilio send failed:', err);
   }
 
-  return { messages: [
-    { id: assistantTurn.id, role: 'assistant', text: assistantTurn.text, intent: intent || null, mode: normalizedReplies[0].reply_type, createdAt: assistantTurn.createdAt },
-  ] };
+  return {};
 }
 
 

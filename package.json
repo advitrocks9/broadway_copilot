@@ -11,25 +11,27 @@
     "db:reset": "rm -f prisma/dev.db && prisma migrate reset --force",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/api/index.js",
+    "mcp:dev": "ts-node-dev --respawn src/mcp/index.ts",
+    "mcp:start": "node dist/mcp/index.js",
     "graph:png": "ts-node-dev --transpile-only scripts/visualizeGraph.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@langchain/core": "^0.3.71",
     "@langchain/langgraph": "^0.4.5",
-    "@langchain/openai": "^0.6.7",
     "@prisma/client": "^6.14.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
+    "fastmcp": "^3.14.5",
     "multer": "^2.0.2",
     "openai": "^5.12.2",
     "pino": "^9.9.0",
     "prisma": "^6.14.0",
     "twilio": "^5.8.0",
-    "zod": "^4.0.17"
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

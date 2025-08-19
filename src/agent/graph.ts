@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
-import { IntentLabel, RunInput, RunOutput, RequiredProfileField, Reply, ModelMessage } from './state';
+import { IntentLabel, RunInput, RunOutput, RequiredProfileField, Reply } from './state';
 import { routeIntent } from './nodes/routeIntent';
 import { askUserInfoNode } from './nodes/askUserInfo';
 import { handleOccasionNode } from './nodes/handleOccasion';
@@ -23,12 +23,14 @@ const GraphAnnotation = Annotation.Root({
   replies: Annotation<Array<Reply | string> | undefined>(),
   missingProfileFields: Annotation<Array<RequiredProfileField> | undefined>(),
   next: Annotation<string | undefined>(),
-  userTurnId: Annotation<string | undefined>(),
-  messages: Annotation<ModelMessage[] | undefined>(),
+  
 });
 
 let compiledApp: any | null = null;
 
+/**
+ * Builds and compiles the agent's state graph.
+ */
 export function buildAgentGraph() {
   const graph = new StateGraph(GraphAnnotation)
     .addNode('ingest_message', ingestMessageNode)
@@ -83,7 +85,10 @@ export function buildAgentGraph() {
   return graph.compile();
 }
 
-export async function runAgent(input: any): Promise<RunOutput & { intent?: IntentLabel; messages?: any[] }> {
+/**
+ * Runs the agent graph with the given input.
+ */
+export async function runAgent(input: any): Promise<RunOutput & { intent?: IntentLabel }> {
   if (!compiledApp) {
     compiledApp = buildAgentGraph();
   }
@@ -91,13 +96,12 @@ export async function runAgent(input: any): Promise<RunOutput & { intent?: Inten
     configurable: { thread_id: (input?.userId || input?.From || 'unknown') },
   });
   if (!result) return { replyText: 'I had a problem there. Please try again.' };
-  type FinalState = { reply?: string | Reply; replies?: Array<string | Reply>; mode?: 'text' | 'menu' | 'card'; intent?: IntentLabel; messages?: ModelMessage[] };
+  type FinalState = { reply?: string | Reply; replies?: Array<string | Reply>; mode?: 'text' | 'menu' | 'card'; intent?: IntentLabel };
   const state = result as FinalState;
   const arrayReplies = Array.isArray(state.replies) ? state.replies : (state.reply ? [state.reply] : []);
   const first = arrayReplies[0];
   const finalReply = typeof first === 'string' ? first : (first?.reply_text ?? '');
   const mode = (typeof first === 'string' ? 'text' : first?.reply_type) as 'text' | 'menu' | 'card' | undefined;
   const intent = state.intent as IntentLabel | undefined;
-  const messages = state.messages as ModelMessage[] | undefined;
-  return { replyText: finalReply, mode, intent, messages };
+  return { replyText: finalReply, mode, intent };
 } 

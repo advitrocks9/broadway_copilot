@@ -1,29 +1,35 @@
 import { RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
-import { getNanoLLM } from '../../utils/llm';
+import { callResponsesWithSchema } from '../../utils/openai';
 
 /**
  * Handles general chat; may return text, menu, or card per prompt schema.
  */
 
-export async function handleGeneralNode(state: { input: RunInput; messages?: unknown[]; intent?: string }): Promise<{ replies: Array<{ reply_type: 'text' | 'menu' | 'card'; reply_text: string }> }>{
-  const llm = getNanoLLM();
+export async function handleGeneralNode(state: { input: RunInput; intent?: string }): Promise<{ replies: Array<{ reply_type: 'text' | 'menu' | 'card'; reply_text: string }> }>{
   const { input } = state;
-  const messages = (state.messages as unknown[]) || [];
   const intent: string | undefined = state.intent;
   const systemPrompt = loadPrompt('handle_general.txt');
   const prompt: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: systemPrompt },
     { role: 'system', content: `UserGender: ${input.gender ?? 'unknown'} (if known, tailor guidance and examples accordingly).` },
+    { role: 'system', content: `Current user ID: ${input.userId}` },
     { role: 'system', content: `Intent: ${intent || 'general'}` },
-    { role: 'system', content: `Conversation: ${JSON.stringify(messages)}` },
     { role: 'user', content: input.text || 'Help with style.' },
   ];
   const Schema = z.object({ reply_type: z.enum(['text','menu','card']), reply_text: z.string(), followup_text: z.string().nullable() });
-  console.log('💬 [GENERAL:INPUT]', { userText: input.text || '', lastTurns: messages.slice(-4) });
-  const resp = await llm.withStructuredOutput(Schema).invoke(prompt);
+  console.log('💬 [GENERAL:INPUT]', { userText: input.text || '' });
+  const resp = await callResponsesWithSchema<{ reply_type: 'text'|'menu'|'card'; reply_text: string; followup_text: string | null}>({
+    messages: prompt as any,
+    schema: Schema,
+    model: 'gpt-5-nano',
+  });
   console.log('💬 [GENERAL:OUTPUT]', resp);
+  if ((resp as any).__tool_calls) {
+    const tc = (resp as any).__tool_calls;
+    console.log('💬 [GENERAL:TOOLS]', { total: tc.total, names: tc.names });
+  }
   const replies: Array<{ reply_type: 'text' | 'menu' | 'card'; reply_text: string }> = [
     { reply_type: resp.reply_type, reply_text: resp.reply_text },
   ];
