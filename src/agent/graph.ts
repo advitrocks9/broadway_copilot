@@ -15,6 +15,7 @@ import { ingestMessageNode } from './nodes/ingestMessage';
 import { inferProfileNode } from './nodes/inferProfile';
 import { handleSuggestNode } from './nodes/handleSuggest';
 import { sendReplyNode } from './nodes/sendReply';
+import { hydrateContextNode } from './nodes/hydrateContext';
 
 const GraphAnnotation = Annotation.Root({
   input: Annotation<RunInput>(),
@@ -23,6 +24,9 @@ const GraphAnnotation = Annotation.Root({
   replies: Annotation<Array<Reply | string> | undefined>(),
   missingProfileFields: Annotation<Array<RequiredProfileField> | undefined>(),
   next: Annotation<string | undefined>(),
+  messages: Annotation<unknown[] | undefined>(),
+  wardrobe: Annotation<unknown | undefined>(),
+  latestColorAnalysis: Annotation<unknown | undefined>(),
   
 });
 
@@ -34,6 +38,7 @@ let compiledApp: any | null = null;
 export function buildAgentGraph() {
   const graph = new StateGraph(GraphAnnotation)
     .addNode('ingest_message', ingestMessageNode)
+    .addNode('hydrate_context', hydrateContextNode)
     .addNode('infer_profile', inferProfileNode)
     .addNode('route_intent', routeIntent)
     .addNode('ask_user_info', askUserInfoNode)
@@ -49,7 +54,8 @@ export function buildAgentGraph() {
     .addNode('handle_general', handleGeneralNode)
     .addNode('send_reply', sendReplyNode)
     .addEdge(START, 'ingest_message')
-    .addEdge('ingest_message', 'infer_profile')
+    .addEdge('ingest_message', 'hydrate_context')
+    .addEdge('hydrate_context', 'infer_profile')
     .addEdge('infer_profile', 'route_intent')
     .addConditionalEdges('route_intent', (s: any) => s.next || 'handle_general', {
       handle_general: 'handle_general',
@@ -71,8 +77,9 @@ export function buildAgentGraph() {
         color_analysis: 'color_analysis',
       }
     )
+    .addEdge('vibe_check', 'send_reply')
     .addEdge('vibe_check', 'wardrobe_index')
-    .addEdge('wardrobe_index', 'send_reply')
+    .addEdge('wardrobe_index', END)
     .addEdge('ask_user_info', 'send_reply')
     .addEdge('handle_occasion', 'send_reply')
     .addEdge('handle_vacation', 'send_reply')

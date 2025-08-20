@@ -1,14 +1,30 @@
 import { z } from 'zod';
 
-export const VibeCheckResponseSchema = z.object({
-  reply: z.string(),
-  followup: z.string().nullable(),
-  mode: z.enum(['full_ootd', 'selfie_look']).nullable(),
-  overall_score: z.number().nullable(),
-  scores: z
-    .record(z.string(), z.union([z.number(), z.string(), z.boolean(), z.null()]))
-    .nullable(),
-});
+export const VibeCategorySchema = z
+  .object({
+    heading: z.enum([
+      'Fit & Silhouette',
+      'Color Harmony',
+      'Styling Details',
+      'Context & Confidence',
+      'Skin Glow',
+      'Makeup Blend',
+      'Hair Style',
+      'Visible Clothing Style',
+    ]),
+    score: z.number().min(0).max(10),
+  })
+  .strict();
+
+export const VibeCheckResponseSchema = z
+  .object({
+    vibe_score: z.number().nullable(),
+    vibe_reply: z.string(),
+    categories: z.array(VibeCategorySchema).length(4),
+    reply_text: z.string(),
+    followup_text: z.string().nullable(),
+  })
+  .strict();
 
 export type VibeCheckResponse = z.infer<typeof VibeCheckResponseSchema>;
 

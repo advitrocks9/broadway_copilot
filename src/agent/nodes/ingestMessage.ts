@@ -44,6 +44,7 @@ export async function ingestMessageNode(state: IngestState): Promise<{ input?: R
       text: bodyText || null,
       imagePath: imagePath || null,
       fileId: fileId || null,
+      metadata: buttonPayload ? { buttonPayload } : undefined,
     },
   });
 

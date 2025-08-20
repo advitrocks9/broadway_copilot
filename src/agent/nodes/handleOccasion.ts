@@ -1,14 +1,14 @@
 import { RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
-import { callResponsesWithSchema } from '../../utils/openai';
+import { getNanoLLM } from '../../services/openaiService';
 import { queryActivityTimestamps } from '../tools';
 
 /**
  * Crafts occasion-specific suggestions; outputs text reply_type.
  */
 
-export async function handleOccasionNode(state: { input: RunInput; intent?: string }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
+export async function handleOccasionNode(state: { input: RunInput; intent?: string; messages?: unknown[]; wardrobe?: unknown; latestColorAnalysis?: unknown }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
   const { input } = state;
   const intent: string | undefined = state.intent;
   const systemPrompt = loadPrompt('handle_occasion.txt');
@@ -18,6 +18,9 @@ export async function handleOccasionNode(state: { input: RunInput; intent?: stri
     { role: 'system', content: `UserGender: ${input.gender ?? 'unknown'} (use this to tailor occasion-specific recommendations).` },
     { role: 'system', content: `Current user ID: ${input.userId}` },
     { role: 'system', content: `Intent: ${intent || 'occasion'}` },
+    { role: 'system', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
+    { role: 'system', content: `WardrobeContext: ${JSON.stringify(state.wardrobe || {})}` },
+    { role: 'system', content: `LatestColorAnalysis: ${JSON.stringify(state.latestColorAnalysis || null)}` },
     { role: 'system', content: `LastColorAnalysisAtISO: ${activity.lastColorAnalysisAt ? activity.lastColorAnalysisAt.toISOString() : 'none'}` },
     { role: 'system', content: `LastColorAnalysisHoursAgo: ${activity.colorAnalysisHoursAgo ?? 'unknown'}` },
     { role: 'system', content: `LastVibeCheckAtISO: ${activity.lastVibeCheckAt ? activity.lastVibeCheckAt.toISOString() : 'none'}` },
@@ -26,16 +29,8 @@ export async function handleOccasionNode(state: { input: RunInput; intent?: stri
   ];
   const Schema = z.object({ reply_text: z.string(), followup_text: z.string().nullable() });
   console.log('🎯 [OCCASION:INPUT]', { userText: input.text || '' });
-  const resp = await callResponsesWithSchema<{ reply_text: string; followup_text: string | null}>({
-    messages: prompt as any,
-    schema: Schema,
-    model: 'gpt-5-nano',
-  });
+  const resp = await getNanoLLM().withStructuredOutput(Schema as any).invoke(prompt as any) as { reply_text: string; followup_text: string | null };
   console.log('🎯 [OCCASION:OUTPUT]', resp);
-  if ((resp as any).__tool_calls) {
-    const tc = (resp as any).__tool_calls;
-    console.log('🎯 [OCCASION:TOOLS]', { total: tc.total, names: tc.names });
-  }
   const replies: Array<{ reply_type: 'text'; reply_text: string }> = [{ reply_type: 'text', reply_text: resp.reply_text }];
   if (resp.followup_text) replies.push({ reply_type: 'text', reply_text: resp.followup_text });
   return { replies };

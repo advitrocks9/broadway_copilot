@@ -5,7 +5,7 @@ export async function fetchRecentTurns(userId: string, limit = 12) {
     where: { userId },
     orderBy: { createdAt: 'desc' },
     take: limit,
-    select: { role: true, text: true, imagePath: true, createdAt: true },
+    select: { role: true, text: true, imagePath: true, createdAt: true, metadata: true },
   });
   return turns.reverse();
 }

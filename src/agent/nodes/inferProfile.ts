@@ -1,4 +1,4 @@
-import { callResponsesWithSchema } from '../../utils/openai';
+import { getNanoLLM } from '../../services/openaiService';
 import prisma from '../../db/client';
 import { RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
@@ -9,7 +9,7 @@ type GenderJson = { inferred_gender: 'male' | 'female' | null; confirmed: boolea
 /**
  * Infers and optionally persists the user's gender from recent conversation.
  */
-export async function inferProfileNode(state: { input: RunInput }): Promise<{ input?: RunInput }>{
+export async function inferProfileNode(state: { input: RunInput; messages?: unknown[] }): Promise<{ input?: RunInput }>{
   const { input } = state;
   if (input.gender === 'male' || input.gender === 'female') {
     return { input };
@@ -24,6 +24,7 @@ export async function inferProfileNode(state: { input: RunInput }): Promise<{ in
   const prompt = loadPrompt('infer_profile.txt');
   const content: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: prompt },
+    { role: 'system', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
     { role: 'user', content: input.text || '' },
   ];
 
@@ -31,20 +32,12 @@ export async function inferProfileNode(state: { input: RunInput }): Promise<{ in
   console.log('🧠 [INFER_PROFILE:INPUT]', { userText: input.text || '' });
   let result: GenderJson;
   try {
-    result = await callResponsesWithSchema<GenderJson>({
-      messages: content as any,
-      schema: Schema,
-      model: 'gpt-5-nano',
-    });
+    result = await getNanoLLM().withStructuredOutput(Schema as any).invoke(content as any) as GenderJson;
   } catch (err: any) {
     console.error('🧠 [INFER_PROFILE:ERROR]', err?.message);
     return { input };
   }
   console.log('🧠 [INFER_PROFILE:OUTPUT]', result);
-  if ((result as any).__tool_calls) {
-    const tc = (result as any).__tool_calls;
-    console.log('🧠 [INFER_PROFILE:TOOLS]', { total: tc.total, names: tc.names });
-  }
 
   const inferred = result.inferred_gender;
   if (!inferred) {
