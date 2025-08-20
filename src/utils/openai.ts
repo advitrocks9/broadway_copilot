@@ -20,7 +20,7 @@ export async function callResponsesWithSchema<T>(params: {
   reasoning?: 'minimal' | 'medium' | 'high';
 }): Promise<T & { __tool_calls?: { total: number; names: string[] } }> {
   const client = getClient();
-  const { messages, schema, model, reasoning = 'medium' } = params;
+  const { messages, schema, model, reasoning = 'minimal' } = params;
 
   function enforceStrictObjectSchema(input: any): any {
     if (!input || typeof input !== 'object') return input;

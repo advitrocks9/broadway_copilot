@@ -2,6 +2,7 @@ import { RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
 import { callResponsesWithSchema } from '../../utils/openai';
+import { queryActivityTimestamps } from '../tools';
 
 /**
  * Provides vacation-specific guidance; outputs text reply_type.
@@ -11,11 +12,16 @@ export async function handleVacationNode(state: { input: RunInput; intent?: stri
   const { input } = state;
   const intent: string | undefined = state.intent;
   const systemPrompt = loadPrompt('handle_vacation.txt');
+  const activity = await queryActivityTimestamps(input.userId);
   const prompt: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: systemPrompt },
     { role: 'system', content: `UserGender: ${input.gender ?? 'unknown'} (tailor vacation packing and style to gender).` },
     { role: 'system', content: `Current user ID: ${input.userId}` },
     { role: 'system', content: `Intent: ${intent || 'vacation'}` },
+    { role: 'system', content: `LastColorAnalysisAtISO: ${activity.lastColorAnalysisAt ? activity.lastColorAnalysisAt.toISOString() : 'none'}` },
+    { role: 'system', content: `LastColorAnalysisHoursAgo: ${activity.colorAnalysisHoursAgo ?? 'unknown'}` },
+    { role: 'system', content: `LastVibeCheckAtISO: ${activity.lastVibeCheckAt ? activity.lastVibeCheckAt.toISOString() : 'none'}` },
+    { role: 'system', content: `LastVibeCheckHoursAgo: ${activity.vibeCheckHoursAgo ?? 'unknown'}` },
     { role: 'user', content: input.text || 'I need vacation outfit ideas.' },
   ];
   const Schema = z.object({ reply_text: z.string(), followup_text: z.string().nullable() });

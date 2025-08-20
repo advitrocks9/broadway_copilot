@@ -45,6 +45,24 @@ export async function queryColors(userId: string) {
   return { latestColorAnalysis: latest };
 }
 
+export async function queryActivityTimestamps(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { lastVibeCheckAt: true, lastColorAnalysisAt: true },
+  });
+  const now = Date.now();
+  const hoursAgo = (d: Date | null | undefined) =>
+    d ? Math.floor((now - new Date(d).getTime()) / (1000 * 60 * 60)) : null;
+  const vibeCheckHoursAgo = hoursAgo(user?.lastVibeCheckAt ?? null);
+  const colorAnalysisHoursAgo = hoursAgo(user?.lastColorAnalysisAt ?? null);
+  return {
+    lastVibeCheckAt: user?.lastVibeCheckAt ?? null,
+    lastColorAnalysisAt: user?.lastColorAnalysisAt ?? null,
+    vibeCheckHoursAgo,
+    colorAnalysisHoursAgo,
+  };
+}
+
 /**
  * Builds a compact transcript of the last 6 user and 6 assistant messages.
  */

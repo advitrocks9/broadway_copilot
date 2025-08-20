@@ -23,14 +23,14 @@ server.addTool({
 
 server.addTool({
   name: 'getRecentMessages',
-  description: "Requires user_id as a parameter. The number of messages to return is optional and is set to 12 by default. This returns the transcript between the user and the assistant. Messages are returned in order Get the user's latest chat messages up to n messages. This includes the user's messages and the assistant's responses.",
+  description: "Requires user_id as a parameter. The number of messages to return is optional and is set to 6 by default. This returns the transcript between the user and the assistant. Messages are returned in order Get the user's latest chat messages up to n messages. This includes the user's messages and the assistant's responses.",
   parameters: z.object({
     user_id: z.string(),
     n: z.number().int().positive().max(100).optional(),
   }),
   execute: async (args) => {
     console.log('🔧 [MCP] getRecentMessages called', args);
-    const limit = args.n ?? 12;
+    const limit = args.n ?? 6;
     const messages = await fetchRecentTurns(args.user_id, limit);
     return JSON.stringify({ messages });
   },

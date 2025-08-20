@@ -48,6 +48,10 @@ export async function vibeCheckNode(state: { input: RunInput; intent?: string })
       rawJson: result as unknown as z.infer<typeof schema>,
     },
   });
+  await prisma.user.update({
+    where: { id: input.userId },
+    data: { lastVibeCheckAt: new Date() },
+  });
   const replies: Array<{ reply_type: 'text'; reply_text: string }> = [{ reply_type: 'text', reply_text: result.reply }];
   if (result.followup) replies.push({ reply_type: 'text', reply_text: result.followup });
   return { replies };

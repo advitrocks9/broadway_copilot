@@ -47,6 +47,10 @@ export async function colorAnalysisNode(state: { input: RunInput; intent?: strin
       rawJson: result as unknown as z.infer<typeof schema>,
     },
   });
+  await prisma.user.update({
+    where: { id: input.userId },
+    data: { lastColorAnalysisAt: new Date() },
+  });
   const primary = result.reply_text;
   const follow = result.followup_text || null;
   const replies: Array<{ reply_type: 'text'; reply_text: string }> = [{ reply_type: 'text', reply_text: primary }];

@@ -2,6 +2,7 @@ import { RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
 import { callResponsesWithSchema } from '../../utils/openai';
+import { queryActivityTimestamps } from '../tools';
 
 /**
  * Suggests complementary pairing tags; outputs text reply_type.
@@ -12,11 +13,16 @@ export async function handlePairingNode(state: { input: RunInput; intent?: strin
   const question = input.text || 'How to pair items?';
   const intent: string | undefined = state.intent;
   const systemPrompt = loadPrompt('handle_pairing.txt');
+  const activity = await queryActivityTimestamps(input.userId);
   const prompt: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: systemPrompt },
     { role: 'system', content: `UserGender: ${input.gender ?? 'unknown'} (choose examples and fits appropriate to gender).` },
     { role: 'system', content: `Current user ID: ${input.userId}` },
     { role: 'system', content: `Intent: ${intent || 'pairing'}` },
+    { role: 'system', content: `LastColorAnalysisAtISO: ${activity.lastColorAnalysisAt ? activity.lastColorAnalysisAt.toISOString() : 'none'}` },
+    { role: 'system', content: `LastColorAnalysisHoursAgo: ${activity.colorAnalysisHoursAgo ?? 'unknown'}` },
+    { role: 'system', content: `LastVibeCheckAtISO: ${activity.lastVibeCheckAt ? activity.lastVibeCheckAt.toISOString() : 'none'}` },
+    { role: 'system', content: `LastVibeCheckHoursAgo: ${activity.vibeCheckHoursAgo ?? 'unknown'}` },
     { role: 'user', content: question },
   ];
   const Schema = z.object({ reply_text: z.string(), followup_text: z.string().nullable() });
