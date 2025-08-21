@@ -27,6 +27,8 @@ COPY package*.json .
 RUN npm ci --only=production
 
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/prompts ./prompts
+COPY --from=build /app/prisma ./prisma
 
 EXPOSE 8080
 
