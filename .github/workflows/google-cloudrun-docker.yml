@@ -35,7 +35,8 @@ jobs:
         with:
           workload_identity_provider: '${{ env.WORKLOAD_IDENTITY_PROVIDER }}'
           service_account: '${{ env.SERVICE_ACCOUNT }}'
-
+          workload_identity_token_file: /tmp/oidc-token.txt
+        
       # BEGIN - Docker auth and build
       #
       # If you already have a container image, you can omit these steps.
