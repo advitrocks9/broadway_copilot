@@ -15,7 +15,12 @@ import { ingestMessageNode } from './nodes/ingestMessage';
 import { inferProfileNode } from './nodes/inferProfile';
 import { handleSuggestNode } from './nodes/handleSuggest';
 import { sendReplyNode } from './nodes/sendReply';
+import { hydrateContextNode } from './nodes/hydrateContext';
+import { getLogger } from '../utils/logger';
 
+/**
+ * Constructs and runs the LangGraph-based conversational agent.
+ */
 const GraphAnnotation = Annotation.Root({
   input: Annotation<RunInput>(),
   intent: Annotation<IntentLabel | undefined>(),
@@ -23,10 +28,14 @@ const GraphAnnotation = Annotation.Root({
   replies: Annotation<Array<Reply | string> | undefined>(),
   missingProfileFields: Annotation<Array<RequiredProfileField> | undefined>(),
   next: Annotation<string | undefined>(),
+  messages: Annotation<unknown[] | undefined>(),
+  wardrobe: Annotation<unknown | undefined>(),
+  latestColorAnalysis: Annotation<unknown | undefined>(),
   
 });
 
 let compiledApp: any | null = null;
+const logger = getLogger('agent:graph');
 
 /**
  * Builds and compiles the agent's state graph.
@@ -34,6 +43,7 @@ let compiledApp: any | null = null;
 export function buildAgentGraph() {
   const graph = new StateGraph(GraphAnnotation)
     .addNode('ingest_message', ingestMessageNode)
+    .addNode('hydrate_context', hydrateContextNode)
     .addNode('infer_profile', inferProfileNode)
     .addNode('route_intent', routeIntent)
     .addNode('ask_user_info', askUserInfoNode)
@@ -49,7 +59,8 @@ export function buildAgentGraph() {
     .addNode('handle_general', handleGeneralNode)
     .addNode('send_reply', sendReplyNode)
     .addEdge(START, 'ingest_message')
-    .addEdge('ingest_message', 'infer_profile')
+    .addEdge('ingest_message', 'hydrate_context')
+    .addEdge('hydrate_context', 'infer_profile')
     .addEdge('infer_profile', 'route_intent')
     .addConditionalEdges('route_intent', (s: any) => s.next || 'handle_general', {
       handle_general: 'handle_general',
@@ -71,8 +82,9 @@ export function buildAgentGraph() {
         color_analysis: 'color_analysis',
       }
     )
+    .addEdge('vibe_check', 'send_reply')
     .addEdge('vibe_check', 'wardrobe_index')
-    .addEdge('wardrobe_index', 'send_reply')
+    .addEdge('wardrobe_index', END)
     .addEdge('ask_user_info', 'send_reply')
     .addEdge('handle_occasion', 'send_reply')
     .addEdge('handle_vacation', 'send_reply')
@@ -90,8 +102,10 @@ export function buildAgentGraph() {
  */
 export async function runAgent(input: any): Promise<RunOutput & { intent?: IntentLabel }> {
   if (!compiledApp) {
+    logger.info('Compiling agent graph');
     compiledApp = buildAgentGraph();
   }
+  logger.info({ userId: input?.userId, waId: input?.From }, 'Invoking agent run');
   const result = await compiledApp.invoke({ input }, {
     configurable: { thread_id: (input?.userId || input?.From || 'unknown') },
   });
@@ -103,5 +117,6 @@ export async function runAgent(input: any): Promise<RunOutput & { intent?: Inten
   const finalReply = typeof first === 'string' ? first : (first?.reply_text ?? '');
   const mode = (typeof first === 'string' ? 'text' : first?.reply_type) as 'text' | 'menu' | 'card' | undefined;
   const intent = state.intent as IntentLabel | undefined;
+  logger.info({ intent, mode, replyPreview: finalReply.slice(0, 80) }, 'Agent run complete');
   return { replyText: finalReply, mode, intent };
 } 

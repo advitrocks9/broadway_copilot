@@ -1,14 +1,16 @@
 import { RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
-import { callResponsesWithSchema } from '../../utils/openai';
+import { getNanoLLM } from '../../services/openaiService';
 import { queryActivityTimestamps } from '../tools';
+import { getLogger } from '../../utils/logger';
 
 /**
  * Suggests complementary pairing tags; outputs text reply_type.
  */
+const logger = getLogger('node:handle_pairing');
 
-export async function handlePairingNode(state: { input: RunInput; intent?: string }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
+export async function handlePairingNode(state: { input: RunInput; intent?: string; messages?: unknown[]; wardrobe?: unknown; latestColorAnalysis?: unknown }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
   const { input } = state;
   const question = input.text || 'How to pair items?';
   const intent: string | undefined = state.intent;
@@ -19,6 +21,9 @@ export async function handlePairingNode(state: { input: RunInput; intent?: strin
     { role: 'system', content: `UserGender: ${input.gender ?? 'unknown'} (choose examples and fits appropriate to gender).` },
     { role: 'system', content: `Current user ID: ${input.userId}` },
     { role: 'system', content: `Intent: ${intent || 'pairing'}` },
+    { role: 'system', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
+    { role: 'system', content: `WardrobeContext: ${JSON.stringify(state.wardrobe || {})}` },
+    { role: 'system', content: `LatestColorAnalysis: ${JSON.stringify(state.latestColorAnalysis || null)}` },
     { role: 'system', content: `LastColorAnalysisAtISO: ${activity.lastColorAnalysisAt ? activity.lastColorAnalysisAt.toISOString() : 'none'}` },
     { role: 'system', content: `LastColorAnalysisHoursAgo: ${activity.colorAnalysisHoursAgo ?? 'unknown'}` },
     { role: 'system', content: `LastVibeCheckAtISO: ${activity.lastVibeCheckAt ? activity.lastVibeCheckAt.toISOString() : 'none'}` },
@@ -26,17 +31,9 @@ export async function handlePairingNode(state: { input: RunInput; intent?: strin
     { role: 'user', content: question },
   ];
   const Schema = z.object({ reply_text: z.string(), followup_text: z.string().nullable() });
-  console.log('🧩 [PAIRING:INPUT]', { userText: question });
-  const resp = await callResponsesWithSchema<{ reply_text: string; followup_text: string | null}>({
-    messages: prompt as any,
-    schema: Schema,
-    model: 'gpt-5-nano',
-  });
-  console.log('🧩 [PAIRING:OUTPUT]', resp);
-  if ((resp as any).__tool_calls) {
-    const tc = (resp as any).__tool_calls;
-    console.log('🧩 [PAIRING:TOOLS]', { total: tc.total, names: tc.names });
-  }
+  logger.info({ userText: question }, 'HandlePairing: input');
+  const resp = await getNanoLLM().withStructuredOutput(Schema as any).invoke(prompt as any) as { reply_text: string; followup_text: string | null };
+  logger.info(resp, 'HandlePairing: output');
   const replies: Array<{ reply_type: 'text'; reply_text: string }> = [{ reply_type: 'text', reply_text: resp.reply_text }];
   if (resp.followup_text) replies.push({ reply_type: 'text', reply_text: resp.followup_text });
   return { replies };

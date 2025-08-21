@@ -1,4 +1,10 @@
 import { PrismaClient } from '@prisma/client';
+import { getLogger } from '../utils/logger';
+
+/**
+ * Singleton Prisma client for database access across the app lifecycle.
+ */
+const logger = getLogger('db:client');
 
 let prisma: PrismaClient;
 

@@ -5,6 +5,12 @@ import { errorHandler } from './middleware/errors';
 import { staticUploadsMount } from '../utils/paths';
 import { validateTwilioRequest } from '../services/twilioService';
 import { runAgent } from '../agent/graph';
+import { getLogger } from '../utils/logger';
+
+/**
+ * Express API entrypoint for Broadway WhatsApp Bot server.
+ */
+const logger = getLogger('api');
 
 const app = express();
 app.set('trust proxy', true);
@@ -26,25 +32,25 @@ app.post('/twilio/', async (req, res) => {
     
     const isValid = validateTwilioRequest(fullUrl, req.body || {}, signature || undefined);
     if (!isValid) {
-      console.warn('❌ [API_WEBHOOK] Invalid Twilio request signature', {
+      logger.warn({
         url: fullUrl,
         hasSignature: Boolean(signature),
         contentType: req.headers['content-type'],
-      });
+      }, 'Invalid Twilio request signature');
       return res.status(403).send('Forbidden');
     }
 
     await runAgent(req.body || {});
 
-    console.log('✅ [API_WEBHOOK] Webhook processed successfully');
+    logger.info('Webhook processed successfully');
     return res.status(200).end();
   } catch (err: any) {
-    console.error('❌ [API_WEBHOOK] Inbound webhook error', {
+    logger.error({
       message: err?.message,
       stack: err?.stack,
       body: req?.body,
       headers: req?.headers,
-    });
+    }, 'Inbound webhook error');
     return res.status(500).end();
   }
 });
@@ -52,6 +58,6 @@ app.post('/twilio/', async (req, res) => {
 app.use(errorHandler);
 
 const PORT = Number(process.env.PORT || 3000);
-app.listen(PORT, () => {
-  console.log('🚀 [SERVER] Broadway WhatsApp Bot server started!');
+app.listen(PORT, '0.0.0.0', () => {
+  logger.info({ port: PORT }, 'Broadway WhatsApp Bot server started');
 });

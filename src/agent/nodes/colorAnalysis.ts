@@ -3,14 +3,16 @@ import prisma from '../../db/client';
 import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
 import { ColorAnalysis, ColorAnalysisSchema } from '../../types/contracts';
-import { callResponsesWithSchema } from '../../utils/openai';
+import { getVisionLLM } from '../../services/openaiService';
 import { ensureVisionFileId, persistUpload } from '../../utils/media';
+import { getLogger } from '../../utils/logger';
 
 /**
  * Performs color analysis from a portrait and returns a text reply; logs and persists results.
  */
+const logger = getLogger('node:color_analysis');
 
-export async function colorAnalysisNode(state: { input: RunInput; intent?: string }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
+export async function colorAnalysisNode(state: { input: RunInput; intent?: string; messages?: unknown[] }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
   const { input, intent } = state;
   const imagePath = input.imagePath as string;
   const ensuredFileId = await ensureVisionFileId(imagePath, input.fileId);
@@ -23,19 +25,12 @@ export async function colorAnalysisNode(state: { input: RunInput; intent?: strin
     { role: 'system', content: prompt },
     { role: 'system', content: `UserGender: ${input.gender ?? 'unknown'} (adjust color guidance if relevant).` },
     { role: 'system', content: `Intent: ${intent || 'color_analysis'}` },
+    { role: 'system', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
     { role: 'user', content: [ { type: 'input_image', file_id: ensuredFileId as string, detail: 'high' } ] },
   ];
-  console.log('🎨 [COLOR_ANALYSIS:INPUT]', { hasImage: true });
-  const result = await callResponsesWithSchema<ColorAnalysis>({
-    messages: content as any,
-    schema,
-    model: 'gpt-5',
-  });
-  console.log('🎨 [COLOR_ANALYSIS:OUTPUT]', result);
-  if ((result as any).__tool_calls) {
-    const tc = (result as any).__tool_calls;
-    console.log('🎨 [COLOR_ANALYSIS:TOOLS]', { total: tc.total, names: tc.names });
-  }
+  logger.info({ hasImage: true }, 'ColorAnalysis: input');
+  const result = await getVisionLLM().withStructuredOutput(schema as any).invoke(content as any) as ColorAnalysis;
+  logger.info(result, 'ColorAnalysis: output');
   await prisma.colorAnalysis.create({
     data: {
       uploadId: upload.id,
@@ -51,9 +46,27 @@ export async function colorAnalysisNode(state: { input: RunInput; intent?: strin
     where: { id: input.userId },
     data: { lastColorAnalysisAt: new Date() },
   });
-  const primary = result.reply_text;
-  const follow = result.followup_text || null;
-  const replies: Array<{ reply_type: 'text'; reply_text: string }> = [{ reply_type: 'text', reply_text: primary }];
-  if (follow) replies.push({ reply_type: 'text', reply_text: follow });
+  const palette = result.palette_name ? `${result.palette_name}` : 'Unknown palette';
+  const descParts: string[] = [];
+  if (result.skin_tone?.name) descParts.push(`skin: ${result.skin_tone.name}`);
+  if (result.eye_color?.name) descParts.push(`eyes: ${result.eye_color.name}`);
+  if (result.hair_color?.name) descParts.push(`hair: ${result.hair_color.name}`);
+  if (result.undertone) descParts.push(`undertone: ${result.undertone}`);
+  const description = descParts.join(', ');
+  const top3 = (result.top3_colors || []).map(c => c.name).join(', ');
+  const bottom3 = (result.avoid3_colors || []).map(c => c.name).join(', ');
+  const lines: string[] = [
+    'Color Analysis',
+    `- Palette: ${palette}`,
+    `- Description: ${description || 'N/A'}`,
+    `- Comment: ${result.palette_comment ?? 'N/A'}`,
+    `- Top 3: ${top3 || 'N/A'}`,
+    `- Bottom 3: ${bottom3 || 'N/A'}`,
+  ];
+  const combinedText = [lines.join('\n'), result.reply_text].filter(Boolean).join('\n\n');
+  const replies: Array<{ reply_type: 'text'; reply_text: string }> = [
+    { reply_type: 'text', reply_text: combinedText },
+  ];
+  if (result.followup_text) replies.push({ reply_type: 'text', reply_text: result.followup_text });
   return { replies };
 }

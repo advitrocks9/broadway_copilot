@@ -1,15 +1,17 @@
-import { callResponsesWithSchema } from '../../utils/openai';
+import { getNanoLLM } from '../../services/openaiService';
 import prisma from '../../db/client';
 import { RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
+import { getLogger } from '../../utils/logger';
 
 type GenderJson = { inferred_gender: 'male' | 'female' | null; confirmed: boolean };
 
 /**
  * Infers and optionally persists the user's gender from recent conversation.
  */
-export async function inferProfileNode(state: { input: RunInput }): Promise<{ input?: RunInput }>{
+const logger = getLogger('node:infer_profile');
+export async function inferProfileNode(state: { input: RunInput; messages?: unknown[] }): Promise<{ input?: RunInput }>{
   const { input } = state;
   if (input.gender === 'male' || input.gender === 'female') {
     return { input };
@@ -24,27 +26,20 @@ export async function inferProfileNode(state: { input: RunInput }): Promise<{ in
   const prompt = loadPrompt('infer_profile.txt');
   const content: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: prompt },
+    { role: 'system', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
     { role: 'user', content: input.text || '' },
   ];
 
   const Schema = z.object({ inferred_gender: z.union([z.literal('male'), z.literal('female')]).nullable(), confirmed: z.boolean() });
-  console.log('🧠 [INFER_PROFILE:INPUT]', { userText: input.text || '' });
+  logger.info({ userText: input.text || '' }, 'InferProfile: input');
   let result: GenderJson;
   try {
-    result = await callResponsesWithSchema<GenderJson>({
-      messages: content as any,
-      schema: Schema,
-      model: 'gpt-5-nano',
-    });
+    result = await getNanoLLM().withStructuredOutput(Schema as any).invoke(content as any) as GenderJson;
   } catch (err: any) {
-    console.error('🧠 [INFER_PROFILE:ERROR]', err?.message);
+    logger.error({ message: err?.message }, 'InferProfile: error');
     return { input };
   }
-  console.log('🧠 [INFER_PROFILE:OUTPUT]', result);
-  if ((result as any).__tool_calls) {
-    const tc = (result as any).__tool_calls;
-    console.log('🧠 [INFER_PROFILE:TOOLS]', { total: tc.total, names: tc.names });
-  }
+  logger.info(result, 'InferProfile: output');
 
   const inferred = result.inferred_gender;
   if (!inferred) {

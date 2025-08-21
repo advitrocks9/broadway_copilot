@@ -1,4 +1,10 @@
 import { NextFunction, Request, Response } from 'express';
+import { getLogger } from '../../utils/logger';
+
+/**
+ * Global Express error handling middleware.
+ */
+const logger = getLogger('api:errors');
 
 export class HttpError extends Error {
   status: number;
@@ -13,7 +19,7 @@ export function errorHandler(err: any, _req: Request, res: Response, _next: Next
   const message = err.message || 'Internal Server Error';
   try {
     const stack = err?.stack || '';
-    console.error('Express error handler:', { status, message, stack, err });
+    logger.error({ status, message, stack, err }, 'Express error handler');
   } catch (_) {
     
   }

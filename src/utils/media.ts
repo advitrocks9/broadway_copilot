@@ -1,8 +1,10 @@
 import prisma from '../db/client';
+import { getLogger } from './logger';
 
 /**
  * Ensures an OpenAI Files API id exists for a given local image path.
  */
+const logger = getLogger('utils:media');
 export async function ensureVisionFileId(imagePath?: string, existingFileId?: string): Promise<string | undefined> {
   if (existingFileId) return existingFileId;
   if (!imagePath) return undefined;
@@ -13,7 +15,9 @@ export async function ensureVisionFileId(imagePath?: string, existingFileId?: st
  * Persists an upload row for analytics and joins.
  */
 export async function persistUpload(userId: string, imagePath: string, fileId?: string) {
-  return prisma.upload.create({ data: { userId, imagePath, fileId: fileId ?? null } });
+  const row = await prisma.upload.create({ data: { userId, imagePath, fileId: fileId ?? null } });
+  logger.info({ uploadId: row.id, userId }, 'Persisted upload');
+  return row;
 }
 
 
@@ -45,6 +49,7 @@ export async function downloadTwilioMedia(url: string, dir: string, suggestedExt
   const filePath = path.join(dir, filename);
   const buf = Buffer.from(await res.arrayBuffer());
   fs.writeFileSync(filePath, buf);
+  logger.info({ filePath }, 'Downloaded Twilio media');
   return filePath;
 }
 
@@ -54,6 +59,7 @@ export async function uploadImageToOpenAI(filePath: string): Promise<string> {
   const client = new OpenAI({ apiKey });
   const stream = fs.createReadStream(filePath);
   const uploaded = await client.files.create({ file: stream as any, purpose: 'vision' as any });
+  logger.info({ filePath }, 'Uploaded image to OpenAI');
   return (uploaded as any).id as string;
 }
 

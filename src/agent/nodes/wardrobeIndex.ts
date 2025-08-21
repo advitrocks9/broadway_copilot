@@ -4,13 +4,15 @@ import { RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
 import { toNameLower } from '../../utils/text';
 import { WardrobeIndexResponseSchema, WardrobeIndexResponse } from '../../types/contracts';
-import { callResponsesWithSchema } from '../../utils/openai';
+import { getVisionLLM } from '../../services/openaiService';
 import { ensureVisionFileId } from '../../utils/media';
 import type { Prisma } from '@prisma/client';
+import { getLogger } from '../../utils/logger';
 
 /**
  * Indexes wardrobe items from an image to persist context for future chats.
  */
+const logger = getLogger('node:wardrobe_index');
 
 export async function wardrobeIndexNode(state: { input: RunInput }): Promise<Record<string, never>> {
   const { input } = state;
@@ -27,28 +29,20 @@ export async function wardrobeIndexNode(state: { input: RunInput }): Promise<Rec
     { role: 'system', content: prompt },
     { role: 'user', content: [ { type: 'input_image', file_id: ensuredFileId as string, detail: 'high' } ] },
   ];
-  console.log('🗂️ [WARDROBE_INDEX:INPUT]', { hasImage: true });
+  logger.info({ hasImage: true }, 'WardrobeIndex: input');
   let result: WardrobeIndexResponse;
   try {
-    result = await callResponsesWithSchema<WardrobeIndexResponse>({
-      messages: content as any,
-      schema,
-      model: 'gpt-5',
-    });
+    result = await getVisionLLM().withStructuredOutput(schema as any).invoke(content as any) as WardrobeIndexResponse;
   } catch (err: any) {
-    console.error('🗂️ [WARDROBE_INDEX:ERROR]', { message: err?.message });
+    logger.error({ message: err?.message }, 'WardrobeIndex: error');
     return {};
   }
-  if ((result as any).__tool_calls) {
-    const tc = (result as any).__tool_calls;
-    console.log('🗂️ [WARDROBE_INDEX:TOOLS]', { total: tc.total, names: tc.names });
-  }
   if (result.status === 'bad_photo') {
-    console.log('🗂️ [WARDROBE_INDEX:OUTPUT]', { status: 'bad_photo', itemsCount: 0 });
+    logger.info({ status: 'bad_photo', itemsCount: 0 }, 'WardrobeIndex: output');
     return {};
   }
   const items = result.items ?? [];
-  console.log('🗂️ [WARDROBE_INDEX:OUTPUT]', { status: 'ok', itemsCount: Array.isArray(items) ? items.length : 0 });
+  logger.info({ status: 'ok', itemsCount: Array.isArray(items) ? items.length : 0 }, 'WardrobeIndex: output');
   for (const item of items) {
     const displayName = `${item.type}`;
     const nameLower = toNameLower(displayName);

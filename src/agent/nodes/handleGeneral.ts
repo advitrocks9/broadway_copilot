@@ -1,14 +1,16 @@
 import { RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
-import { callResponsesWithSchema } from '../../utils/openai';
+import { getNanoLLM } from '../../services/openaiService';
 import { queryActivityTimestamps } from '../tools';
+import { getLogger } from '../../utils/logger';
 
 /**
  * Handles general chat; may return text, menu, or card per prompt schema.
  */
+const logger = getLogger('node:handle_general');
 
-export async function handleGeneralNode(state: { input: RunInput; intent?: string }): Promise<{ replies: Array<{ reply_type: 'text' | 'menu' | 'card'; reply_text: string }> }>{
+export async function handleGeneralNode(state: { input: RunInput; intent?: string; messages?: unknown[]; wardrobe?: unknown; latestColorAnalysis?: unknown }): Promise<{ replies: Array<{ reply_type: 'text' | 'menu' | 'card'; reply_text: string }> }>{
   const { input } = state;
   const intent: string | undefined = state.intent;
   const systemPrompt = loadPrompt('handle_general.txt');
@@ -18,6 +20,9 @@ export async function handleGeneralNode(state: { input: RunInput; intent?: strin
     { role: 'system', content: `UserGender: ${input.gender ?? 'unknown'} (if known, tailor guidance and examples accordingly).` },
     { role: 'system', content: `Current user ID: ${input.userId}` },
     { role: 'system', content: `Intent: ${intent || 'general'}` },
+    { role: 'system', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
+    { role: 'system', content: `WardrobeContext: ${JSON.stringify(state.wardrobe || {})}` },
+    { role: 'system', content: `LatestColorAnalysis: ${JSON.stringify(state.latestColorAnalysis || null)}` },
     { role: 'system', content: `LastColorAnalysisAtISO: ${activity.lastColorAnalysisAt ? activity.lastColorAnalysisAt.toISOString() : 'none'}` },
     { role: 'system', content: `LastColorAnalysisHoursAgo: ${activity.colorAnalysisHoursAgo ?? 'unknown'}` },
     { role: 'system', content: `LastVibeCheckAtISO: ${activity.lastVibeCheckAt ? activity.lastVibeCheckAt.toISOString() : 'none'}` },
@@ -25,17 +30,9 @@ export async function handleGeneralNode(state: { input: RunInput; intent?: strin
     { role: 'user', content: input.text || 'Help with style.' },
   ];
   const Schema = z.object({ reply_type: z.enum(['text','menu','card']), reply_text: z.string(), followup_text: z.string().nullable() });
-  console.log('💬 [GENERAL:INPUT]', { userText: input.text || '' });
-  const resp = await callResponsesWithSchema<{ reply_type: 'text'|'menu'|'card'; reply_text: string; followup_text: string | null}>({
-    messages: prompt as any,
-    schema: Schema,
-    model: 'gpt-5-nano',
-  });
-  console.log('💬 [GENERAL:OUTPUT]', resp);
-  if ((resp as any).__tool_calls) {
-    const tc = (resp as any).__tool_calls;
-    console.log('💬 [GENERAL:TOOLS]', { total: tc.total, names: tc.names });
-  }
+  logger.info({ userText: input.text || '' }, 'HandleGeneral: input');
+  const resp = await getNanoLLM().withStructuredOutput(Schema as any).invoke(prompt as any) as { reply_type: 'text'|'menu'|'card'; reply_text: string; followup_text: string | null };
+  logger.info(resp, 'HandleGeneral: output');
   const replies: Array<{ reply_type: 'text' | 'menu' | 'card'; reply_text: string }> = [
     { reply_type: resp.reply_type, reply_text: resp.reply_text },
   ];
