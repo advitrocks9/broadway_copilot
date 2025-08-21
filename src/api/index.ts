@@ -11,7 +11,6 @@ import { getLogger } from '../utils/logger';
  * Express API entrypoint for Broadway WhatsApp Bot server.
  */
 const logger = getLogger('api');
-
 const app = express();
 app.set('trust proxy', true);
 app.use(cors({ origin: [/http:\/\/localhost:\d+/, /http:\/\/127\.0\.0\.1:\d+/], credentials: true }));
