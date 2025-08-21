@@ -10,7 +10,8 @@ env:
   PROJECT_ID: 'broadway-chatbot' 
   REGION: 'asia-south2'
   SERVICE: 'broadway-chatbot'
-  WORKLOAD_IDENTITY_PROVIDER: 'projects/480746037141/locations/global/workloadIdentityPools/github-actions-cloud-run' 
+  WORKLOAD_IDENTITY_PROVIDER: 'projects/480746037141/locations/global/workloadIdentityPools/github-actions-cloud-run/providers/github' 
+  SERVICE_ACCOUNT: 'github-actions-deploy@broadway-chatbot.iam.gserviceaccount.com'
 
 jobs:
   deploy:
@@ -33,6 +34,7 @@ jobs:
         uses: 'google-github-actions/auth@f112390a2df9932162083945e46d439060d66ec2' # google-github-actions/auth@v2
         with:
           workload_identity_provider: '${{ env.WORKLOAD_IDENTITY_PROVIDER }}'
+          service_account: '${{ env.SERVICE_ACCOUNT }}'
 
       # BEGIN - Docker auth and build
       #
