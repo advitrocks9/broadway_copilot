@@ -30,6 +30,8 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/prompts ./prompts
 COPY --from=build /app/prisma ./prisma
 
+RUN npx prisma generate
+
 EXPOSE 8080
 
 CMD ["npm", "start"]
