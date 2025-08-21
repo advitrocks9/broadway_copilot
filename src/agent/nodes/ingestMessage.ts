@@ -4,10 +4,12 @@ import { downloadTwilioMedia } from '../../utils/media';
 import { userUploadDir } from '../../utils/paths';
 import { RunInput } from '../state';
 import { ensureVisionFileId } from '../../utils/media';
+import { getLogger } from '../../utils/logger';
 
 /**
  * Normalizes Twilio webhook payload into RunInput and records a user turn.
  */
+const logger = getLogger('node:ingest_message');
 type IngestState = { input: Record<string, unknown> };
 
 export async function ingestMessageNode(state: IngestState): Promise<{ input?: RunInput; reply?: string }>{
@@ -33,6 +35,7 @@ export async function ingestMessageNode(state: IngestState): Promise<{ input?: R
       imagePath = await downloadTwilioMedia(mediaUrl0, dir);
       fileId = await ensureVisionFileId(imagePath);
     } catch (err) {
+      logger.error({ err }, 'IngestMessage: failed to download/process media');
       return { reply: 'I had a problem downloading the image. Please try again.' };
     }
   }
@@ -47,6 +50,7 @@ export async function ingestMessageNode(state: IngestState): Promise<{ input?: R
       metadata: buttonPayload ? { buttonPayload } : undefined,
     },
   });
+  logger.info({ userId: user.id, waId, hasImage: Boolean(imagePath), hasText: Boolean(bodyText) }, 'Ingested user turn');
 
   const normalized: RunInput = {
     userId: user.id,

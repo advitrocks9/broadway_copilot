@@ -1,6 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 
+/**
+ * Filesystem helpers for uploads directory handling.
+ */
 export function ensureDir(dirPath: string): void {
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true });

@@ -5,10 +5,12 @@ import { z } from 'zod';
 import { VibeCheckResponse, VibeCheckResponseSchema } from '../../types/contracts';
 import { getVisionLLM } from '../../services/openaiService';
 import { ensureVisionFileId, persistUpload } from '../../utils/media';
+import { getLogger } from '../../utils/logger';
 
 /**
  * Rates outfit from an image and returns a concise text summary; logs and persists results.
  */
+const logger = getLogger('node:vibe_check');
 export async function vibeCheckNode(state: { input: RunInput; intent?: string; messages?: unknown[]; latestColorAnalysis?: unknown }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
   const { input, intent } = state;
   const imagePath = input.imagePath as string;
@@ -25,9 +27,9 @@ export async function vibeCheckNode(state: { input: RunInput; intent?: string; m
     { role: 'system', content: `LatestColorAnalysis: ${JSON.stringify(state.latestColorAnalysis || null)}` },
     { role: 'user', content: [ { type: 'input_image', file_id: ensuredFileId as string, detail: 'high' } ] },
   ];
-  console.log('👗 [VIBE_CHECK:INPUT]', { hasImage: true });
+  logger.info({ hasImage: true }, 'VibeCheck: input');
   const result = await getVisionLLM().withStructuredOutput(schema as any).invoke(content as any) as VibeCheckResponse;
-  console.log('👗 [VIBE_CHECK:OUTPUT]', result);
+  logger.info(result, 'VibeCheck: output');
   const categories = Array.isArray(result.categories) ? result.categories : [];
   const byHeading: Record<string, number | undefined> = Object.fromEntries(
     categories.map((c: any) => [c.heading, typeof c.score === 'number' ? c.score : undefined])
@@ -54,7 +56,6 @@ export async function vibeCheckNode(state: { input: RunInput; intent?: string; m
     ...categories.map((c) => `- ${c.heading}: ${typeof c.score === 'number' ? c.score : 'N/A'}`),
     `- Overall: ${typeof result.vibe_score === 'number' ? result.vibe_score : 'N/A'}`,
     '',
-    `Vibe reply: ${result.vibe_reply}`,
   ];
   const combinedText = [scoreLines.join('\n'), result.reply_text].filter(Boolean).join('\n\n');
   const replies: Array<{ reply_type: 'text'; reply_text: string }> = [

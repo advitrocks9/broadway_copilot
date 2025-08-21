@@ -3,10 +3,12 @@ import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
 import { getNanoLLM } from '../../services/openaiService';
 import { queryActivityTimestamps } from '../tools';
+import { getLogger } from '../../utils/logger';
 
 /**
  * Handles general chat; may return text, menu, or card per prompt schema.
  */
+const logger = getLogger('node:handle_general');
 
 export async function handleGeneralNode(state: { input: RunInput; intent?: string; messages?: unknown[]; wardrobe?: unknown; latestColorAnalysis?: unknown }): Promise<{ replies: Array<{ reply_type: 'text' | 'menu' | 'card'; reply_text: string }> }>{
   const { input } = state;
@@ -28,9 +30,9 @@ export async function handleGeneralNode(state: { input: RunInput; intent?: strin
     { role: 'user', content: input.text || 'Help with style.' },
   ];
   const Schema = z.object({ reply_type: z.enum(['text','menu','card']), reply_text: z.string(), followup_text: z.string().nullable() });
-  console.log('💬 [GENERAL:INPUT]', { userText: input.text || '' });
+  logger.info({ userText: input.text || '' }, 'HandleGeneral: input');
   const resp = await getNanoLLM().withStructuredOutput(Schema as any).invoke(prompt as any) as { reply_type: 'text'|'menu'|'card'; reply_text: string; followup_text: string | null };
-  console.log('💬 [GENERAL:OUTPUT]', resp);
+  logger.info(resp, 'HandleGeneral: output');
   const replies: Array<{ reply_type: 'text' | 'menu' | 'card'; reply_text: string }> = [
     { reply_type: resp.reply_type, reply_text: resp.reply_text },
   ];

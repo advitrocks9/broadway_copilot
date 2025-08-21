@@ -5,10 +5,12 @@ import { z } from 'zod';
 import { ColorAnalysis, ColorAnalysisSchema } from '../../types/contracts';
 import { getVisionLLM } from '../../services/openaiService';
 import { ensureVisionFileId, persistUpload } from '../../utils/media';
+import { getLogger } from '../../utils/logger';
 
 /**
  * Performs color analysis from a portrait and returns a text reply; logs and persists results.
  */
+const logger = getLogger('node:color_analysis');
 
 export async function colorAnalysisNode(state: { input: RunInput; intent?: string; messages?: unknown[] }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
   const { input, intent } = state;
@@ -26,9 +28,9 @@ export async function colorAnalysisNode(state: { input: RunInput; intent?: strin
     { role: 'system', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
     { role: 'user', content: [ { type: 'input_image', file_id: ensuredFileId as string, detail: 'high' } ] },
   ];
-  console.log('🎨 [COLOR_ANALYSIS:INPUT]', { hasImage: true });
+  logger.info({ hasImage: true }, 'ColorAnalysis: input');
   const result = await getVisionLLM().withStructuredOutput(schema as any).invoke(content as any) as ColorAnalysis;
-  console.log('🎨 [COLOR_ANALYSIS:OUTPUT]', result);
+  logger.info(result, 'ColorAnalysis: output');
   await prisma.colorAnalysis.create({
     data: {
       uploadId: upload.id,

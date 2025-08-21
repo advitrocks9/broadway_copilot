@@ -3,10 +3,12 @@ import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
 import { getNanoLLM } from '../../services/openaiService';
 import { queryActivityTimestamps } from '../tools';
+import { getLogger } from '../../utils/logger';
 
 /**
  * Provides vacation-specific guidance; outputs text reply_type.
  */
+const logger = getLogger('node:handle_vacation');
 
 export async function handleVacationNode(state: { input: RunInput; intent?: string; messages?: unknown[]; wardrobe?: unknown; latestColorAnalysis?: unknown }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
   const { input } = state;
@@ -28,9 +30,9 @@ export async function handleVacationNode(state: { input: RunInput; intent?: stri
     { role: 'user', content: input.text || 'I need vacation outfit ideas.' },
   ];
   const Schema = z.object({ reply_text: z.string(), followup_text: z.string().nullable() });
-  console.log('🌴 [VACATION:INPUT]', { userText: input.text || '' });
+  logger.info({ userText: input.text || '' }, 'HandleVacation: input');
   const resp = await getNanoLLM().withStructuredOutput(Schema as any).invoke(prompt as any) as { reply_text: string; followup_text: string | null };
-  console.log('🌴 [VACATION:OUTPUT]', resp);
+  logger.info(resp, 'HandleVacation: output');
   const replies: Array<{ reply_type: 'text'; reply_text: string }> = [{ reply_type: 'text', reply_text: resp.reply_text }];
   if (resp.followup_text) replies.push({ reply_type: 'text', reply_text: resp.followup_text });
   return { replies };

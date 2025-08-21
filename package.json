@@ -1,17 +1,14 @@
 {
-  "name": "broadway-whatsappbot",
+  "name": "broadway-copilot",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "ts-node-dev --respawn src/api/index.ts",
-    "prisma:gen": "prisma generate",
-    "prisma:migrate": "prisma migrate dev --name init",
-    "db:reset": "rm -f prisma/dev.db && prisma migrate reset --force",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/api/index.js",
-    "graph:png": "ts-node-dev --transpile-only scripts/visualizeGraph.ts"
+    "graph": "ts-node-dev --transpile-only scripts/visualizeGraph.ts"
   },
   "keywords": [],
   "author": "",
@@ -36,6 +33,7 @@
     "@types/express": "^5.0.3",
     "@types/multer": "^2.0.0",
     "@types/node": "^24.3.0",
+    "pino-pretty": "^13.1.1",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.2"
   }

@@ -2,10 +2,12 @@ import { getNanoLLM } from '../../services/openaiService';
 import { IntentLabel, RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
+import { getLogger } from '../../utils/logger';
 
 /**
  * Routes the input to the appropriate handler node based on the router prompt.
  */
+const logger = getLogger('node:route_intent');
 
 type RouterOutput = { intent: IntentLabel; gender_required: boolean };
 
@@ -16,23 +18,32 @@ export async function routeIntent(state: { input: RunInput; messages?: unknown[]
     const intent = payload as IntentLabel;
     const missingProfileFields: Array<'gender'> = [];
     const next = 'check_image';
-    console.log('🧭 [ROUTE_INTENT:SKIP_LLM]', { input, intent, next });
+    logger.info({ input, intent, next }, 'RouteIntent: skip LLM due to button payload');
     return { intent, missingProfileFields, next };
   }
 
 
   const hasImage = Boolean(input.fileId || input.imagePath);
-  let lastButton: string | undefined = undefined;
+  let prevUserButton: string | undefined = undefined;
   try {
     const msgs = Array.isArray(state.messages) ? (state.messages as Array<any>) : [];
-    const last = msgs.slice().reverse().find((m: any) => m?.role === 'user' && m?.metadata?.buttonPayload);
-    lastButton = (last?.metadata?.buttonPayload || '').toString().toLowerCase();
+    const lastIdx = msgs.length - 1;
+    const currentIsUser = lastIdx >= 0 && msgs[lastIdx]?.role === 'user';
+    if (currentIsUser) {
+      for (let i = lastIdx - 1; i >= 0; i--) {
+        const m = msgs[i];
+        if (m?.role === 'user') {
+          prevUserButton = (m?.metadata?.buttonPayload || '').toString().toLowerCase();
+          break;
+        }
+      }
+    }
   } catch {}
-  if (hasImage && (lastButton === 'vibe_check' || lastButton === 'color_analysis')) {
-    const intent = lastButton as IntentLabel;
+  if (hasImage && (prevUserButton === 'vibe_check' || prevUserButton === 'color_analysis')) {
+    const intent = prevUserButton as IntentLabel;
     const missingProfileFields: Array<'gender'> = [];
-    const next = intent; // route directly to service since image is present
-    console.log('🧭 [ROUTE_INTENT:IMG+LAST_BTN]', { intent, next });
+    const next = intent;
+    logger.info({ intent, next }, 'RouteIntent: image present and previous user button');
     return { intent, missingProfileFields, next };
   }
 
@@ -49,9 +60,9 @@ export async function routeIntent(state: { input: RunInput; messages?: unknown[]
     { role: 'system', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
   ];
 
-  console.log('🧭 [ROUTE_INTENT:INPUT]', { input });
+  logger.info({ input }, 'RouteIntent: input');
   const res = await getNanoLLM().withStructuredOutput(RouterSchema as any).invoke(content as any) as RouterOutput;
-  console.log('🧭 [ROUTE_INTENT:OUTPUT]', res);
+  logger.info(res, 'RouteIntent: output');
 
   const { intent, gender_required } = res;
   const hasGender = input.gender === 'male' || input.gender === 'female';

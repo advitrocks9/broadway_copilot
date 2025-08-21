@@ -1,4 +1,10 @@
 import prisma from '../db/client';
+import { getLogger } from '../utils/logger';
+
+/**
+ * Agent data helpers: recent turns, wardrobe, colors, and activity timestamps.
+ */
+const logger = getLogger('agent:tools');
 
 export async function fetchRecentTurns(userId: string, limit = 12) {
   const turns = await prisma.turn.findMany({

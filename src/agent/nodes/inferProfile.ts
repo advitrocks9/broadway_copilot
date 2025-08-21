@@ -3,12 +3,14 @@ import prisma from '../../db/client';
 import { RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
+import { getLogger } from '../../utils/logger';
 
 type GenderJson = { inferred_gender: 'male' | 'female' | null; confirmed: boolean };
 
 /**
  * Infers and optionally persists the user's gender from recent conversation.
  */
+const logger = getLogger('node:infer_profile');
 export async function inferProfileNode(state: { input: RunInput; messages?: unknown[] }): Promise<{ input?: RunInput }>{
   const { input } = state;
   if (input.gender === 'male' || input.gender === 'female') {
@@ -29,15 +31,15 @@ export async function inferProfileNode(state: { input: RunInput; messages?: unkn
   ];
 
   const Schema = z.object({ inferred_gender: z.union([z.literal('male'), z.literal('female')]).nullable(), confirmed: z.boolean() });
-  console.log('🧠 [INFER_PROFILE:INPUT]', { userText: input.text || '' });
+  logger.info({ userText: input.text || '' }, 'InferProfile: input');
   let result: GenderJson;
   try {
     result = await getNanoLLM().withStructuredOutput(Schema as any).invoke(content as any) as GenderJson;
   } catch (err: any) {
-    console.error('🧠 [INFER_PROFILE:ERROR]', err?.message);
+    logger.error({ message: err?.message }, 'InferProfile: error');
     return { input };
   }
-  console.log('🧠 [INFER_PROFILE:OUTPUT]', result);
+  logger.info(result, 'InferProfile: output');
 
   const inferred = result.inferred_gender;
   if (!inferred) {

@@ -1,6 +1,12 @@
 import multer from 'multer';
 import path from 'path';
 import { ensureDir, userUploadDir } from '../../utils/paths';
+import { getLogger } from '../../utils/logger';
+
+/**
+ * Multer upload middleware for saving inbound media under per-user directories.
+ */
+const logger = getLogger('api:upload');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {

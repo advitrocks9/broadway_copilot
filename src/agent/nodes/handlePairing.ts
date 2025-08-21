@@ -3,10 +3,12 @@ import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
 import { getNanoLLM } from '../../services/openaiService';
 import { queryActivityTimestamps } from '../tools';
+import { getLogger } from '../../utils/logger';
 
 /**
  * Suggests complementary pairing tags; outputs text reply_type.
  */
+const logger = getLogger('node:handle_pairing');
 
 export async function handlePairingNode(state: { input: RunInput; intent?: string; messages?: unknown[]; wardrobe?: unknown; latestColorAnalysis?: unknown }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
   const { input } = state;
@@ -29,9 +31,9 @@ export async function handlePairingNode(state: { input: RunInput; intent?: strin
     { role: 'user', content: question },
   ];
   const Schema = z.object({ reply_text: z.string(), followup_text: z.string().nullable() });
-  console.log('🧩 [PAIRING:INPUT]', { userText: question });
+  logger.info({ userText: question }, 'HandlePairing: input');
   const resp = await getNanoLLM().withStructuredOutput(Schema as any).invoke(prompt as any) as { reply_text: string; followup_text: string | null };
-  console.log('🧩 [PAIRING:OUTPUT]', resp);
+  logger.info(resp, 'HandlePairing: output');
   const replies: Array<{ reply_type: 'text'; reply_text: string }> = [{ reply_type: 'text', reply_text: resp.reply_text }];
   if (resp.followup_text) replies.push({ reply_type: 'text', reply_text: resp.followup_text });
   return { replies };

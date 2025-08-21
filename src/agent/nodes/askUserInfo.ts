@@ -2,10 +2,12 @@ import { RunInput } from '../state';
 import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
 import { getNanoLLM } from '../../services/openaiService';
+import { getLogger } from '../../utils/logger';
 
 /**
  * Asks the user for required profile fields and returns a text reply.
  */
+const logger = getLogger('node:ask_user_info');
 
 export async function askUserInfoNode(state: { input: RunInput; messages?: unknown[]; intent?: string; missingProfileFields?: Array<'gender'> }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
   const llm = getNanoLLM();
@@ -23,9 +25,9 @@ export async function askUserInfoNode(state: { input: RunInput; messages?: unkno
     { role: 'user', content: JSON.stringify({ fields: list }) },
   ];
   const AskSchema = z.object({ text: z.string() });
-  console.log('🧩 [ASK_USER_INFO:INPUT]', { userId: input.userId, missing });
+  logger.info({ userId: input.userId, missing }, 'AskUserInfo: input');
   const resp = await llm.withStructuredOutput(AskSchema as any).invoke(promptMessages) as { text: string };
-  console.log('🧩 [ASK_USER_INFO:OUTPUT]', resp);
+  logger.info(resp, 'AskUserInfo: output');
   const replyText = resp.text;
   return { replies: [{ reply_type: 'text', reply_text: replyText }] };
 }

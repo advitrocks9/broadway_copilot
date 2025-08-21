@@ -1,0 +1,46 @@
+# Node dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+dist/
+build/
+
+# Test and coverage
+coverage/
+.nyc_output
+
+# Caches
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+.eslintcache
+.npm
+.cache
+tmp/
+temp/
+
+# VCS
+.git/
+
+# Editors/OS
+.vscode/
+.idea/
+.DS_Store
+.DS_Store?
+
+# Environment files
+.env
+.env.*
+
+# App data not needed
+uploads/
+
+# Tests (exclude from build context)
+**/__tests__/
+**/*.test.*
+**/*.spec.*

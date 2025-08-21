@@ -2,11 +2,13 @@ import 'dotenv/config';
 import prisma from '../../db/client';
 import { sendText, sendMenu, sendCard } from '../../services/twilioService';
 import type { Reply } from '../state';
+import { getLogger } from '../../utils/logger';
 
 /**
  * Sends the reply via Twilio based on state.reply and state.mode.
  * Also records assistant turn and updates intent if present.
  */
+const logger = getLogger('node:send_reply');
 type SendReplyState = {
   input?: { waId: string; userId: string };
   reply?: Reply | string;
@@ -40,6 +42,7 @@ export async function sendReplyNode(state: SendReplyState): Promise<Record<strin
     replies: normalizedReplies,
   };
   const assistantTurn = await prisma.turn.create({ data: createData });
+  logger.info({ userId, waId, turnId: assistantTurn.id, repliesCount: normalizedReplies.length, intent }, 'SendReply: persisted assistant turn');
 
   try {
     for (const r of normalizedReplies) {
@@ -52,7 +55,7 @@ export async function sendReplyNode(state: SendReplyState): Promise<Record<strin
       }
     }
   } catch (err) {
-    console.error('❌ [SEND_REPLY] Twilio send failed:', err);
+    logger.error({ err }, 'SendReply: Twilio send failed');
   }
 
   return {};

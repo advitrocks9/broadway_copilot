@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+/**
+ * Zod schemas and types for model-structured responses and wardrobe items.
+ */
 export const VibeCategorySchema = z
   .object({
     heading: z.enum([
