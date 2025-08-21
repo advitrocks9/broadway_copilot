@@ -24,6 +24,6 @@ RUN npm ci --only=production
 
 COPY --from=build /app/dist ./dist
 
-EXPOSE 3000
+EXPOSE 8080
 
 CMD ["npm", "start"]
