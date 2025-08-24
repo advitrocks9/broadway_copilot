@@ -9,10 +9,13 @@ type HydrateIn = { input: RunInput };
 export async function hydrateContextNode(state: HydrateIn): Promise<{ messages: unknown[]; wardrobe: unknown; latestColorAnalysis: unknown }>{
   const { input } = state;
   const [messages, wardrobe, colors] = await Promise.all([
-    fetchRecentTurns(input.userId, 12),
+    fetchRecentTurns(input.userId, 6),
     queryWardrobe(input.userId),
     queryColors(input.userId),
   ]);
+  console.log('messages', messages);
+  console.log('wardrobe', wardrobe);
+  console.log('colors', colors);
   return { messages, wardrobe, latestColorAnalysis: colors.latestColorAnalysis };
 }
 

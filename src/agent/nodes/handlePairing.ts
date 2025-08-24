@@ -14,7 +14,7 @@ export async function handlePairingNode(state: { input: RunInput; intent?: strin
   const { input } = state;
   const question = input.text || 'How to pair items?';
   const intent: string | undefined = state.intent;
-  const systemPrompt = loadPrompt('handle_pairing.txt');
+  const systemPrompt = await loadPrompt('handle_pairing.txt');
   const activity = await queryActivityTimestamps(input.userId);
   const prompt: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: systemPrompt },

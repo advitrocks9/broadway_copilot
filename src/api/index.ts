@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import { errorHandler } from './middleware/errors';
 import { staticUploadsMount } from '../utils/paths';
-import { validateTwilioRequest } from '../services/twilioService';
+import { sendText, validateTwilioRequest } from '../services/twilioService';
 import { runAgent } from '../agent/graph';
 import { getLogger } from '../utils/logger';
 
@@ -37,6 +37,14 @@ app.post('/twilio/', async (req, res) => {
         contentType: req.headers['content-type'],
       }, 'Invalid Twilio request signature');
       return res.status(403).send('Forbidden');
+    }
+
+    if (req.body.Body.length > 200) {
+      logger.info({
+        body: req.body,
+      }, 'Message too long');
+      sendText(req.body.From, 'Please send a shorter message!');
+      return res.status(200).end();
     }
 
     await runAgent(req.body || {});

@@ -23,7 +23,7 @@ export async function inferProfileNode(state: { input: RunInput; messages?: unkn
     return { input: { ...input, gender: existingGender } };
   }
 
-  const prompt = loadPrompt('infer_profile.txt');
+  const prompt = await loadPrompt('infer_profile.txt');
   const content: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: prompt },
     { role: 'system', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },

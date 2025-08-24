@@ -17,7 +17,7 @@ export async function vibeCheckNode(state: { input: RunInput; intent?: string; m
   const ensuredFileId = await ensureVisionFileId(imagePath, input.fileId);
   const upload = await persistUpload(input.userId, imagePath, ensuredFileId);
   const schema = VibeCheckResponseSchema as unknown as z.ZodType<VibeCheckResponse>;
-  const prompt = loadPrompt('vibe_check.txt');
+  const prompt = await loadPrompt('vibe_check.txt');
   type VisionPart = { type: 'input_text'; text: string } | { type: 'input_image'; file_id: string; detail?: 'auto' | 'low' | 'high' };
   type VisionContent = string | VisionPart[];
   const content: Array<{ role: 'system' | 'user'; content: VisionContent }> = [

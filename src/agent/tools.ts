@@ -6,12 +6,13 @@ import { getLogger } from '../utils/logger';
  */
 const logger = getLogger('agent:tools');
 
-export async function fetchRecentTurns(userId: string, limit = 12) {
+export async function fetchRecentTurns(userId: string, limit = 6) {
+  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
   const turns = await prisma.turn.findMany({
-    where: { userId },
+    where: { userId, createdAt: { gte: thirtyMinutesAgo } },
     orderBy: { createdAt: 'desc' },
     take: limit,
-    select: { role: true, text: true, imagePath: true, createdAt: true, metadata: true },
+    select: { role: true, text: true, imagePath: true },
   });
   return turns.reverse();
 }
@@ -24,11 +25,9 @@ export async function queryWardrobe(userId: string) {
     where: { userId },
     orderBy: { createdAt: 'desc' },
     select: {
-      id: true,
       name: true,
       category: true,
       colors: true,
-      type: true,
       subtype: true,
       attributes: true,
       createdAt: true,
@@ -43,11 +42,28 @@ export async function queryWardrobe(userId: string) {
 export async function queryColors(userId: string) {
   const uploadsWithColor = await prisma.upload.findMany({
     where: { userId, color: { isNot: null } },
-    include: { color: true },
+    include: {
+      color: {
+        select: {
+          palette_name: true,
+          top3_colors: true,
+          avoid3_colors: true,
+          undertone: true,
+        },
+      },
+    },
     orderBy: { createdAt: 'desc' },
     take: 1,
   });
-  const latest = uploadsWithColor[0]?.color || null;
+  const raw = uploadsWithColor[0]?.color || null;
+  const latest = raw
+    ? {
+        palette_name: raw.palette_name ?? null,
+        top_3_colors: (raw as any).top3_colors ?? null,
+        bottom_3_colors: (raw as any).avoid3_colors ?? null,
+        undertone: raw.undertone ?? null,
+      }
+    : null;
   return { latestColorAnalysis: latest };
 }
 
@@ -68,8 +84,3 @@ export async function queryActivityTimestamps(userId: string) {
     colorAnalysisHoursAgo,
   };
 }
-
-/**
- * Builds a compact transcript of the last 6 user and 6 assistant messages.
- */
-export {}

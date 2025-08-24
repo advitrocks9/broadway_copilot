@@ -14,7 +14,7 @@ export async function handleSuggestNode(state: { input: RunInput; intent?: strin
   const { input } = state;
   const question = input.text || 'Suggestions to improve the outfit?';
   const intent: string | undefined = state.intent;
-  const systemPrompt = loadPrompt('handle_suggest.txt');
+  const systemPrompt = await loadPrompt('handle_suggest.txt');
   const activity = await queryActivityTimestamps(input.userId);
   const prompt: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: systemPrompt },

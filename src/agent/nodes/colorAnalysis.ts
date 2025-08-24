@@ -18,7 +18,7 @@ export async function colorAnalysisNode(state: { input: RunInput; intent?: strin
   const ensuredFileId = await ensureVisionFileId(imagePath, input.fileId);
   const upload = await persistUpload(input.userId, imagePath, ensuredFileId);
   const schema = ColorAnalysisSchema as unknown as z.ZodType<ColorAnalysis>;
-  const prompt = loadPrompt('color_analysis.txt');
+  const prompt = await loadPrompt('color_analysis.txt');
   type VisionPart = { type: 'input_text'; text: string } | { type: 'input_image'; file_id: string; detail?: 'auto' | 'low' | 'high' };
   type VisionContent = string | VisionPart[];
   const content: Array<{ role: 'system' | 'user'; content: VisionContent }> = [
@@ -37,6 +37,8 @@ export async function colorAnalysisNode(state: { input: RunInput; intent?: strin
       skin_tone: result.skin_tone?.name ?? null,
       eye_color: result.eye_color?.name ?? null,
       hair_color: result.hair_color?.name ?? null,
+      undertone: result.undertone ?? null,
+      palette_name: result.palette_name ?? null,
       top3_colors: result.top3_colors as unknown as z.infer<typeof schema>['top3_colors'],
       avoid3_colors: result.avoid3_colors as unknown as z.infer<typeof schema>['avoid3_colors'],
       rawJson: result as unknown as z.infer<typeof schema>,

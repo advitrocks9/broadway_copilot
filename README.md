@@ -1,96 +1,173 @@
-# Broadway Copilot
+## Broadway Copilot
 
-This is a WhatsApp bot that acts as a personal stylist. It uses AI to understand user queries, analyze images, and provide fashion advice.
+Broadway Copilot is a WhatsApp personal stylist powered by LangGraph and OpenAI. It understands user intent, analyzes outfit photos, and returns responses via Twilio WhatsApp.
 
-## How It Works
+### Architecture
 
-The core of the bot is an AI agent built with LangChain. The agent is a state machine that processes user messages and decides what to do next. The flow is as follows:
+- **Express API**: Receives Twilio webhooks at `POST /twilio/` and serves static files under `/uploads`.
+- **Agent (LangGraph)**: A state graph routes across nodes like `route_intent`, `vibe_check`, `color_analysis`, `handle_suggest`, and more.
+- **Services**: Twilio messaging helpers and OpenAI clients.
+- **Database**: Prisma + PostgreSQL for users, turns, uploads, color analysis, vibe checks, and wardrobe items.
 
-1.  **Ingest Message**: A new message from WhatsApp is received by the Express API, which passes it to the agent.
-2.  **Infer Profile**: The agent infers user profile information from the message.
-3.  **Route Intent**: The agent determines the user's intent (e.g., asking for a style suggestion, an opinion on an outfit, etc.).
-4.  **Handle Intent**: Based on the intent, the agent routes the message to the appropriate handler. Handlers exist for various intents like `occasion`, `vacation`, `pairing`, `suggest`, `vibe_check`, and `color_analysis`.
-5.  **Send Reply**: The handler generates a response, which is sent back to the user via Twilio's WhatsApp API.
+![Agent Graph](./langgraph.png)
 
-The project uses Prisma to interact with a SQLite database, which stores information about users, their wardrobe, and conversations.
-
-## Project Layout
-
-The project is structured as follows:
+### Repository structure
 
 ```
 broadway_copilot/
-├── prisma/               # Prisma schema and migrations
-├── scripts/              # Helper scripts
+├── prisma/                Prisma schema and migrations
+├── prompts/               Prompt files used by the agent
+├── scripts/               Graph visualization script
 ├── src/
-│   ├── agent/            # Core AI agent logic (LangChain graph and nodes)
-│   ├── api/              # Express API for handling webhooks
-│   ├── db/               # Prisma client
-│   ├── prompts/          # Prompts for the LLM
-│   ├── services/         # Services for interacting with external APIs (Twilio, etc.)
-│   ├── types/            # TypeScript types and interfaces
-│   └── utils/            # Utility functions
+│   ├── agent/             LangGraph state machine and nodes
+│   ├── api/               Express server, middleware, routes
+│   ├── db/                Prisma client
+│   ├── services/          Twilio and OpenAI services
+│   ├── types/             Shared types
+│   └── utils/             Utilities (logging, media, paths)
+├── Dockerfile
 ├── package.json
 └── tsconfig.json
 ```
 
-## Getting Started
+## Prerequisites
 
-To get the project up and running, follow these steps:
-
-### 1. Prerequisites
-
-- Node.js
+- Node.js 20+ (Node 22 recommended; Dockerfile uses 22-alpine)
 - npm
-- [ngrok](https://ngrok.com/download)
+- PostgreSQL database
+- Twilio account with WhatsApp (sandbox or business number)
+- ngrok (optional for local webhook testing)
 
-### 2. Installation and Setup
+## Environment variables
 
-1.  **Clone the repository**
+Create a `.env` at the repo root:
 
-    ```bash
-    git clone <repository-url>
-    cd broadway_copilot
-    ```
+```
+# OpenAI
+OPENAI_API_KEY=
 
-2.  **Install dependencies**
+# Twilio core
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
 
-    ```bash
-    npm install
-    ```
+# Optional Twilio Content Template SIDs (fallbacks to text if absent)
+TWILIO_MENU_SID=
+TWILIO_CARD_SID=
 
-3.  **Set up the database**
+# Webhook signature validation (default true)
+TWILIO_VALIDATE_WEBHOOK=true
 
-    ```bash
-    npm run prisma:migrate
-    ```
+# Database
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB?schema=public
 
-4.  **Set up environment variables**
+# Server
+PORT=8080
+LOG_LEVEL=debug
+NODE_ENV=development
+```
 
-    Create a `.env` file in the root of the project and add the following secrets.
+Notes:
+- If `TWILIO_VALIDATE_WEBHOOK=false`, signature checks are skipped, which helps for local testing/curl.
+- `TWILIO_MENU_SID` and `TWILIO_CARD_SID` are optional; without them, replies fall back to plain text.
 
-    ```
-    OPENAI_API_KEY=
-    TWILIO_ACCOUNT_SID=
-    TWILIO_AUTH_TOKEN=
-    TWILIO_CARD_SID=
-    TWILIO_MENU_SID=
-    ```
+## Install and initialize
 
-5.  **Run ngrok**
+```bash
+npm install
+npx prisma generate
+```
 
-    Expose your local server to the internet using ngrok.
+Run migrations locally (choose one):
 
-    ```bash
-    ngrok http --url=dodo-proud-visually.ngrok-free.app 3000
-    ```
+```bash
+# for active development
+npx prisma migrate dev
 
-    You will need to configure your Twilio WhatsApp number to send webhook requests to the ngrok URL.
+# or to apply existing migrations
+npx prisma migrate deploy
+```
 
-### 3. Running the application
-
-To start the development server, run:
+## Run locally
 
 ```bash
 npm run dev
 ```
+
+Expose your local server for Twilio using ngrok and point your WhatsApp webhook to it:
+
+```bash
+ngrok http 8080
+# In Twilio Console, set the WhatsApp Inbound Webhook to:
+# https://YOUR-NGROK-DOMAIN.ngrok.io/twilio/
+```
+
+To test without Twilio signatures, set `TWILIO_VALIDATE_WEBHOOK=false` and post a form-encoded body to `/twilio/`.
+
+## Agent graph visualization
+
+Render or refresh the graph image `langgraph.png`:
+
+```bash
+npm run graph
+```
+
+This uses `scripts/visualizeGraph.ts` to compile the LangGraph and write the PNG at the repo root.
+
+## API
+
+- `POST /twilio/`: Twilio webhook endpoint. Expects standard WhatsApp webhook params and validates the `X-Twilio-Signature` header by default.
+- `GET /uploads/...`: Serves uploaded images saved under `uploads/`.
+
+## Docker
+
+Build and run locally:
+
+```bash
+docker build -t broadway-copilot .
+docker run --rm -p 8080:8080 \
+  -e OPENAI_API_KEY=$OPENAI_API_KEY \
+  -e TWILIO_ACCOUNT_SID=$TWILIO_ACCOUNT_SID \
+  -e TWILIO_AUTH_TOKEN=$TWILIO_AUTH_TOKEN \
+  -e TWILIO_WHATSAPP_FROM=$TWILIO_WHATSAPP_FROM \
+  -e TWILIO_MENU_SID=$TWILIO_MENU_SID \
+  -e TWILIO_CARD_SID=$TWILIO_CARD_SID \
+  -e DATABASE_URL=$DATABASE_URL \
+  -e PORT=8080 \
+  --name broadway-copilot broadway-copilot
+```
+
+The Dockerfile compiles TypeScript, copies `prompts/` and `prisma/`, generates the Prisma client at runtime, and starts the server.
+
+## Deploy to Google Cloud Run
+
+This repo includes a GitHub Actions workflow for Cloud Run. On push to `main`, it:
+- Builds and pushes a container to Artifact Registry
+- Deploys to Cloud Run service `broadway-chatbot` in region `asia-south2`
+- Updates secrets `OPENAI_API_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `DATABASE_URL`
+
+Required GitHub Actions repository secrets:
+- `OPENAI_API_KEY`
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `DATABASE_URL`
+
+Ensure Workload Identity and Artifact Registry are configured to match `.github/workflows/google-cloudrun-docker.yml`.
+
+## Key files
+
+- `src/api/index.ts`: Express server and webhook handler
+- `src/agent/graph.ts`: LangGraph state graph build and runner
+- `src/agent/nodes/*`: Intent handlers and utilities
+- `src/services/twilioService.ts`: Twilio client and send helpers
+- `src/services/openaiService.ts`: Standardized OpenAI Chat/Vision clients
+- `src/utils/media.ts`: Media download and OpenAI file upload helpers
+- `prisma/schema.prisma`: Database models
+- `scripts/visualizeGraph.ts`: Graph rendering script
+
+## Troubleshooting
+
+- 401 from Twilio: verify `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN`.
+- Signature failures: set correct webhook URL or temporarily `TWILIO_VALIDATE_WEBHOOK=false` for local testing.
+- OpenAI file upload errors: ensure `OPENAI_API_KEY` is set and reachable.
+- Prisma connection errors: verify `DATABASE_URL` and that the database is reachable from your environment.

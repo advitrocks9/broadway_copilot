@@ -1,13 +1,11 @@
-import fs from 'fs';
+import { promises as fsp } from 'fs';
 import path from 'path';
 
 /**
  * Filesystem helpers for uploads directory handling.
  */
-export function ensureDir(dirPath: string): void {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
+export async function ensureDir(dirPath: string): Promise<void> {
+  await fsp.mkdir(dirPath, { recursive: true });
 }
 
 export function uploadsDir(): string {
@@ -16,7 +14,6 @@ export function uploadsDir(): string {
 
 export function userUploadDir(waId: string): string {
   const dir = path.join(uploadsDir(), waId);
-  ensureDir(dir);
   return dir;
 }
 
