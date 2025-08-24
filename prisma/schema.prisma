@@ -75,9 +75,12 @@ model ColorAnalysis {
   skin_tone String?
   eye_color String?
   hair_color String?
+  undertone String?
+  palette_name String?
   top3_colors Json
   avoid3_colors Json
   rawJson   Json
+  createdAt DateTime @default(now())
 }
 
 model WardrobeItem {
