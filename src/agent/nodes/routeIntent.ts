@@ -47,7 +47,7 @@ export async function routeIntent(state: { input: RunInput; messages?: unknown[]
     return { intent, missingProfileFields, next };
   }
 
-  const systemPrompt = loadPrompt('route_intent.txt');
+  const systemPrompt = await loadPrompt('route_intent.txt');
 
   const RouterSchema = z.object({
     intent: z.enum(['general', 'occasion', 'vacation', 'pairing', 'suggest', 'vibe_check', 'color_analysis']),

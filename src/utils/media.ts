@@ -22,8 +22,10 @@ export async function persistUpload(userId: string, imagePath: string, fileId?: 
 
 
 import fs from 'fs';
+import { promises as fsp } from 'fs';
 import path from 'path';
 import OpenAI from 'openai';
+import { ensureDir } from './paths';
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID || '';
 const authToken = process.env.TWILIO_AUTH_TOKEN || '';
@@ -45,10 +47,10 @@ export async function downloadTwilioMedia(url: string, dir: string, suggestedExt
   const ct = res.headers.get('content-type') || undefined;
   const ext = suggestedExt || extensionFromContentType(ct) || path.extname(new URL(url).pathname) || '';
   const filename = `twilio_${Date.now()}${ext}`;
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  await ensureDir(dir);
   const filePath = path.join(dir, filename);
   const buf = Buffer.from(await res.arrayBuffer());
-  fs.writeFileSync(filePath, buf);
+  await fsp.writeFile(filePath, buf);
   logger.info({ filePath }, 'Downloaded Twilio media');
   return filePath;
 }

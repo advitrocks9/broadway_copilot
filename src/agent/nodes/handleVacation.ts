@@ -13,7 +13,7 @@ const logger = getLogger('node:handle_vacation');
 export async function handleVacationNode(state: { input: RunInput; intent?: string; messages?: unknown[]; wardrobe?: unknown; latestColorAnalysis?: unknown }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
   const { input } = state;
   const intent: string | undefined = state.intent;
-  const systemPrompt = loadPrompt('handle_vacation.txt');
+  const systemPrompt = await loadPrompt('handle_vacation.txt');
   const activity = await queryActivityTimestamps(input.userId);
   const prompt: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: systemPrompt },

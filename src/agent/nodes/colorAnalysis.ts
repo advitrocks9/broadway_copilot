@@ -18,7 +18,7 @@ export async function colorAnalysisNode(state: { input: RunInput; intent?: strin
   const ensuredFileId = await ensureVisionFileId(imagePath, input.fileId);
   const upload = await persistUpload(input.userId, imagePath, ensuredFileId);
   const schema = ColorAnalysisSchema as unknown as z.ZodType<ColorAnalysis>;
-  const prompt = loadPrompt('color_analysis.txt');
+  const prompt = await loadPrompt('color_analysis.txt');
   type VisionPart = { type: 'input_text'; text: string } | { type: 'input_image'; file_id: string; detail?: 'auto' | 'low' | 'high' };
   type VisionContent = string | VisionPart[];
   const content: Array<{ role: 'system' | 'user'; content: VisionContent }> = [

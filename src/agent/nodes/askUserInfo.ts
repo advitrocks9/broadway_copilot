@@ -16,7 +16,7 @@ export async function askUserInfoNode(state: { input: RunInput; messages?: unkno
   const convo = (state.messages as unknown[]) || [];
   const intent: string | undefined = state.intent;
 
-  const system = loadPrompt('ask_user_info.txt');
+  const system = await loadPrompt('ask_user_info.txt');
   const list = missing.join(', ').replace(/, ([^,]*)$/, ' and $1');
   const promptMessages: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: system },

@@ -22,7 +22,7 @@ export async function wardrobeIndexNode(state: { input: RunInput }): Promise<Rec
   }
   const ensuredFileId = await ensureVisionFileId(imagePath, input.fileId);
   const schema = WardrobeIndexResponseSchema as unknown as z.ZodType<WardrobeIndexResponse>;
-  const prompt = loadPrompt('wardrobe_index.txt');
+  const prompt = await loadPrompt('wardrobe_index.txt');
   type VisionPart = { type: 'input_text'; text: string } | { type: 'input_image'; file_id: string; detail?: 'auto' | 'low' | 'high' };
   type VisionContent = string | VisionPart[];
   const content: Array<{ role: 'system' | 'user'; content: VisionContent }> = [
