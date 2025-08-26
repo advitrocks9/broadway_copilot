@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import { errorHandler } from './middleware/errors';
 import { staticUploadsMount } from '../utils/paths';
-import { sendText, validateTwilioRequest } from '../services/twilioService';
+import { sendText, validateTwilioRequest, processStatusCallback } from '../services/twilioService';
 import { runAgent } from '../agent/graph';
 import { getLogger } from '../utils/logger';
 
@@ -58,6 +58,27 @@ app.post('/twilio/', async (req, res) => {
       body: req?.body,
       headers: req?.headers,
     }, 'Inbound webhook error');
+    return res.status(500).end();
+  }
+});
+
+app.post('/twilio/callback/', async (req, res) => {
+  try {
+    const signature = req.header('X-Twilio-Signature') || req.header('x-twilio-signature');
+    const protoHeader = (req.headers['x-forwarded-proto'] as string) || req.protocol;
+    const hostHeader = (req.headers['x-forwarded-host'] as string) || (req.get('host') as string);
+    const fullUrl = `${protoHeader}://${hostHeader}${req.originalUrl}`;
+
+    const isValid = validateTwilioRequest(fullUrl, req.body || {}, signature || undefined);
+    if (!isValid) {
+      logger.warn({ url: fullUrl, hasSignature: Boolean(signature) }, 'Invalid Twilio callback signature');
+      return res.status(403).send('Forbidden');
+    }
+
+    processStatusCallback(req.body || {});
+    return res.status(200).end();
+  } catch (err: any) {
+    logger.error({ message: err?.message, stack: err?.stack, body: req?.body }, 'Callback processing error');
     return res.status(500).end();
   }
 });
