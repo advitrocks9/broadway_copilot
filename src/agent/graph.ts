@@ -31,6 +31,7 @@ const GraphAnnotation = Annotation.Root({
   messages: Annotation<unknown[] | undefined>(),
   wardrobe: Annotation<unknown | undefined>(),
   latestColorAnalysis: Annotation<unknown | undefined>(),
+  runGen: Annotation<number | undefined>(),
   
 });
 
@@ -100,7 +101,7 @@ export function buildAgentGraph() {
 /**
  * Runs the agent graph with the given input.
  */
-export async function runAgent(input: any): Promise<RunOutput & { intent?: IntentLabel }> {
+export async function runAgent(input: any, options?: { signal?: AbortSignal }): Promise<RunOutput & { intent?: IntentLabel }> {
   if (!compiledApp) {
     logger.info('Compiling agent graph');
     compiledApp = buildAgentGraph();
@@ -108,6 +109,7 @@ export async function runAgent(input: any): Promise<RunOutput & { intent?: Inten
   logger.info({ userId: input?.userId, waId: input?.From }, 'Invoking agent run');
   const result = await compiledApp.invoke({ input }, {
     configurable: { thread_id: (input?.userId || input?.From || 'unknown') },
+    signal: options?.signal,
   });
   if (!result) return { replyText: 'I had a problem there. Please try again.' };
   type FinalState = { reply?: string | Reply; replies?: Array<string | Reply>; mode?: 'text' | 'menu' | 'card'; intent?: IntentLabel };

@@ -1,9 +1,8 @@
 import prisma from '../../db/client';
 import { getOrCreateUserByWaId } from '../../utils/user';
-import { downloadTwilioMedia } from '../../utils/media';
+import { downloadTwilioMedia, ensureVisionFileId } from '../../utils/media';
 import { userUploadDir } from '../../utils/paths';
 import { RunInput } from '../state';
-import { ensureVisionFileId } from '../../utils/media';
 import { getLogger } from '../../utils/logger';
 
 /**
@@ -12,7 +11,7 @@ import { getLogger } from '../../utils/logger';
 const logger = getLogger('node:ingest_message');
 type IngestState = { input: Record<string, unknown> };
 
-export async function ingestMessageNode(state: IngestState): Promise<{ input?: RunInput; reply?: string }>{
+export async function ingestMessageNode(state: IngestState): Promise<{ input?: RunInput & { _runGen?: number }; reply?: string }>{
   const twilioBody = state.input as Record<string, unknown>;
   const from: string = (twilioBody?.From || '').toString();
   const bodyText: string | undefined = (twilioBody?.Body || '').toString() || undefined;
@@ -52,7 +51,7 @@ export async function ingestMessageNode(state: IngestState): Promise<{ input?: R
   });
   logger.info({ userId: user.id, waId, hasImage: Boolean(imagePath), hasText: Boolean(bodyText) }, 'Ingested user turn');
 
-  const normalized: RunInput = {
+  const normalized: RunInput & { _runGen?: number } = {
     userId: user.id,
     waId,
     text: bodyText,
@@ -61,6 +60,9 @@ export async function ingestMessageNode(state: IngestState): Promise<{ input?: R
     buttonPayload,
     gender: (user.confirmedGender as 'male' | 'female' | null) ?? (user.inferredGender as 'male' | 'female' | null) ?? null,
   };
+  if (typeof (twilioBody as any)?._runGen === 'number') {
+    (normalized as any)._runGen = (twilioBody as any)._runGen;
+  }
 
   return { input: normalized };
 }

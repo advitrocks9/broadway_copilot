@@ -3,6 +3,7 @@ import prisma from '../../db/client';
 import { sendText, sendMenu, sendCard } from '../../services/twilioService';
 import type { Reply } from '../state';
 import { getLogger } from '../../utils/logger';
+import { getLatestGen } from '../../services/runtimeState';
 
 /**
  * Sends the reply via Twilio based on state.reply and state.mode.
@@ -10,7 +11,7 @@ import { getLogger } from '../../utils/logger';
  */
 const logger = getLogger('node:send_reply');
 type SendReplyState = {
-  input?: { waId: string; userId: string };
+  input?: { waId: string; userId: string; _runGen?: number };
   reply?: Reply | string;
   replies?: Array<Reply | string>;
   intent?: string;
@@ -20,6 +21,7 @@ export async function sendReplyNode(state: SendReplyState): Promise<Record<strin
   const input = state.input;
   const waId = input?.waId;
   const userId = input?.userId;
+  const runGen = input?._runGen;
   const replyObj: Reply | string | undefined = state.reply;
   const repliesArray: Array<Reply | string> | undefined = state.replies;
   const intent: string | undefined = state.intent;
@@ -29,7 +31,10 @@ export async function sendReplyNode(state: SendReplyState): Promise<Record<strin
     return {};
   }
 
-  
+  if (waId && typeof runGen === 'number') {
+    const latest = getLatestGen(waId);
+    if (latest && latest !== runGen) return {};
+  }
 
   const normalizedReplies: Reply[] = collected.slice(0, 2).map(r => typeof r === 'string' ? { reply_type: 'text', reply_text: r } : r);
 

@@ -4,7 +4,7 @@ import cors from 'cors';
 import { errorHandler } from './middleware/errors';
 import { staticUploadsMount } from '../utils/paths';
 import { sendText, validateTwilioRequest, processStatusCallback } from '../services/twilioService';
-import { runAgent } from '../agent/graph';
+import { orchestrateInbound } from '../services/orchestrator';
 import { getLogger } from '../utils/logger';
 
 /**
@@ -47,7 +47,7 @@ app.post('/twilio/', async (req, res) => {
       return res.status(200).end();
     }
 
-    await runAgent(req.body || {});
+    await orchestrateInbound({ body: req.body || {} });
 
     logger.info('Webhook processed successfully');
     return res.status(200).end();
@@ -86,6 +86,6 @@ app.post('/twilio/callback/', async (req, res) => {
 app.use(errorHandler);
 
 const PORT = Number(process.env.PORT || 8080);
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
   logger.info({ port: PORT }, 'Broadway WhatsApp Bot server started');
 });
