@@ -7,8 +7,7 @@ export type IntentLabel =
   | 'pairing'
   | 'vibe_check'
   | 'color_analysis'
-  | 'suggest'
-;
+  | 'suggest';
 
 export const IntentSchema = z.object({
   intent: z.enum(['general', 'occasion', 'vacation', 'pairing', 'vibe_check', 'color_analysis', 'suggest']),

@@ -32,10 +32,17 @@ const authToken = process.env.TWILIO_AUTH_TOKEN || '';
 
 function extensionFromContentType(contentType: string | undefined): string {
   if (!contentType) return '';
-  if (contentType.includes('jpeg')) return '.jpg';
-  if (contentType.includes('png')) return '.png';
-  if (contentType.includes('webp')) return '.webp';
-  if (contentType.includes('gif')) return '.gif';
+  const map: Record<string, string> = {
+    jpeg: '.jpg',
+    jpg: '.jpg',
+    png: '.png',
+    webp: '.webp',
+    gif: '.gif',
+  };
+  const lower = contentType.toLowerCase();
+  for (const key of Object.keys(map)) {
+    if (lower.includes(key)) return map[key];
+  }
   return '';
 }
 

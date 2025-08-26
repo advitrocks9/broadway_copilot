@@ -20,8 +20,6 @@ export function errorHandler(err: any, _req: Request, res: Response, _next: Next
   try {
     const stack = err?.stack || '';
     logger.error({ status, message, stack, err }, 'Express error handler');
-  } catch (_) {
-    
-  }
+  } catch (_) {}
   res.status(status).json({ error: { status, message } });
 }

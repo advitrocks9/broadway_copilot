@@ -6,7 +6,6 @@ import { toNameLower } from '../../utils/text';
 import { WardrobeIndexResponseSchema, WardrobeIndexResponse } from '../../types/contracts';
 import { getVisionLLM } from '../../services/openaiService';
 import { ensureVisionFileId } from '../../utils/media';
-import type { Prisma } from '@prisma/client';
 import { getLogger } from '../../utils/logger';
 
 /**

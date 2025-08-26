@@ -13,8 +13,7 @@ export function uploadsDir(): string {
 }
 
 export function userUploadDir(waId: string): string {
-  const dir = path.join(uploadsDir(), waId);
-  return dir;
+  return path.join(uploadsDir(), waId);
 }
 
 export function staticUploadsMount(): string {

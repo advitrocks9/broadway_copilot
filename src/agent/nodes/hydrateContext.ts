@@ -13,9 +13,6 @@ export async function hydrateContextNode(state: HydrateIn): Promise<{ messages: 
     queryWardrobe(input.userId),
     queryColors(input.userId),
   ]);
-  console.log('messages', messages);
-  console.log('wardrobe', wardrobe);
-  console.log('colors', colors);
   return { messages, wardrobe, latestColorAnalysis: colors.latestColorAnalysis };
 }
 
