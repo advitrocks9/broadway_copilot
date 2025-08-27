@@ -9,23 +9,22 @@ import { getLogger } from '../../utils/logger';
  */
 const logger = getLogger('node:ask_user_info');
 
-export async function askUserInfoNode(state: { input: RunInput; messages?: unknown[]; intent?: string; missingProfileFields?: Array<'gender'> }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
+export async function askUserInfoNode(state: { input: RunInput; messages?: unknown[]; missingProfileFields?: Array<'gender'> }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
   const llm = getNanoLLM();
   const { input } = state;
   const missing: Array<'gender'> = state.missingProfileFields || [];
   const convo = (state.messages as unknown[]) || [];
-  const intent: string | undefined = state.intent;
 
   const system = await loadPrompt('ask_user_info.txt');
   const list = missing.join(', ').replace(/, ([^,]*)$/, ' and $1');
   const promptMessages: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: system },
-    { role: 'system', content: `Intent: ${intent || 'general'}` },
-    { role: 'system', content: `ConversationContext: ${JSON.stringify(convo)}` },
-    { role: 'user', content: JSON.stringify({ fields: list }) },
+    { role: 'user', content: `ConversationContext: ${JSON.stringify(convo)}` },
+    { role: 'user', content: `Missing Fields: ${JSON.stringify({ fields: list })}` },
   ];
   const AskSchema = z.object({ text: z.string() });
   logger.info({ userId: input.userId, missing }, 'AskUserInfo: input');
+  console.log('🤖 AskUserInfo Model Input:', JSON.stringify(promptMessages, null, 2));
   const resp = await llm.withStructuredOutput(AskSchema as any).invoke(promptMessages) as { text: string };
   logger.info(resp, 'AskUserInfo: output');
   const replyText = resp.text;

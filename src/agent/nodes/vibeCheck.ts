@@ -11,8 +11,8 @@ import { getLogger } from '../../utils/logger';
  * Rates outfit from an image and returns a concise text summary; logs and persists results.
  */
 const logger = getLogger('node:vibe_check');
-export async function vibeCheckNode(state: { input: RunInput; intent?: string; messages?: unknown[]; latestColorAnalysis?: unknown }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
-  const { input, intent } = state;
+export async function vibeCheckNode(state: { input: RunInput; messages?: unknown[]; latestColorAnalysis?: unknown }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
+  const { input } = state;
   const imagePath = input.imagePath as string;
   const ensuredFileId = await ensureVisionFileId(imagePath, input.fileId);
   const upload = await persistUpload(input.userId, imagePath, ensuredFileId);
@@ -22,12 +22,12 @@ export async function vibeCheckNode(state: { input: RunInput; intent?: string; m
   type VisionContent = string | VisionPart[];
   const content: Array<{ role: 'system' | 'user'; content: VisionContent }> = [
     { role: 'system', content: prompt },
-    { role: 'system', content: `UserGender: ${input.gender ?? 'unknown'} (reflect in fit notes when applicable).` },
-    { role: 'system', content: `Intent: ${intent || 'vibe_check'}` },
-    { role: 'system', content: `LatestColorAnalysis: ${JSON.stringify(state.latestColorAnalysis || null)}` },
+    { role: 'user', content: `UserGender: ${input.gender ?? 'unknown'} (reflect in fit notes when applicable).` },
+    { role: 'user', content: `LatestColorAnalysis: ${JSON.stringify(state.latestColorAnalysis || null)}` },
     { role: 'user', content: [ { type: 'input_image', file_id: ensuredFileId as string, detail: 'high' } ] },
   ];
   logger.info({ hasImage: true }, 'VibeCheck: input');
+  console.log('🤖 VibeCheck Model Input:', JSON.stringify(content, null, 2));
   const result = await getVisionLLM().withStructuredOutput(schema as any).invoke(content as any) as VibeCheckResponse;
   logger.info(result, 'VibeCheck: output');
   const categories = Array.isArray(result.categories) ? result.categories : [];

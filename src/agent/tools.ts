@@ -14,7 +14,11 @@ export async function fetchRecentTurns(userId: string, limit = 6) {
     take: limit,
     select: { role: true, text: true, imagePath: true },
   });
-  return turns.reverse();
+  
+  return turns
+    .reverse()
+    .filter(turn => turn.text && turn.text.trim())
+    .map(turn => `${turn.role}: ${turn.text}`);
 }
 
 /**

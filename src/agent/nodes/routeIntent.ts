@@ -56,11 +56,12 @@ export async function routeIntent(state: { input: RunInput; messages?: unknown[]
 
   const content: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: systemPrompt },
-    { role: 'system', content: `InputState: ${JSON.stringify({ input })}` },
-    { role: 'system', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
+    { role: 'user', content: `InputState: ${JSON.stringify({ input })}` },
+    { role: 'user', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
   ];
 
   logger.info({ input }, 'RouteIntent: input');
+  console.log('🤖 RouteIntent Model Input:', JSON.stringify(content, null, 2));
   const res = await getNanoLLM().withStructuredOutput(RouterSchema as any).invoke(content as any) as RouterOutput;
   logger.info(res, 'RouteIntent: output');
 

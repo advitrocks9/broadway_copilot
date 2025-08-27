@@ -10,27 +10,23 @@ import { getLogger } from '../../utils/logger';
  */
 const logger = getLogger('node:handle_vacation');
 
-export async function handleVacationNode(state: { input: RunInput; intent?: string; messages?: unknown[]; wardrobe?: unknown; latestColorAnalysis?: unknown }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
+export async function handleVacationNode(state: { input: RunInput; messages?: unknown[]; wardrobe?: unknown; latestColorAnalysis?: unknown }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
   const { input } = state;
-  const intent: string | undefined = state.intent;
   const systemPrompt = await loadPrompt('handle_vacation.txt');
   const activity = await queryActivityTimestamps(input.userId);
   const prompt: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: systemPrompt },
-    { role: 'system', content: `UserGender: ${input.gender ?? 'unknown'} (tailor vacation packing and style to gender).` },
-    { role: 'system', content: `Current user ID: ${input.userId}` },
-    { role: 'system', content: `Intent: ${intent || 'vacation'}` },
-    { role: 'system', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
-    { role: 'system', content: `WardrobeContext: ${JSON.stringify(state.wardrobe || {})}` },
-    { role: 'system', content: `LatestColorAnalysis: ${JSON.stringify(state.latestColorAnalysis || null)}` },
-    { role: 'system', content: `LastColorAnalysisAtISO: ${activity.lastColorAnalysisAt ? activity.lastColorAnalysisAt.toISOString() : 'none'}` },
-    { role: 'system', content: `LastColorAnalysisHoursAgo: ${activity.colorAnalysisHoursAgo ?? 'unknown'}` },
-    { role: 'system', content: `LastVibeCheckAtISO: ${activity.lastVibeCheckAt ? activity.lastVibeCheckAt.toISOString() : 'none'}` },
-    { role: 'system', content: `LastVibeCheckHoursAgo: ${activity.vibeCheckHoursAgo ?? 'unknown'}` },
+    { role: 'user', content: `UserGender: ${input.gender ?? 'unknown'} (tailor vacation packing and style to gender).` },
+    { role: 'user', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
+    { role: 'user', content: `WardrobeContext: ${JSON.stringify(state.wardrobe || {})}` },
+    { role: 'user', content: `LatestColorAnalysis: ${JSON.stringify(state.latestColorAnalysis || null)}` },
+    { role: 'user', content: `LastColorAnalysisHoursAgo: ${activity.colorAnalysisHoursAgo ?? 'unknown'}` },
+    { role: 'user', content: `LastVibeCheckHoursAgo: ${activity.vibeCheckHoursAgo ?? 'unknown'}` },
     { role: 'user', content: input.text || 'I need vacation outfit ideas.' },
   ];
   const Schema = z.object({ reply_text: z.string(), followup_text: z.string().nullable() });
   logger.info({ userText: input.text || '' }, 'HandleVacation: input');
+  console.log('🤖 HandleVacation Model Input:', JSON.stringify(prompt, null, 2));
   const resp = await getNanoLLM().withStructuredOutput(Schema as any).invoke(prompt as any) as { reply_text: string; followup_text: string | null };
   logger.info(resp, 'HandleVacation: output');
   const replies: Array<{ reply_type: 'text'; reply_text: string }> = [{ reply_type: 'text', reply_text: resp.reply_text }];

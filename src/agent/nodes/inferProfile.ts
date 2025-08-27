@@ -26,12 +26,13 @@ export async function inferProfileNode(state: { input: RunInput; messages?: unkn
   const prompt = await loadPrompt('infer_profile.txt');
   const content: Array<{ role: 'system' | 'user'; content: string }> = [
     { role: 'system', content: prompt },
-    { role: 'system', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
+    { role: 'user', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
     { role: 'user', content: input.text || '' },
   ];
 
   const Schema = z.object({ inferred_gender: z.union([z.literal('male'), z.literal('female')]).nullable(), confirmed: z.boolean() });
   logger.info({ userText: input.text || '' }, 'InferProfile: input');
+  console.log('🤖 InferProfile Model Input:', JSON.stringify(content, null, 2));
   let result: GenderJson;
   try {
     result = await getNanoLLM().withStructuredOutput(Schema as any).invoke(content as any) as GenderJson;

@@ -8,7 +8,7 @@ const TTL_MS = 60 * 60 * 1000;
 const SWEEP_MS = 10 * 60 * 1000;
 
 const CAPACITY = 5;
-const REFILL_MS_PER_TOKEN = 4000;
+const REFILL_MS_PER_TOKEN = 6000;
 
 const tokenBuckets = new Map<string, BucketState>();
 const inboundLogs = new Map<string, InboundRecord[]>();

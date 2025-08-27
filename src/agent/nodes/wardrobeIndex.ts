@@ -29,6 +29,7 @@ export async function wardrobeIndexNode(state: { input: RunInput }): Promise<Rec
     { role: 'user', content: [ { type: 'input_image', file_id: ensuredFileId as string, detail: 'high' } ] },
   ];
   logger.info({ hasImage: true }, 'WardrobeIndex: input');
+  console.log('🤖 WardrobeIndex Model Input:', JSON.stringify(content, null, 2));
   let result: WardrobeIndexResponse;
   try {
     result = await getVisionLLM().withStructuredOutput(schema as any).invoke(content as any) as WardrobeIndexResponse;
