@@ -36,5 +36,3 @@ export function getLogger(moduleName?: string): Logger {
 }
 
 export default baseLogger;
-
-

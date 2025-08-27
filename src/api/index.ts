@@ -1,9 +1,11 @@
 import 'dotenv/config';
+import { ValidationUtils } from '../utils/validation';
 import express from 'express';
 import cors from 'cors';
 import { errorHandler } from './middleware/errors';
 import { staticUploadsMount } from '../utils/paths';
-import { sendText, validateTwilioRequest, processStatusCallback } from '../services/twilioService';
+import { sendText } from '../services/twilioService';
+import { validateTwilioRequest, processStatusCallback } from '../utils/twilioHelpers';
 import { orchestrateInbound } from '../services/orchestrator';
 import { getLogger } from '../utils/logger';
 
@@ -39,15 +41,23 @@ app.post('/twilio/', async (req, res) => {
       return res.status(403).send('Forbidden');
     }
 
-    if (req.body.Body.length > 200) {
-      logger.info({
-        body: req.body,
-      }, 'Message too long');
-      sendText(req.body.From, 'Please send a shorter message!');
-      return res.status(200).end();
+    // Validate webhook payload
+    const validatedBody = ValidationUtils.validateTwilioWebhook(req.body);
+
+    // Validate message content if present
+    if (validatedBody.Body) {
+      const contentValidation = ValidationUtils.validateMessageContent(validatedBody.Body);
+      if (!contentValidation.isValid) {
+        logger.warn({
+          body: validatedBody,
+          reason: contentValidation.reason
+        }, 'Invalid message content');
+        sendText(validatedBody.From || 'unknown', contentValidation.reason || 'Invalid message');
+        return res.status(200).end();
+      }
     }
 
-    await orchestrateInbound({ body: req.body || {} });
+    await orchestrateInbound({ body: validatedBody });
 
     logger.info('Webhook processed successfully');
     return res.status(200).end();

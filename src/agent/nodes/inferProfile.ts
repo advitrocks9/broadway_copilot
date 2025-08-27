@@ -1,17 +1,31 @@
-import { getNanoLLM } from '../../services/openaiService';
+import { z } from 'zod';
+
 import prisma from '../../db/client';
 import { RunInput } from '../state';
+import { getNanoLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
-import { z } from 'zod';
 import { getLogger } from '../../utils/logger';
-
-type GenderJson = { inferred_gender: 'male' | 'female' | null; confirmed: boolean };
 
 /**
  * Infers and optionally persists the user's gender from recent conversation.
  */
 const logger = getLogger('node:infer_profile');
-export async function inferProfileNode(state: { input: RunInput; messages?: unknown[] }): Promise<{ input?: RunInput }>{
+
+interface GenderJson {
+  inferred_gender: 'male' | 'female' | null;
+  confirmed: boolean;
+}
+
+interface InferProfileState {
+  input: RunInput;
+  messages?: unknown[];
+}
+
+interface InferProfileResult {
+  input?: RunInput;
+}
+
+export async function inferProfileNode(state: InferProfileState): Promise<InferProfileResult>{
   const { input } = state;
   if (input.gender === 'male' || input.gender === 'female') {
     return { input };
@@ -30,27 +44,38 @@ export async function inferProfileNode(state: { input: RunInput; messages?: unkn
     { role: 'user', content: input.text || '' },
   ];
 
-  const Schema = z.object({ inferred_gender: z.union([z.literal('male'), z.literal('female')]).nullable(), confirmed: z.boolean() });
+  const Schema = z.object({
+    inferred_gender: z.union([z.literal('male'), z.literal('female')]).nullable(),
+    confirmed: z.boolean()
+  });
+
   logger.info({ userText: input.text || '' }, 'InferProfile: input');
-  console.log('🤖 InferProfile Model Input:', JSON.stringify(content, null, 2));
-  let result: GenderJson;
+  logger.debug({ content }, 'InferProfile: model input');
+
+  let response: GenderJson;
   try {
-    result = await getNanoLLM().withStructuredOutput(Schema as any).invoke(content as any) as GenderJson;
+    response = await getNanoLLM().withStructuredOutput(Schema as any).invoke(content as any) as GenderJson;
   } catch (err: any) {
     logger.error({ message: err?.message }, 'InferProfile: error');
     return { input };
   }
-  logger.info(result, 'InferProfile: output');
+  logger.info(response, 'InferProfile: output');
 
-  const inferred = result.inferred_gender;
+  const inferred = response.inferred_gender;
   if (!inferred) {
     return { input };
   }
 
-  if (result.confirmed) {
-    await prisma.user.update({ where: { id: input.userId }, data: { confirmedGender: inferred, inferredGender: null } });
+  if (response.confirmed) {
+    await prisma.user.update({
+      where: { id: input.userId },
+      data: { confirmedGender: inferred, inferredGender: null }
+    });
   } else {
-    await prisma.user.update({ where: { id: input.userId }, data: { inferredGender: inferred } });
+    await prisma.user.update({
+      where: { id: input.userId },
+      data: { inferredGender: inferred }
+    });
   }
 
   return { input: { ...input, gender: inferred } };

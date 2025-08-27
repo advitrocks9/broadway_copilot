@@ -1,9 +1,11 @@
-import { RunInput } from '../state';
-import prisma from '../../db/client';
-import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
+
+import prisma from '../../db/client';
+import { RunInput } from '../state';
+import { GraphMessages, Reply } from '../../types/common';
 import { ColorAnalysis, ColorAnalysisSchema } from '../../types/contracts';
 import { getVisionLLM } from '../../services/openaiService';
+import { loadPrompt } from '../../utils/prompts';
 import { ensureVisionFileId, persistUpload } from '../../utils/media';
 import { getLogger } from '../../utils/logger';
 
@@ -12,7 +14,16 @@ import { getLogger } from '../../utils/logger';
  */
 const logger = getLogger('node:color_analysis');
 
-export async function colorAnalysisNode(state: { input: RunInput; messages?: unknown[] }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
+interface ColorAnalysisState {
+  input: RunInput;
+  messages?: GraphMessages;
+}
+
+interface ColorAnalysisResult {
+  replies: Reply[];
+}
+
+export async function colorAnalysisNode(state: ColorAnalysisState): Promise<ColorAnalysisResult>{
   const { input } = state;
   const imagePath = input.imagePath as string;
   const ensuredFileId = await ensureVisionFileId(imagePath, input.fileId);
@@ -28,7 +39,7 @@ export async function colorAnalysisNode(state: { input: RunInput; messages?: unk
     { role: 'user', content: [ { type: 'input_image', file_id: ensuredFileId as string, detail: 'high' } ] },
   ];
   logger.info({ hasImage: true }, 'ColorAnalysis: input');
-  console.log('🤖 ColorAnalysis Model Input:', JSON.stringify(content, null, 2));
+  logger.debug({ content }, 'ColorAnalysis: model input');
   const result = await getVisionLLM().withStructuredOutput(schema as any).invoke(content as any) as ColorAnalysis;
   logger.info(result, 'ColorAnalysis: output');
   await prisma.colorAnalysis.create({
@@ -66,9 +77,11 @@ export async function colorAnalysisNode(state: { input: RunInput; messages?: unk
     `- Bottom 3: ${bottom3 || 'N/A'}`,
   ];
   const combinedText = [lines.join('\n'), result.reply_text].filter(Boolean).join('\n\n');
-  const replies: Array<{ reply_type: 'text'; reply_text: string }> = [
+  const replies: Reply[] = [
     { reply_type: 'text', reply_text: combinedText },
   ];
-  if (result.followup_text) replies.push({ reply_type: 'text', reply_text: result.followup_text });
+  if (result.followup_text) {
+    replies.push({ reply_type: 'text', reply_text: result.followup_text });
+  }
   return { replies };
 }

@@ -1,27 +1,37 @@
 import 'dotenv/config';
+
 import prisma from '../../db/client';
-import { sendText, sendMenu, sendCard } from '../../services/twilioService';
 import type { Reply } from '../state';
-import { getLogger } from '../../utils/logger';
+import { sendText, sendMenu, sendCard } from '../../services/twilioService';
 import { getLatestGen } from '../../services/runtimeState';
+import { getLogger } from '../../utils/logger';
 
 /**
  * Sends the reply via Twilio based on state.reply and state.mode.
  * Also records assistant turn and updates intent if present.
  */
 const logger = getLogger('node:send_reply');
-type SendReplyState = {
-  input?: { waId: string; userId: string; _runGen?: number };
+
+interface SendReplyInput {
+  waId: string;
+  userId: string;
+  runGen?: number;
+}
+
+interface SendReplyState {
+  input?: SendReplyInput;
   reply?: Reply | string;
   replies?: Array<Reply | string>;
   intent?: string;
-};
+}
 
-export async function sendReplyNode(state: SendReplyState): Promise<Record<string, never>> {
+interface SendReplyResult extends Record<string, never> {}
+
+export async function sendReplyNode(state: SendReplyState): Promise<SendReplyResult> {
   const input = state.input;
   const waId = input?.waId;
   const userId = input?.userId;
-  const runGen = input?._runGen;
+  const runGen = input?.runGen;
   const replyObj: Reply | string | undefined = state.reply;
   const repliesArray: Array<Reply | string> | undefined = state.replies;
   const intent: string | undefined = state.intent;
@@ -38,7 +48,7 @@ export async function sendReplyNode(state: SendReplyState): Promise<Record<strin
 
   const normalizedReplies: Reply[] = collected.slice(0, 2).map(r => typeof r === 'string' ? { reply_type: 'text', reply_text: r } : r);
 
-  const createData: any = {
+  const createData = {
     userId: userId,
     role: 'assistant',
     text: normalizedReplies.map(r => r.reply_text).join('\n\n'),
@@ -46,7 +56,7 @@ export async function sendReplyNode(state: SendReplyState): Promise<Record<strin
     metadata: { engine: 'langgraph' },
     replies: normalizedReplies,
   };
-  const assistantTurn = await prisma.turn.create({ data: createData });
+  const assistantTurn = await prisma.turn.create({ data: createData as any });
   logger.info({ userId, waId, turnId: assistantTurn.id, repliesCount: normalizedReplies.length, intent }, 'SendReply: persisted assistant turn');
 
   try {
@@ -65,5 +75,3 @@ export async function sendReplyNode(state: SendReplyState): Promise<Record<strin
 
   return {};
 }
-
-

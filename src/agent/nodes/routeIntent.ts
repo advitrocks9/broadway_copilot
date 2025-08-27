@@ -1,7 +1,9 @@
-import { getNanoLLM } from '../../services/openaiService';
-import { IntentLabel, RunInput } from '../state';
-import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
+
+import { AdditionalContextItem, IntentLabel, RunInput } from '../state';
+import { GraphMessages } from '../../types/common';
+import { getNanoLLM } from '../../services/openaiService';
+import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
 
 /**
@@ -9,80 +11,126 @@ import { getLogger } from '../../utils/logger';
  */
 const logger = getLogger('node:route_intent');
 
-type RouterOutput = { intent: IntentLabel; gender_required: boolean };
+/**
+ * Zod schema for validating router output from LLM.
+ */
+const RouterSchema = z.object({
+  intent: z.enum(['general', 'occasion', 'vacation', 'pairing', 'suggest', 'vibe_check', 'color_analysis']),
+  gender_required: z.boolean(),
+  additionalContext: z.array(z.enum(['wardrobeItems', 'latestColorAnalysis'])).default([]),
+});
 
-export async function routeIntent(state: { input: RunInput; messages?: unknown[] }): Promise<{ intent: IntentLabel; missingProfileFields: Array<'gender'>; next: string }>{
-  const input = state.input;
-  const payload = (input.buttonPayload || '').toLowerCase();
-  if (payload === 'vibe_check' || payload === 'color_analysis') {
-    const intent = payload as IntentLabel;
-    const missingProfileFields: Array<'gender'> = [];
-    const next = 'check_image';
-    logger.info({ input, intent, next }, 'RouteIntent: skip LLM due to button payload');
-    return { intent, missingProfileFields, next };
-  }
+/**
+ * Interface for router output with proper typing.
+ */
+interface RouterOutput {
+  intent: IntentLabel;
+  gender_required: boolean;
+  additionalContext?: AdditionalContextItem[];
+}
 
+interface RouteIntentState {
+  input: RunInput;
+  messages?: GraphMessages;
+}
 
-  const hasImage = Boolean(input.fileId || input.imagePath);
-  let prevUserButton: string | undefined = undefined;
-  try {
-    const msgs = Array.isArray(state.messages) ? (state.messages as Array<any>) : [];
-    const lastIdx = msgs.length - 1;
-    const currentIsUser = lastIdx >= 0 && msgs[lastIdx]?.role === 'user';
-    if (currentIsUser) {
-      for (let i = lastIdx - 1; i >= 0; i--) {
-        const m = msgs[i];
-        if (m?.role === 'user') {
-          prevUserButton = (m?.metadata?.buttonPayload || '').toString().toLowerCase();
-          break;
-        }
+interface RouteIntentResult {
+  intent: IntentLabel;
+  missingProfileFields: string[];
+  next: string;
+  additionalContext?: AdditionalContextItem[];
+}
+
+/**
+ * Extracts the previous user button payload from conversation messages.
+ */
+function extractPreviousUserButton(messages?: GraphMessages): string | undefined {
+  if (!Array.isArray(messages)) return undefined;
+
+  const lastIdx = messages.length - 1;
+  const currentIsUser = lastIdx >= 0 && messages[lastIdx]?.role === 'user';
+
+  if (currentIsUser) {
+    for (let i = lastIdx - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (message?.role === 'user') {
+        return (message?.metadata?.buttonPayload || '').toString().toLowerCase();
       }
     }
-  } catch {}
-  if (hasImage && (prevUserButton === 'vibe_check' || prevUserButton === 'color_analysis')) {
-    const intent = prevUserButton as IntentLabel;
-    const missingProfileFields: Array<'gender'> = [];
-    const next = intent;
-    logger.info({ intent, next }, 'RouteIntent: image present and previous user button');
-    return { intent, missingProfileFields, next };
   }
 
+  return undefined;
+}
+
+/**
+ * Determines the next node based on intent and missing profile fields.
+ */
+function determineNextNode(intent: IntentLabel, missingProfileFields: string[]): string {
+  if (missingProfileFields.length > 0) {
+    return 'ask_user_info';
+  }
+
+  switch (intent) {
+    case 'occasion':
+      return 'handle_occasion';
+    case 'vacation':
+      return 'handle_vacation';
+    case 'pairing':
+      return 'handle_pairing';
+    case 'suggest':
+      return 'handle_suggest';
+    case 'vibe_check':
+    case 'color_analysis':
+      return 'check_image';
+    default:
+      return 'handle_general';
+  }
+}
+
+export async function routeIntent(state: RouteIntentState): Promise<RouteIntentResult> {
+  const input = state.input;
+  const payload = (input.buttonPayload || '').toLowerCase();
+
+  // Handle button payloads that skip LLM routing
+  if (payload === 'vibe_check' || payload === 'color_analysis') {
+    const intent = payload as IntentLabel;
+    logger.info({ input, intent, next: 'check_image' }, 'RouteIntent: skip LLM due to button payload');
+    return { intent, missingProfileFields: [], next: 'check_image' };
+  }
+
+  const hasImage = Boolean(input.fileId || input.imagePath);
+  const prevUserButton = extractPreviousUserButton(state.messages);
+
+  // Handle image with previous button context
+  if (hasImage && (prevUserButton === 'vibe_check' || prevUserButton === 'color_analysis')) {
+    const intent = prevUserButton as IntentLabel;
+    logger.info({ intent, next: intent }, 'RouteIntent: image present and previous user button');
+    return { intent, missingProfileFields: [], next: intent };
+  }
+
+  // Load routing prompt and get LLM response
   const systemPrompt = await loadPrompt('route_intent.txt');
-
-  const RouterSchema = z.object({
-    intent: z.enum(['general', 'occasion', 'vacation', 'pairing', 'suggest', 'vibe_check', 'color_analysis']),
-    gender_required: z.boolean(),
-  });
-
-  const content: Array<{ role: 'system' | 'user'; content: string }> = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: `InputState: ${JSON.stringify({ input })}` },
-    { role: 'user', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
+  const content = [
+    { role: 'system' as const, content: systemPrompt },
+    { role: 'user' as const, content: `InputState: ${JSON.stringify({ input })}` },
+    { role: 'user' as const, content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
   ];
 
   logger.info({ input }, 'RouteIntent: input');
-  console.log('🤖 RouteIntent Model Input:', JSON.stringify(content, null, 2));
-  const res = await getNanoLLM().withStructuredOutput(RouterSchema as any).invoke(content as any) as RouterOutput;
-  logger.info(res, 'RouteIntent: output');
+  logger.debug({ content }, 'RouteIntent: model input');
 
-  const { intent, gender_required } = res;
+  const llm = getNanoLLM();
+  const response = await (llm as any)
+    .withStructuredOutput(RouterSchema)
+    .invoke(content) as RouterOutput;
+
+  logger.info(response, 'RouteIntent: output');
+
+  const { intent, gender_required, additionalContext } = response;
   const hasGender = input.gender === 'male' || input.gender === 'female';
-  const missingProfileFields = gender_required && !hasGender ? (['gender'] as Array<'gender'>) : [];
+  const missingProfileFields = gender_required && !hasGender ? ['gender' as string] : [];
 
-  let next = 'handle_general';
-  if (missingProfileFields.length > 0) {
-    next = 'ask_user_info';
-  } else if (intent === 'occasion') {
-    next = 'handle_occasion';
-  } else if (intent === 'vacation') {
-    next = 'handle_vacation';
-  } else if (intent === 'pairing') {
-    next = 'handle_pairing';
-  } else if (intent === 'suggest') {
-    next = 'handle_suggest';
-  } else if (intent === 'vibe_check' || intent === 'color_analysis') {
-    next = 'check_image';
-  }
+  const next = determineNextNode(intent, missingProfileFields);
 
-  return { intent, missingProfileFields, next };
+  return { intent, missingProfileFields, next, additionalContext };
 }

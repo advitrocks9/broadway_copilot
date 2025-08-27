@@ -1,13 +1,20 @@
 import prisma from '../db/client';
 import { getLogger } from '../utils/logger';
+import { THIRTY_MINUTES_MS, HOUR_MS } from '../utils/constants';
 
 /**
  * Agent data helpers: recent turns, wardrobe, colors, and activity timestamps.
  */
 const logger = getLogger('agent:tools');
 
+/**
+ * Fetches recent conversation turns for a user within the last 30 minutes.
+ * @param userId - The user identifier
+ * @param limit - Maximum number of turns to return (default: 6)
+ * @returns Array of formatted conversation turns
+ */
 export async function fetchRecentTurns(userId: string, limit = 6) {
-  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+  const thirtyMinutesAgo = new Date(Date.now() - THIRTY_MINUTES_MS);
   const turns = await prisma.turn.findMany({
     where: { userId, createdAt: { gte: thirtyMinutesAgo } },
     orderBy: { createdAt: 'desc' },
@@ -23,6 +30,8 @@ export async function fetchRecentTurns(userId: string, limit = 6) {
 
 /**
  * Returns wardrobe items for a user.
+ * @param userId - The user identifier
+ * @returns Object containing array of wardrobe items
  */
 export async function queryWardrobe(userId: string) {
   const items = await prisma.wardrobeItem.findMany({
@@ -42,6 +51,8 @@ export async function queryWardrobe(userId: string) {
 
 /**
  * Returns the latest color analysis for a user, if any.
+ * @param userId - The user identifier
+ * @returns Object containing latest color analysis data
  */
 export async function queryColors(userId: string) {
   const uploadsWithColor = await prisma.upload.findMany({
@@ -71,14 +82,24 @@ export async function queryColors(userId: string) {
   return { latestColorAnalysis: latest };
 }
 
-export async function queryActivityTimestamps(userId: string) {
+/**
+ * Returns activity timestamps for a user's recent interactions.
+ * @param userId - The user identifier
+ * @returns Object containing last activity timestamps and hours ago calculations
+ */
+export async function queryActivityTimestamps(userId: string): Promise<{
+  lastVibeCheckAt: Date | null;
+  lastColorAnalysisAt: Date | null;
+  vibeCheckHoursAgo: number | undefined;
+  colorAnalysisHoursAgo: number | undefined;
+}> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { lastVibeCheckAt: true, lastColorAnalysisAt: true },
   });
   const now = Date.now();
   const hoursAgo = (d: Date | null | undefined) =>
-    d ? Math.floor((now - new Date(d).getTime()) / (1000 * 60 * 60)) : null;
+    d ? Math.floor((now - new Date(d).getTime()) / HOUR_MS) : undefined;
   const vibeCheckHoursAgo = hoursAgo(user?.lastVibeCheckAt ?? null);
   const colorAnalysisHoursAgo = hoursAgo(user?.lastColorAnalysisAt ?? null);
   return {

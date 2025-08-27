@@ -1,23 +1,48 @@
 import prisma from '../../db/client';
+import { RunInput } from '../state';
 import { getOrCreateUserByWaId } from '../../utils/user';
 import { downloadTwilioMedia, ensureVisionFileId } from '../../utils/media';
 import { userUploadDir } from '../../utils/paths';
-import { RunInput } from '../state';
+import { sanitizeWaIdForFilesystem } from '../../utils/text';
 import { getLogger } from '../../utils/logger';
 
 /**
  * Normalizes Twilio webhook payload into RunInput and records a user turn.
  */
 const logger = getLogger('node:ingest_message');
-type IngestState = { input: Record<string, unknown> };
 
-export async function ingestMessageNode(state: IngestState): Promise<{ input?: RunInput & { _runGen?: number }; reply?: string }>{
+/**
+ * Safely extracts a string value from Twilio webhook payload.
+ */
+function extractString(body: Record<string, unknown>, key: string): string | undefined {
+  const value = body?.[key];
+  return value ? value.toString() : undefined;
+}
+
+/**
+ * Safely extracts a number value from Twilio webhook payload.
+ */
+function extractNumber(body: Record<string, unknown>, key: string): number {
+  const value = body?.[key];
+  return Number(value || 0);
+}
+
+interface IngestMessageState {
+  input: Record<string, unknown>;
+}
+
+interface IngestMessageResult {
+  input?: RunInput;
+  reply?: string;
+}
+
+export async function ingestMessageNode(state: IngestMessageState): Promise<IngestMessageResult> {
   const twilioBody = state.input as Record<string, unknown>;
-  const from: string = (twilioBody?.From || '').toString();
-  const bodyText: string | undefined = (twilioBody?.Body || '').toString() || undefined;
-  const buttonPayload: string | undefined = (twilioBody?.ButtonPayload || '').toString() || undefined;
-  const numMedia: number = Number(twilioBody?.NumMedia || 0);
-  const mediaUrl0: string | undefined = (twilioBody?.MediaUrl0 || '').toString() || undefined;
+  const from: string = extractString(twilioBody, 'From') || '';
+  const bodyText: string | undefined = extractString(twilioBody, 'Body');
+  const buttonPayload: string | undefined = extractString(twilioBody, 'ButtonPayload');
+  const numMedia: number = extractNumber(twilioBody, 'NumMedia');
+  const mediaUrl0: string | undefined = extractString(twilioBody, 'MediaUrl0');
 
   if (!from) {
     return { reply: 'Invalid request: missing sender.' };
@@ -30,7 +55,7 @@ export async function ingestMessageNode(state: IngestState): Promise<{ input?: R
   let fileId: string | undefined = undefined;
   if (numMedia > 0 && mediaUrl0) {
     try {
-      const dir = userUploadDir(waId.replace(/[^\w+]/g, '_'));
+      const dir = userUploadDir(sanitizeWaIdForFilesystem(waId));
       imagePath = await downloadTwilioMedia(mediaUrl0, dir);
       fileId = await ensureVisionFileId(imagePath);
     } catch (err) {
@@ -51,7 +76,7 @@ export async function ingestMessageNode(state: IngestState): Promise<{ input?: R
   });
   logger.info({ userId: user.id, waId, hasImage: Boolean(imagePath), hasText: Boolean(bodyText) }, 'Ingested user turn');
 
-  const normalized: RunInput & { _runGen?: number } = {
+  const normalized: RunInput = {
     userId: user.id,
     waId,
     text: bodyText,
@@ -60,11 +85,12 @@ export async function ingestMessageNode(state: IngestState): Promise<{ input?: R
     buttonPayload,
     gender: (user.confirmedGender as 'male' | 'female' | null) ?? (user.inferredGender as 'male' | 'female' | null) ?? null,
   };
-  if (typeof (twilioBody as any)?._runGen === 'number') {
-    (normalized as any)._runGen = (twilioBody as any)._runGen;
+
+  // Extract runGen from twilio body
+  const runGen = (twilioBody as { runGen?: number })?.runGen;
+  if (typeof runGen === 'number') {
+    normalized.runGen = runGen;
   }
 
   return { input: normalized };
 }
-
-

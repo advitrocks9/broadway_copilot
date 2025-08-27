@@ -1,7 +1,9 @@
-import { RunInput } from '../state';
-import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
+
+import { RunInput } from '../state';
+import { Reply } from '../../types/common';
 import { getNanoLLM } from '../../services/openaiService';
+import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
 
 /**
@@ -9,7 +11,17 @@ import { getLogger } from '../../utils/logger';
  */
 const logger = getLogger('node:ask_user_info');
 
-export async function askUserInfoNode(state: { input: RunInput; messages?: unknown[]; missingProfileFields?: Array<'gender'> }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
+interface AskUserInfoState {
+  input: RunInput;
+  messages?: unknown[];
+  missingProfileFields?: Array<'gender'>;
+}
+
+interface AskUserInfoResult {
+  replies: Reply[];
+}
+
+export async function askUserInfoNode(state: AskUserInfoState): Promise<AskUserInfoResult>{
   const llm = getNanoLLM();
   const { input } = state;
   const missing: Array<'gender'> = state.missingProfileFields || [];
@@ -24,9 +36,10 @@ export async function askUserInfoNode(state: { input: RunInput; messages?: unkno
   ];
   const AskSchema = z.object({ text: z.string() });
   logger.info({ userId: input.userId, missing }, 'AskUserInfo: input');
-  console.log('🤖 AskUserInfo Model Input:', JSON.stringify(promptMessages, null, 2));
-  const resp = await llm.withStructuredOutput(AskSchema as any).invoke(promptMessages) as { text: string };
-  logger.info(resp, 'AskUserInfo: output');
-  const replyText = resp.text;
-  return { replies: [{ reply_type: 'text', reply_text: replyText }] };
+  logger.debug({ promptMessages }, 'AskUserInfo: model input');
+  const response = await llm.withStructuredOutput(AskSchema as any).invoke(promptMessages) as { text: string };
+  logger.info(response, 'AskUserInfo: output');
+  const replyText = response.text;
+  const replies: Reply[] = [{ reply_type: 'text', reply_text: replyText }];
+  return { replies };
 }

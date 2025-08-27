@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
-import { IntentLabel, RunInput, RunOutput, RequiredProfileField, Reply } from './state';
+import { IntentLabel, RunInput, RunOutput, RequiredProfileField, Reply, FinalState } from './state';
 import { routeIntent } from './nodes/routeIntent';
 import { askUserInfoNode } from './nodes/askUserInfo';
 import { handleOccasionNode } from './nodes/handleOccasion';
@@ -17,12 +17,13 @@ import { handleSuggestNode } from './nodes/handleSuggest';
 import { sendReplyNode } from './nodes/sendReply';
 import { hydrateContextNode } from './nodes/hydrateContext';
 import { getLogger } from '../utils/logger';
+import { ValidationUtils } from '../utils/validation';
 
 /**
  * Constructs and runs the LangGraph-based conversational agent.
  */
 const GraphAnnotation = Annotation.Root({
-  input: Annotation<RunInput>(),
+  input: Annotation<RunInput | Record<string, unknown>>(),
   intent: Annotation<IntentLabel | undefined>(),
   reply: Annotation<Reply | string | undefined>(),
   replies: Annotation<Array<Reply | string> | undefined>(),
@@ -31,11 +32,12 @@ const GraphAnnotation = Annotation.Root({
   messages: Annotation<unknown[] | undefined>(),
   wardrobe: Annotation<unknown | undefined>(),
   latestColorAnalysis: Annotation<unknown | undefined>(),
+  additionalContext: Annotation<Array<'wardrobeItems' | 'latestColorAnalysis'> | undefined>(),
   runGen: Annotation<number | undefined>(),
   
 });
 
-let compiledApp: any | null = null;
+let compiledApp: ReturnType<typeof StateGraph.prototype.compile> | null = null;
 const logger = getLogger('agent:graph');
 
 /**
@@ -100,19 +102,30 @@ export function buildAgentGraph() {
 
 /**
  * Runs the agent graph with the given input.
+ * @param input - The input data containing user message and context
+ * @param options - Optional configuration including abort signal
+ * @returns The agent's response with text, mode, and detected intent
  */
-export async function runAgent(input: any, options?: { signal?: AbortSignal }): Promise<RunOutput & { intent?: IntentLabel }> {
+export async function runAgent(input: RunInput | Record<string, unknown>, options?: { signal?: AbortSignal }): Promise<RunOutput & { intent?: IntentLabel }> {
+  // Validate input data - if it's already a RunInput, use it directly
+  let validatedInput: RunInput;
+  if (ValidationUtils.isRunInput(input)) {
+    validatedInput = ValidationUtils.validateRunInput(input);
+  } else {
+    // If it's a raw payload, let the graph handle the transformation
+    validatedInput = input as unknown as RunInput; // This will be handled by ingestMessageNode
+  }
+
   if (!compiledApp) {
     logger.info('Compiling agent graph');
     compiledApp = buildAgentGraph();
   }
-  logger.info({ userId: input?.userId, waId: input?.From }, 'Invoking agent run');
-  const result = await compiledApp.invoke({ input }, {
-    configurable: { thread_id: (input?.userId || input?.From || 'unknown') },
+  logger.info({ userId: validatedInput.userId, waId: validatedInput.waId }, 'Invoking agent run');
+  const result = await compiledApp.invoke({ input: validatedInput }, {
+    configurable: { thread_id: (validatedInput.userId || validatedInput.waId || 'unknown') },
     signal: options?.signal,
   });
   if (!result) return { replyText: 'I had a problem there. Please try again.' };
-  type FinalState = { reply?: string | Reply; replies?: Array<string | Reply>; mode?: 'text' | 'menu' | 'card'; intent?: IntentLabel };
   const state = result as FinalState;
   const arrayReplies = Array.isArray(state.replies) ? state.replies : (state.reply ? [state.reply] : []);
   const first = arrayReplies[0];

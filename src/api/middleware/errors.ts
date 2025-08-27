@@ -1,11 +1,14 @@
 import { NextFunction, Request, Response } from 'express';
-import { getLogger } from '../../utils/logger';
+import { errorHandler as appErrorHandler, AppError, createErrorResponse } from '../../utils/errors';
 
 /**
- * Global Express error handling middleware.
+ * Global Express error handling middleware using standardized error handling.
  */
-const logger = getLogger('api:errors');
 
+/**
+ * Legacy HTTP error class for backward compatibility.
+ * @deprecated Use AppError from utils/errors instead
+ */
 export class HttpError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -14,12 +17,21 @@ export class HttpError extends Error {
   }
 }
 
-export function errorHandler(err: any, _req: Request, res: Response, _next: NextFunction) {
-  const status = err.status || 500;
-  const message = err.message || 'Internal Server Error';
-  try {
-    const stack = err?.stack || '';
-    logger.error({ status, message, stack, err }, 'Express error handler');
-  } catch (_) {}
-  res.status(status).json({ error: { status, message } });
+/**
+ * Express error handling middleware with standardized error processing.
+ */
+export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
+  const context = {
+    method: req.method,
+    url: req.url,
+    userAgent: req.get('User-Agent'),
+    ip: req.ip,
+  };
+
+  const appError = appErrorHandler.handle(err, context);
+
+  // If it's an AppError, use its status code, otherwise default to 500
+  const statusCode = appError instanceof AppError ? appError.statusCode : 500;
+
+  res.status(statusCode).json(createErrorResponse(appError));
 }

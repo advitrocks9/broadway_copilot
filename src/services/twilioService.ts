@@ -2,24 +2,16 @@ import 'dotenv/config';
 import twilio, { Twilio } from 'twilio';
 import RequestClient from 'twilio/lib/base/RequestClient';
 import { getLogger } from '../utils/logger';
+import { TwilioApiError, TwilioMessageOptions, TwilioWebhookPayload, StatusResolvers } from '../types/twilio';
+import { addStatusCallback, handleTwilioError, validateTwilioRequest } from '../utils/twilioHelpers';
 
 /**
  * Twilio messaging utilities for WhatsApp interactions.
  */
 const logger = getLogger('service:twilio');
- 
-/**
- * Tracks message status promises for 'sent' and 'delivered'.
- */
-type StatusResolvers = {
-  resolveSent: () => void;
-  resolveDelivered: () => void;
-  sentPromise: Promise<void>;
-  deliveredPromise: Promise<void>;
-  cleanupTimer?: NodeJS.Timeout;
-};
-const sidToResolvers = new Map<string, StatusResolvers>();
-const sidToSeenStatuses = new Map<string, Set<string>>();
+
+export const sidToResolvers = new Map<string, StatusResolvers>();
+export const sidToSeenStatuses = new Map<string, Set<string>>();
   
 /**
  * Provides a singleton Twilio client with keep-alive agent and optional edge/region.
@@ -45,32 +37,42 @@ function getClient(): Twilio {
   return cachedClient;
 }
 
+/**
+ * Sends a text message via Twilio WhatsApp.
+ * @param to - The recipient's WhatsApp number
+ * @param body - The message content to send
+ * @param imageUrl - Optional image URL to include with the message
+ */
 export async function sendText(to: string, body: string, imageUrl?: string): Promise<void> {
   const client = getClient();
+  const fromNumber = process.env.TWILIO_WHATSAPP_FROM;
+  if (!fromNumber) {
+    throw new Error('TWILIO_WHATSAPP_FROM environment variable is required');
+  }
   try {
-    const messageOptions: any = {
+    const messageOptions: TwilioMessageOptions = {
       body,
-      from: process.env.TWILIO_WHATSAPP_FROM,
+      from: fromNumber,
       to,
     };
     if (imageUrl) {
       messageOptions.mediaUrl = [imageUrl];
     }
-    const statusCallbackUrl = process.env.TWILIO_STATUS_CALLBACK_URL;
-    if (statusCallbackUrl) {
-      messageOptions.statusCallback = statusCallbackUrl;
-    }
+    addStatusCallback(messageOptions);
     const resp = await client.messages.create(messageOptions);
     logger.info({ sid: resp.sid, to }, 'Sent text message');
     await awaitStatuses(resp.sid);
-  } catch (err: any) {
-    if (err && err.code === 20003) {
-      logger.error('Twilio auth failed (401). Verify TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.');
-    }
-    throw err;
+  } catch (err: unknown) {
+    handleTwilioError(err as TwilioApiError);
   }
 }
 
+/**
+ * Sends an interactive menu message via Twilio WhatsApp.
+ * Falls back to text message if TWILIO_MENU_SID is not configured.
+ * @param to - The recipient's WhatsApp number
+ * @param replyText - The text content to display in the menu
+ */
 export async function sendMenu(to: string, replyText: string): Promise<void> {
   const client = getClient();
   const contentSid = process.env.TWILIO_MENU_SID;
@@ -79,21 +81,28 @@ export async function sendMenu(to: string, replyText: string): Promise<void> {
     await sendText(to, replyText);
     return;
   }
-  const payload: any = {
+  const fromNumber = process.env.TWILIO_WHATSAPP_FROM;
+  if (!fromNumber) {
+    throw new Error('TWILIO_WHATSAPP_FROM environment variable is required');
+  }
+  const payload: TwilioMessageOptions = {
     contentSid,
     contentVariables: JSON.stringify({ '1': replyText }),
-    from: process.env.TWILIO_WHATSAPP_FROM,
+    from: fromNumber,
     to,
   };
-  const statusCallbackUrl = process.env.TWILIO_STATUS_CALLBACK_URL;
-  if (statusCallbackUrl) {
-    payload.statusCallback = statusCallbackUrl;
-  }
+  addStatusCallback(payload);
   const resp = await client.messages.create(payload);
   logger.info({ sid: resp.sid, to }, 'Sent menu message');
   await awaitStatuses(resp.sid);
 }
 
+/**
+ * Sends a rich card message via Twilio WhatsApp.
+ * Falls back to text message if TWILIO_CARD_SID is not configured.
+ * @param to - The recipient's WhatsApp number
+ * @param replyText - The text content to display in the card
+ */
 export async function sendCard(to: string, replyText: string): Promise<void> {
   const client = getClient();
   const contentSid = process.env.TWILIO_CARD_SID;
@@ -102,51 +111,23 @@ export async function sendCard(to: string, replyText: string): Promise<void> {
     await sendText(to, replyText);
     return;
   }
-  const payload: any = {
+  const fromNumber = process.env.TWILIO_WHATSAPP_FROM;
+  if (!fromNumber) {
+    throw new Error('TWILIO_WHATSAPP_FROM environment variable is required');
+  }
+  const payload: TwilioMessageOptions = {
     contentSid,
     contentVariables: JSON.stringify({ '1': replyText }),
-    from: process.env.TWILIO_WHATSAPP_FROM,
+    from: fromNumber,
     to,
   };
-  const statusCallbackUrl = process.env.TWILIO_STATUS_CALLBACK_URL;
-  if (statusCallbackUrl) {
-    payload.statusCallback = statusCallbackUrl;
-  }
+  addStatusCallback(payload);
   const resp = await client.messages.create(payload);
   logger.info({ sid: resp.sid, to }, 'Sent card message');
   await awaitStatuses(resp.sid);
 }
 
-export function validateTwilioRequest(url: string, params: Record<string, any>, signature: string | undefined): boolean {
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  if (process.env.TWILIO_VALIDATE_WEBHOOK === 'false') return true;
-  if (!authToken) return false;
-  if (!signature) return false;
-  return twilio.validateRequest(authToken, signature, url, params);
-}
 
-/**
- * Processes a Twilio status callback payload.
- */
-export function processStatusCallback(payload: Record<string, any>): void {
-  const sid: string | undefined = payload?.MessageSid || payload?.SmsSid;
-  const status: string | undefined = payload?.MessageStatus || payload?.SmsStatus;
-  if (!sid || !status) return;
-  logger.info({ sid, status }, 'Twilio status callback received');
-  const resolvers = sidToResolvers.get(sid);
-  if (!resolvers) {
-    const seen = sidToSeenStatuses.get(sid) || new Set<string>();
-    seen.add(status);
-    sidToSeenStatuses.set(sid, seen);
-    return;
-  }
-  if (status === 'sent') {
-    resolvers.resolveSent();
-  }
-  if (status === 'delivered') {
-    resolvers.resolveDelivered();
-  }
-}
 
 /**
  * Awaits 'sent' and 'delivered' statuses with timeouts.
@@ -183,9 +164,11 @@ async function awaitStatuses(sid: string): Promise<void> {
   ]);
   await deliveredOrTimeout;
 
+  // Set cleanup timer for resolvers (will be cleared if callbacks arrive)
   const cleanupTimer = setTimeout(() => {
+    logger.debug({ sid }, 'Cleaning up expired message resolvers');
     sidToResolvers.delete(sid);
-  }, 300000);
+  }, 300000); // 5 minutes
   resolvers.cleanupTimer = cleanupTimer;
 }
 

@@ -1,10 +1,11 @@
 import { z } from 'zod';
+
 import prisma from '../../db/client';
 import { RunInput } from '../state';
-import { loadPrompt } from '../../utils/prompts';
-import { toNameLower } from '../../utils/text';
 import { WardrobeIndexResponseSchema, WardrobeIndexResponse } from '../../types/contracts';
 import { getVisionLLM } from '../../services/openaiService';
+import { loadPrompt } from '../../utils/prompts';
+import { toNameLower } from '../../utils/text';
 import { ensureVisionFileId } from '../../utils/media';
 import { getLogger } from '../../utils/logger';
 
@@ -13,7 +14,13 @@ import { getLogger } from '../../utils/logger';
  */
 const logger = getLogger('node:wardrobe_index');
 
-export async function wardrobeIndexNode(state: { input: RunInput }): Promise<Record<string, never>> {
+interface WardrobeIndexState {
+  input: RunInput;
+}
+
+interface WardrobeIndexResult extends Record<string, never> {}
+
+export async function wardrobeIndexNode(state: WardrobeIndexState): Promise<WardrobeIndexResult> {
   const { input } = state;
   const imagePath = input.imagePath as string;
   if (!imagePath) {
@@ -22,14 +29,16 @@ export async function wardrobeIndexNode(state: { input: RunInput }): Promise<Rec
   const ensuredFileId = await ensureVisionFileId(imagePath, input.fileId);
   const schema = WardrobeIndexResponseSchema as unknown as z.ZodType<WardrobeIndexResponse>;
   const prompt = await loadPrompt('wardrobe_index.txt');
+
   type VisionPart = { type: 'input_text'; text: string } | { type: 'input_image'; file_id: string; detail?: 'auto' | 'low' | 'high' };
   type VisionContent = string | VisionPart[];
+
   const content: Array<{ role: 'system' | 'user'; content: VisionContent }> = [
     { role: 'system', content: prompt },
-    { role: 'user', content: [ { type: 'input_image', file_id: ensuredFileId as string, detail: 'high' } ] },
+    { role: 'user', content: [{ type: 'input_image', file_id: ensuredFileId as string, detail: 'high' }] },
   ];
   logger.info({ hasImage: true }, 'WardrobeIndex: input');
-  console.log('🤖 WardrobeIndex Model Input:', JSON.stringify(content, null, 2));
+  logger.debug({ content }, 'WardrobeIndex: model input');
   let result: WardrobeIndexResponse;
   try {
     result = await getVisionLLM().withStructuredOutput(schema as any).invoke(content as any) as WardrobeIndexResponse;
@@ -55,10 +64,10 @@ export async function wardrobeIndexNode(state: { input: RunInput }): Promise<Rec
           name: displayName,
           nameLower,
           category: item.category,
-          colors: colors as any,
+          colors: colors,
           type: item.type,
           subtype: item.subtype ?? null,
-          attributes: item.attributes as any,
+          attributes: item.attributes,
         },
       });
     }

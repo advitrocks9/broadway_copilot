@@ -1,9 +1,11 @@
-import { RunInput } from '../state';
-import prisma from '../../db/client';
-import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
+
+import prisma from '../../db/client';
+import { AdditionalContextItem, RunInput } from '../state';
+import { Reply } from '../../types/common';
 import { VibeCheckResponse, VibeCheckResponseSchema } from '../../types/contracts';
 import { getVisionLLM } from '../../services/openaiService';
+import { loadPrompt } from '../../utils/prompts';
 import { ensureVisionFileId, persistUpload } from '../../utils/media';
 import { getLogger } from '../../utils/logger';
 
@@ -11,7 +13,18 @@ import { getLogger } from '../../utils/logger';
  * Rates outfit from an image and returns a concise text summary; logs and persists results.
  */
 const logger = getLogger('node:vibe_check');
-export async function vibeCheckNode(state: { input: RunInput; messages?: unknown[]; latestColorAnalysis?: unknown }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
+interface VibeCheckState {
+  input: RunInput;
+  messages?: unknown[];
+  latestColorAnalysis?: unknown;
+  additionalContext?: AdditionalContextItem[];
+}
+
+interface VibeCheckResult {
+  replies: Reply[];
+}
+
+export async function vibeCheckNode(state: VibeCheckState): Promise<VibeCheckResult>{
   const { input } = state;
   const imagePath = input.imagePath as string;
   const ensuredFileId = await ensureVisionFileId(imagePath, input.fileId);
@@ -20,14 +33,19 @@ export async function vibeCheckNode(state: { input: RunInput; messages?: unknown
   const prompt = await loadPrompt('vibe_check.txt');
   type VisionPart = { type: 'input_text'; text: string } | { type: 'input_image'; file_id: string; detail?: 'auto' | 'low' | 'high' };
   type VisionContent = string | VisionPart[];
+  const extraContext: Array<{ role: 'system' | 'user'; content: VisionContent }> =
+    Array.isArray(state.additionalContext) && state.additionalContext.includes('latestColorAnalysis')
+      ? [{ role: 'user' as const, content: `LatestColorAnalysis: ${JSON.stringify(state.latestColorAnalysis || null)}` }]
+      : [];
+
   const content: Array<{ role: 'system' | 'user'; content: VisionContent }> = [
     { role: 'system', content: prompt },
     { role: 'user', content: `UserGender: ${input.gender ?? 'unknown'} (reflect in fit notes when applicable).` },
-    { role: 'user', content: `LatestColorAnalysis: ${JSON.stringify(state.latestColorAnalysis || null)}` },
+    ...extraContext,
     { role: 'user', content: [ { type: 'input_image', file_id: ensuredFileId as string, detail: 'high' } ] },
   ];
   logger.info({ hasImage: true }, 'VibeCheck: input');
-  console.log('🤖 VibeCheck Model Input:', JSON.stringify(content, null, 2));
+  logger.debug({ content }, 'VibeCheck: model input');
   const result = await getVisionLLM().withStructuredOutput(schema as any).invoke(content as any) as VibeCheckResponse;
   logger.info(result, 'VibeCheck: output');
   const categories = Array.isArray(result.categories) ? result.categories : [];
@@ -58,10 +76,12 @@ export async function vibeCheckNode(state: { input: RunInput; messages?: unknown
     '',
   ];
   const combinedText = [scoreLines.join('\n'), result.reply_text].filter(Boolean).join('\n\n');
-  const replies: Array<{ reply_type: 'text'; reply_text: string }> = [
+  const replies: Reply[] = [
     { reply_type: 'text', reply_text: combinedText },
   ];
-  if (result.followup_text) replies.push({ reply_type: 'text', reply_text: result.followup_text });
+  if (result.followup_text) {
+    replies.push({ reply_type: 'text', reply_text: result.followup_text });
+  }
   return { replies };
 }
 

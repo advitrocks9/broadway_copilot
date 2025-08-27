@@ -1,10 +1,10 @@
 import { getLogger } from '../utils/logger';
 import { runAgent } from '../agent/graph';
 import { takeToken, recordInbound, enqueue, snapshotAndClearQueue, hasPending, setProcessing, getLatestGen, setLatestGen, getCurrentBodies, setCurrentBodies, clearCurrentBodies, abortActiveRun, setController, clearController } from './runtimeState';
+import { OrchestrateOptions, TwilioWebhookPayload } from '../types/twilio';
+import { combineBodies, isAbortError } from '../utils/twilioHelpers';
 
 const logger = getLogger('svc:orchestrator');
-
-export type OrchestrateOptions = { body: any };
 
 export async function orchestrateInbound({ body }: OrchestrateOptions): Promise<void> {
   const waId: string = (body?.From || '').toString();
@@ -33,7 +33,7 @@ export async function orchestrateInbound({ body }: OrchestrateOptions): Promise<
       if (batch.length === 0) break;
 
       const priorBodies = getCurrentBodies(waId);
-      const bodies = [...priorBodies, ...batch.map(b => b.body)];
+      const bodies: TwilioWebhookPayload[] = [...priorBodies, ...batch.map(b => b.body as TwilioWebhookPayload)];
       const combined = combineBodies(bodies);
 
       const myGen = Date.now();
@@ -48,11 +48,12 @@ export async function orchestrateInbound({ body }: OrchestrateOptions): Promise<
       try {
         const controller = new AbortController();
         setController(waId, controller);
-        await runAgent({ ...combined, _runGen: myGen }, { signal: controller.signal });
-      } catch (err: any) {
+            await runAgent({ ...combined, runGen: myGen } as Record<string, unknown>, { signal: controller.signal });
+      } catch (err: unknown) {
         if (isAbortError(err)) {
           logger.info({ waId }, 'Run aborted due to new inbound');
         } else {
+          logger.error({ waId, error: err }, 'Agent execution failed');
           throw err;
         }
       } finally {
@@ -65,31 +66,11 @@ export async function orchestrateInbound({ body }: OrchestrateOptions): Promise<
         recordInbound(waId, b.id, 'sent');
       }
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (isAbortError(err)) {
       logger.info({ waId }, 'Processing loop aborted');
     } else {
-      logger.error({ err }, 'Orchestrator error');
+      logger.error({ waId, error: err }, 'Orchestrator error');
     }
   }
 }
-
-function combineBodies(bodies: any[]): any {
-  if (bodies.length === 1) return bodies[0];
-  const first = bodies[0] || {};
-  const texts = bodies.map(b => (b?.Body || '').toString()).filter(Boolean);
-  const latestMedia = [...bodies].reverse().find(b => b?.NumMedia && Number(b.NumMedia) > 0);
-  return {
-    ...first,
-    Body: texts.join('\n\n'),
-    NumMedia: latestMedia?.NumMedia || first.NumMedia,
-    MediaUrl0: latestMedia?.MediaUrl0 || first.MediaUrl0,
-  };
-}
-
-function isAbortError(err: unknown): boolean {
-  const e = err as any;
-  return e?.name === 'AbortError' || e?.message === 'Aborted' || e?.code === 'ABORT_ERR';
-}
-
-
