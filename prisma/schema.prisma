@@ -39,6 +39,8 @@ model Turn {
   metadata  Json?
   replies   Json?
   createdAt DateTime @default(now())
+  feedback  Feedback? @relation(fields: [feedbackId], references: [id])
+  feedbackId String?
 
   @@index([userId, createdAt])
 }
@@ -106,5 +108,13 @@ model ModelTrace {
   rawRequest  Json
   rawResponse Json
   createdAt   DateTime @default(now())
+}
+
+model Feedback {
+  id         String   @id @default(cuid())
+  userId     String
+  helpful    Boolean
+  createdAt  DateTime @default(now())
+  turns      Turn[]
 }
 

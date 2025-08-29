@@ -54,15 +54,16 @@ export function buildCompletePrompt(
  * Processes LLM response with followup text into reply array.
  */
 export function processResponseWithFollowup(
-  response: { reply_type?: 'text' | 'menu' | 'card'; reply_text: string; followup_text?: string | null },
-  defaultReplyType: 'text' | 'menu' | 'card' = 'text'
+  response: { reply_type?: 'text' | 'quick_reply'; reply_text: string; followup_text?: string | null },
+  defaultReplyType: 'text' | 'quick_reply' = 'text'
 ): Reply[] {
-  const replies: Reply[] = [
-    {
-      reply_type: response.reply_type || defaultReplyType,
-      reply_text: response.reply_text
-    },
-  ];
+  const replyType = response.reply_type || defaultReplyType;
+
+  const baseReply: Reply = replyType === 'quick_reply'
+    ? { reply_type: 'quick_reply', reply_text: response.reply_text, buttons: [] }
+    : { reply_type: 'text', reply_text: response.reply_text };
+
+  const replies: Reply[] = [baseReply];
 
   if (response.followup_text) {
     replies.push({ reply_type: 'text', reply_text: response.followup_text });
@@ -83,7 +84,7 @@ export const TextWithFollowupSchema = z.object({
  * Common schema for handlers that return structured replies with optional followup.
  */
 export const StructuredReplySchema = z.object({
-  reply_type: z.enum(['text', 'menu', 'card']),
+  reply_type: z.enum(['text', 'quick_reply', 'greeting']),
   reply_text: z.string(),
   followup_text: z.string().nullable(),
 });

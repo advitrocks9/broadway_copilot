@@ -13,6 +13,7 @@ export function buildAdditionalContextSections(state: {
 }): Section[] {
   const sections: Section[] = [];
   const requested = Array.isArray(state.additionalContext) ? state.additionalContext : [];
+
   if (requested.includes('wardrobeItems')) {
     sections.push({ role: 'user', content: `WardrobeContext: ${JSON.stringify(state.wardrobe || {})}` });
   }

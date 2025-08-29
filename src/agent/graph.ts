@@ -58,7 +58,6 @@ export function buildAgentGraph() {
     .addNode('color_analysis', colorAnalysisNode)
     .addNode('wardrobe_index', wardrobeIndexNode)
     .addNode('handle_suggest', handleSuggestNode)
-    
     .addNode('handle_general', handleGeneralNode)
     .addNode('send_reply', sendReplyNode)
     .addEdge(START, 'ingest_message')
@@ -130,7 +129,7 @@ export async function runAgent(input: RunInput | Record<string, unknown>, option
   const arrayReplies = Array.isArray(state.replies) ? state.replies : (state.reply ? [state.reply] : []);
   const first = arrayReplies[0];
   const finalReply = typeof first === 'string' ? first : (first?.reply_text ?? '');
-  const mode = (typeof first === 'string' ? 'text' : first?.reply_type) as 'text' | 'menu' | 'card' | undefined;
+  const mode = (typeof first === 'string' ? 'text' : first?.reply_type) as 'text' | 'quick_reply' | 'image' | undefined;
   const intent = state.intent as IntentLabel | undefined;
   logger.info({ intent, mode, replyPreview: finalReply.slice(0, 80) }, 'Agent run complete');
   return { replyText: finalReply, mode, intent };

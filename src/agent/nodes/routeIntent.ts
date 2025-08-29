@@ -88,14 +88,24 @@ function determineNextNode(intent: IntentLabel, missingProfileFields: string[]):
 }
 
 export async function routeIntent(state: RouteIntentState): Promise<RouteIntentResult> {
-  const input = state.input;
+  const { input } = state;
   const payload = (input.buttonPayload || '').toLowerCase();
 
   // Handle button payloads that skip LLM routing
-  if (payload === 'vibe_check' || payload === 'color_analysis') {
-    const intent = payload as IntentLabel;
-    logger.info({ input, intent, next: 'check_image' }, 'RouteIntent: skip LLM due to button payload');
-    return { intent, missingProfileFields: [], next: 'check_image' };
+  if (payload) {
+    const buttonRoutes: Record<string, { intent: IntentLabel; next: string }> = {
+      'vibe_check': { intent: 'vibe_check', next: 'check_image' },
+      'color_analysis': { intent: 'color_analysis', next: 'check_image' },
+      'handle_occasion': { intent: 'occasion', next: 'handle_occasion' },
+      'handle_suggest': { intent: 'suggest', next: 'handle_suggest' },
+      'handle_vacation': { intent: 'vacation', next: 'handle_vacation' },
+    };
+
+    const route = buttonRoutes[payload];
+    if (route) {
+      logger.info({ input, intent: route.intent, next: route.next }, 'RouteIntent: skip LLM due to button payload');
+      return { intent: route.intent, missingProfileFields: [], next: route.next };
+    }
   }
 
   const hasImage = Boolean(input.fileId || input.imagePath);

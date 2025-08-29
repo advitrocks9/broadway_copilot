@@ -4,6 +4,8 @@ import RequestClient from 'twilio/lib/base/RequestClient';
 import { getLogger } from '../utils/logger';
 import { TwilioApiError, TwilioMessageOptions, TwilioWebhookPayload, StatusResolvers } from '../types/twilio';
 import { addStatusCallback, handleTwilioError, validateTwilioRequest } from '../utils/twilioHelpers';
+import { QuickReplyButton } from '../types/common';
+import {TWILIO_WHATSAPP_FROM, TWILIO_QUICKREPLY2_SID, TWILIO_QUICKREPLY3_SID } from '../utils/constants';
 
 /**
  * Twilio messaging utilities for WhatsApp interactions.
@@ -45,10 +47,7 @@ function getClient(): Twilio {
  */
 export async function sendText(to: string, body: string, imageUrl?: string): Promise<void> {
   const client = getClient();
-  const fromNumber = process.env.TWILIO_WHATSAPP_FROM;
-  if (!fromNumber) {
-    throw new Error('TWILIO_WHATSAPP_FROM environment variable is required');
-  }
+  const fromNumber = TWILIO_WHATSAPP_FROM;
   try {
     const messageOptions: TwilioMessageOptions = {
       body,
@@ -68,63 +67,69 @@ export async function sendText(to: string, body: string, imageUrl?: string): Pro
 }
 
 /**
- * Sends an interactive menu message via Twilio WhatsApp.
- * Falls back to text message if TWILIO_MENU_SID is not configured.
+ * Sends an interactive menu message with quick reply buttons via Twilio WhatsApp.
  * @param to - The recipient's WhatsApp number
  * @param replyText - The text content to display in the menu
+ * @param buttons - Array of quick reply buttons (2-3 buttons)
  */
-export async function sendMenu(to: string, replyText: string): Promise<void> {
+export async function sendMenu(to: string, replyText: string, buttons?: QuickReplyButton[]): Promise<void> {
   const client = getClient();
-  const contentSid = process.env.TWILIO_MENU_SID;
-  if (!contentSid) {
-    logger.warn('TWILIO_MENU_SID missing; falling back to text');
+  
+  // If no buttons provided, fall back to text
+  if (!buttons || buttons.length === 0) {
+    logger.warn('No buttons provided for menu; falling back to text');
     await sendText(to, replyText);
     return;
   }
-  const fromNumber = process.env.TWILIO_WHATSAPP_FROM;
-  if (!fromNumber) {
-    throw new Error('TWILIO_WHATSAPP_FROM environment variable is required');
+  
+  // Validate button count (2-3 buttons)
+  if (buttons.length < 2 || buttons.length > 3) {
+    logger.warn(`Invalid button count ${buttons.length}; must be 2-3 buttons. Falling back to text`);
+    await sendText(to, replyText);
+    return;
   }
+  
+  // Select appropriate content SID based on button count
+  const contentSid = buttons.length === 2 ? TWILIO_QUICKREPLY2_SID : TWILIO_QUICKREPLY3_SID;
+  const fromNumber = TWILIO_WHATSAPP_FROM;
+  
+  // Build content variables
+  const contentVariables: Record<string, string> = {
+    '1': replyText,
+    '2': buttons[0].text,
+    '3': buttons[0].id,
+    '4': buttons[1].text,
+    '5': buttons[1].id
+  };
+  
+  // Add third button if present
+  if (buttons.length === 3) {
+    contentVariables['6'] = buttons[2].text;
+    contentVariables['7'] = buttons[2].id;
+  }
+  
   const payload: TwilioMessageOptions = {
     contentSid,
-    contentVariables: JSON.stringify({ '1': replyText }),
+    contentVariables: JSON.stringify(contentVariables),
     from: fromNumber,
     to,
   };
+  
   addStatusCallback(payload);
   const resp = await client.messages.create(payload);
-  logger.info({ sid: resp.sid, to }, 'Sent menu message');
+  logger.info({ sid: resp.sid, to, buttonCount: buttons.length }, 'Sent menu message with buttons');
   await awaitStatuses(resp.sid);
 }
 
 /**
- * Sends a rich card message via Twilio WhatsApp.
- * Falls back to text message if TWILIO_CARD_SID is not configured.
+ * Sends an image message via Twilio WhatsApp.
  * @param to - The recipient's WhatsApp number
- * @param replyText - The text content to display in the card
+ * @param imageUrl - The URL of the image to send
+ * @param caption - Optional caption text for the image
  */
-export async function sendCard(to: string, replyText: string): Promise<void> {
-  const client = getClient();
-  const contentSid = process.env.TWILIO_CARD_SID;
-  if (!contentSid) {
-    logger.warn('TWILIO_CARD_SID missing; falling back to text');
-    await sendText(to, replyText);
-    return;
-  }
-  const fromNumber = process.env.TWILIO_WHATSAPP_FROM;
-  if (!fromNumber) {
-    throw new Error('TWILIO_WHATSAPP_FROM environment variable is required');
-  }
-  const payload: TwilioMessageOptions = {
-    contentSid,
-    contentVariables: JSON.stringify({ '1': replyText }),
-    from: fromNumber,
-    to,
-  };
-  addStatusCallback(payload);
-  const resp = await client.messages.create(payload);
-  logger.info({ sid: resp.sid, to }, 'Sent card message');
-  await awaitStatuses(resp.sid);
+export async function sendImage(to: string, imageUrl: string, caption?: string): Promise<void> {
+  await sendText(to, caption || '', imageUrl);
+  logger.info({ to, imageUrl }, 'Sent image message');
 }
 
 

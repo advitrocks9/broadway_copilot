@@ -2,8 +2,8 @@ import 'dotenv/config';
 
 import prisma from '../../db/client';
 import type { Reply } from '../state';
-import { sendText, sendMenu, sendCard } from '../../services/twilioService';
-import { getLatestGen } from '../../services/runtimeState';
+import { sendText, sendMenu, sendImage } from '../../services/twilioService';
+import { getLatestGen, sanitizeUserKey } from '../../services/runtimeState';
 import { getLogger } from '../../utils/logger';
 
 /**
@@ -46,12 +46,12 @@ export async function sendReplyNode(state: SendReplyState): Promise<SendReplyRes
     if (latest && latest !== runGen) return {};
   }
 
-  const normalizedReplies: Reply[] = collected.slice(0, 2).map(r => typeof r === 'string' ? { reply_type: 'text', reply_text: r } : r);
+  const normalizedReplies: Reply[] = collected.slice(0, 2).map(r => typeof r === 'string' ? { reply_type: 'text' as const, reply_text: r } : r);
 
   const createData = {
     userId: userId,
     role: 'assistant',
-    text: normalizedReplies.map(r => r.reply_text).join('\n\n'),
+    text: normalizedReplies.map(r => r.reply_type === 'image' ? r.reply_text || '' : r.reply_text).join('\n\n'),
     intent: intent || null,
     metadata: { engine: 'langgraph' },
     replies: normalizedReplies,
@@ -63,10 +63,10 @@ export async function sendReplyNode(state: SendReplyState): Promise<SendReplyRes
     for (const r of normalizedReplies) {
       if (r.reply_type === 'text') {
         await sendText(waId, r.reply_text);
-      } else if (r.reply_type === 'menu') {
-        await sendMenu(waId, r.reply_text);
-      } else if (r.reply_type === 'card') {
-        await sendCard(waId, r.reply_text);
+      } else if (r.reply_type === 'quick_reply') {
+        await sendMenu(waId, r.reply_text, r.buttons);
+      } else if (r.reply_type === 'image') {
+        await sendImage(waId, r.media_url, r.reply_text);
       }
     }
   } catch (err) {

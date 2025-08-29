@@ -65,12 +65,31 @@ export interface LatestColorAnalysis {
 }
 
 /**
+ * Quick reply button structure for interactive messages.
+ */
+export interface QuickReplyButton {
+  text: string;
+  id: string;
+}
+
+/**
  * Standard reply structure used throughout the application.
  */
-export interface Reply {
-  reply_type: 'text' | 'menu' | 'card';
-  reply_text: string;
-}
+export type Reply =
+  | {
+      reply_type: 'text';
+      reply_text: string;
+    }
+  | {
+      reply_type: 'quick_reply';
+      reply_text: string;
+      buttons: QuickReplyButton[];
+    }
+  | {
+      reply_type: 'image';
+      media_url: string;
+      reply_text?: string;
+    };
 
 /**
  * Color object with name and hex code representation.
@@ -88,7 +107,7 @@ export type UserGender = 'male' | 'female' | null;
 /**
  * Message processing mode for responses.
  */
-export type MessageMode = 'text' | 'menu' | 'card';
+export type MessageMode = 'text' | 'quick_reply' | 'image';
 
 /**
  * Processing state for inbound messages.
