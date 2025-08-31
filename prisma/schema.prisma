@@ -1,120 +1,184 @@
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  extensions = [ vector(version: "0.8.0") ]
 }
 
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+enum MessageRole {
+  USER
+  AI
+  SYSTEM
+  TOOL
 }
 
 model User {
-  id            String          @id @default(cuid())
-  waId          String          @unique
-  createdAt     DateTime        @default(now())
-  uploads       Upload[]
-  wardrobe      WardrobeItem[]
-  turns         Turn[]
+  id          String   @id @default(cuid())
+  waId        String   @unique
+  createdAt   DateTime @default(now())
 
-  // Inferred profile
-  inferredGender  String?
+  uploads     Upload[]
+  wardrobe    WardrobeItem[]
+  messages    Message[]
+  traces      ModelTrace[]
 
-  // Confirmed profile
-  confirmedGender  String?
+  inferredGender    String?
+  inferredAgeGroup  String?
 
-  // Activity timestamps
-  lastVibeCheckAt     DateTime?
-  lastColorAnalysisAt DateTime?
+  confirmedGender   String?
+  confirmedAgeGroup String?
+
+  lastVibeCheckAt      DateTime?
+  lastColorAnalysisAt  DateTime?
+
+  @@index([createdAt])
 }
 
-model Turn {
-  id        String   @id @default(cuid())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  role      String
-  text      String?
-  imagePath String?
-  fileId    String?
-  intent    String?
-  choices   Json?
-  metadata  Json?
-  replies   Json?
-  createdAt DateTime @default(now())
-  feedback  Feedback? @relation(fields: [feedbackId], references: [id])
-  feedbackId String?
+model Message {
+  id               String       @id @default(cuid())
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String
+
+  role             MessageRole
+  content          String?
+  additionalKwargs Json?
+
+  intent           String?
+
+  embedding        Unsupported("vector")?
+  embeddingModel   String?
+  embeddingDim     Int?
+  embeddingAt      DateTime?
+
+  createdAt        DateTime     @default(now())
+
+  uploads          Upload[]     @relation("MessageUploads")
+  feedback         Feedback?
+  traces           ModelTrace[]
 
   @@index([userId, createdAt])
+  @@index([role, createdAt])
 }
 
 model Upload {
   id         String   @id @default(cuid())
-  user       User     @relation(fields: [userId], references: [id])
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId     String
-  imagePath  String
-  fileId     String?
+
+  fileId     String   @unique
+
+  imagePath  String?
+
+  filename   String?
+  mimeType   String?
+  bytes      Int?
+  width      Int?
+  height     Int?
+
   createdAt  DateTime @default(now())
+
+  messages   Message[]    @relation("MessageUploads")
   vibeCheck  VibeCheck?
   color      ColorAnalysis?
+  traces     ModelTrace[]
+
+  @@index([userId, createdAt])
 }
 
 model VibeCheck {
-  id        String  @id @default(cuid())
-  upload    Upload  @relation(fields: [uploadId], references: [id])
-  uploadId  String  @unique
+  id                  String  @id @default(cuid())
+  upload              Upload  @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  uploadId            String  @unique
+
   fit_silhouette      Float?
   color_harmony       Float?
   styling_details     Float?
   accessories_texture Float?
   context_confidence  Float?
   overall_score       Float?
-  comment             String
-  rawJson             Json
+
+  comment             String?
+
+  createdAt           DateTime @default(now())
 }
 
 model ColorAnalysis {
-  id        String  @id @default(cuid())
-  upload    Upload  @relation(fields: [uploadId], references: [id])
-  uploadId  String  @unique
-  skin_tone String?
-  eye_color String?
-  hair_color String?
-  undertone String?
-  palette_name String?
-  top3_colors Json
-  avoid3_colors Json
-  rawJson   Json
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  upload        Upload   @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  uploadId      String   @unique
+
+  skin_tone     String?
+  eye_color     String?
+  hair_color    String?
+  undertone     String?
+  palette_name  String?
+
+  top3_colors   Json?
+  avoid3_colors Json?
+
+  createdAt     DateTime @default(now())
 }
 
 model WardrobeItem {
-  id        String  @id @default(cuid())
-  user      User    @relation(fields: [userId], references: [id])
-  userId    String
-  name      String
-  nameLower String
-  category  String
-  colors    Json
-  type      String
-  subtype   String?
-  attributes Json?
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+
+  name        String
+  nameLower   String
+  category    String
+  colors      Json
+  type        String
+  subtype     String?
+  description String?
+  attributes  Json?
+  createdAt   DateTime @default(now())
+
+  embedding       Unsupported("vector")?
+  embeddingModel  String?
+  embeddingDim    Int?
+  embeddingAt     DateTime?
 
   @@index([userId, nameLower, category])
 }
-// add some user/turn id
-model ModelTrace {
-  id          String  @id @default(cuid())
-  uploadId    String?
-  kind        String
-  rawRequest  Json
-  rawResponse Json
+
+model Feedback {
+  id          String   @id @default(cuid())
+  message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId   String   @unique
+
+  helpful     Boolean?
+  comment     String?
+
   createdAt   DateTime @default(now())
 }
 
-model Feedback {
-  id         String   @id @default(cuid())
-  userId     String
-  helpful    Boolean
-  createdAt  DateTime @default(now())
-  turns      Turn[]
-}
+model ModelTrace {
+  id              String   @id @default(cuid())
 
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId          String?
+
+  message         Message?  @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  messageId       String?
+
+  upload          Upload?   @relation(fields: [uploadId], references: [id], onDelete: SetNull)
+  uploadId        String?
+
+  model           String?
+  rawRequest      Json
+  rawResponse     Json
+
+  promptTokens     Int?
+  completionTokens Int?
+  costUsd          Decimal? @db.Decimal(10, 6)
+
+  createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([messageId])
+}
