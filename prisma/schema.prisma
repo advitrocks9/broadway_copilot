@@ -30,6 +30,13 @@ enum AgeGroup {
   AGE_55_PLUS
 }
 
+enum PendingType {
+  NONE
+  VIBE_CHECK_IMAGE
+  COLOR_ANALYSIS_IMAGE
+  ASK_USER_INFO
+}
+
 model User {
   id          String   @id @default(cuid())
   waId        String   @unique
@@ -57,12 +64,12 @@ model Message {
   userId           String
 
   role             MessageRole
-  content          Json?
+  content          Json[]       @default([])
   additionalKwargs Json? 
 
   intent           String?
-  buttonText       String?
   buttonPayload    String?
+  pending          PendingType? @default(NONE)
   createdAt        DateTime     @default(now())
 
   feedback         Feedback?
@@ -73,7 +80,6 @@ model Message {
   @@index([userId, createdAt])
   @@index([role, createdAt])
   @@index([buttonPayload])
-  @@index([threadId, createdAt])
 }
 
 model VibeCheck {

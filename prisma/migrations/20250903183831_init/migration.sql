@@ -4,15 +4,24 @@ CREATE EXTENSION IF NOT EXISTS "vector" WITH VERSION "0.8.0";
 -- CreateEnum
 CREATE TYPE "public"."MessageRole" AS ENUM ('USER', 'AI', 'SYSTEM', 'TOOL');
 
+-- CreateEnum
+CREATE TYPE "public"."Gender" AS ENUM ('MALE', 'FEMALE');
+
+-- CreateEnum
+CREATE TYPE "public"."AgeGroup" AS ENUM ('AGE_13_17', 'AGE_18_25', 'AGE_26_35', 'AGE_36_45', 'AGE_46_55', 'AGE_55_PLUS');
+
+-- CreateEnum
+CREATE TYPE "public"."PendingType" AS ENUM ('NONE', 'VIBE_CHECK_IMAGE', 'COLOR_ANALYSIS_IMAGE', 'ASK_USER_INFO');
+
 -- CreateTable
 CREATE TABLE "public"."User" (
     "id" TEXT NOT NULL,
     "waId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "inferredGender" TEXT,
-    "inferredAgeGroup" TEXT,
-    "confirmedGender" TEXT,
-    "confirmedAgeGroup" TEXT,
+    "inferredGender" "public"."Gender",
+    "inferredAgeGroup" "public"."AgeGroup",
+    "confirmedGender" "public"."Gender",
+    "confirmedAgeGroup" "public"."AgeGroup",
     "lastVibeCheckAt" TIMESTAMP(3),
     "lastColorAnalysisAt" TIMESTAMP(3),
 
@@ -24,33 +33,20 @@ CREATE TABLE "public"."Message" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "role" "public"."MessageRole" NOT NULL,
-    "content" TEXT,
+    "content" JSONB[] DEFAULT ARRAY[]::JSONB[],
     "additionalKwargs" JSONB,
     "intent" TEXT,
+    "buttonPayload" TEXT,
+    "pending" "public"."PendingType" DEFAULT 'NONE',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "public"."Upload" (
-    "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "fileId" TEXT NOT NULL,
-    "filename" TEXT,
-    "mimeType" TEXT,
-    "bytes" INTEGER,
-    "width" INTEGER,
-    "height" INTEGER,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "Upload_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "public"."VibeCheck" (
     "id" TEXT NOT NULL,
-    "uploadId" TEXT NOT NULL,
+    "messageId" TEXT NOT NULL,
     "fit_silhouette" DOUBLE PRECISION,
     "color_harmony" DOUBLE PRECISION,
     "styling_details" DOUBLE PRECISION,
@@ -66,7 +62,7 @@ CREATE TABLE "public"."VibeCheck" (
 -- CreateTable
 CREATE TABLE "public"."ColorAnalysis" (
     "id" TEXT NOT NULL,
-    "uploadId" TEXT NOT NULL,
+    "messageId" TEXT NOT NULL,
     "skin_tone" TEXT,
     "eye_color" TEXT,
     "hair_color" TEXT,
@@ -116,7 +112,6 @@ CREATE TABLE "public"."ModelTrace" (
     "id" TEXT NOT NULL,
     "userId" TEXT,
     "messageId" TEXT,
-    "uploadId" TEXT,
     "model" TEXT,
     "rawRequest" JSONB NOT NULL,
     "rawResponse" JSONB NOT NULL,
@@ -126,14 +121,6 @@ CREATE TABLE "public"."ModelTrace" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "ModelTrace_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "public"."_MessageUploads" (
-    "A" TEXT NOT NULL,
-    "B" TEXT NOT NULL,
-
-    CONSTRAINT "_MessageUploads_AB_pkey" PRIMARY KEY ("A","B")
 );
 
 -- CreateIndex
@@ -149,16 +136,13 @@ CREATE INDEX "Message_userId_createdAt_idx" ON "public"."Message"("userId", "cre
 CREATE INDEX "Message_role_createdAt_idx" ON "public"."Message"("role", "createdAt");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Upload_fileId_key" ON "public"."Upload"("fileId");
+CREATE INDEX "Message_buttonPayload_idx" ON "public"."Message"("buttonPayload");
 
 -- CreateIndex
-CREATE INDEX "Upload_userId_createdAt_idx" ON "public"."Upload"("userId", "createdAt");
+CREATE UNIQUE INDEX "VibeCheck_messageId_key" ON "public"."VibeCheck"("messageId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "VibeCheck_uploadId_key" ON "public"."VibeCheck"("uploadId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "ColorAnalysis_uploadId_key" ON "public"."ColorAnalysis"("uploadId");
+CREATE UNIQUE INDEX "ColorAnalysis_messageId_key" ON "public"."ColorAnalysis"("messageId");
 
 -- CreateIndex
 CREATE INDEX "WardrobeItem_userId_nameLower_category_idx" ON "public"."WardrobeItem"("userId", "nameLower", "category");
@@ -172,20 +156,14 @@ CREATE INDEX "ModelTrace_userId_createdAt_idx" ON "public"."ModelTrace"("userId"
 -- CreateIndex
 CREATE INDEX "ModelTrace_messageId_idx" ON "public"."ModelTrace"("messageId");
 
--- CreateIndex
-CREATE INDEX "_MessageUploads_B_index" ON "public"."_MessageUploads"("B");
-
 -- AddForeignKey
 ALTER TABLE "public"."Message" ADD CONSTRAINT "Message_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."Upload" ADD CONSTRAINT "Upload_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."VibeCheck" ADD CONSTRAINT "VibeCheck_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "public"."Message"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."VibeCheck" ADD CONSTRAINT "VibeCheck_uploadId_fkey" FOREIGN KEY ("uploadId") REFERENCES "public"."Upload"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "public"."ColorAnalysis" ADD CONSTRAINT "ColorAnalysis_uploadId_fkey" FOREIGN KEY ("uploadId") REFERENCES "public"."Upload"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."ColorAnalysis" ADD CONSTRAINT "ColorAnalysis_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "public"."Message"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."WardrobeItem" ADD CONSTRAINT "WardrobeItem_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -198,12 +176,3 @@ ALTER TABLE "public"."ModelTrace" ADD CONSTRAINT "ModelTrace_userId_fkey" FOREIG
 
 -- AddForeignKey
 ALTER TABLE "public"."ModelTrace" ADD CONSTRAINT "ModelTrace_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "public"."Message"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "public"."ModelTrace" ADD CONSTRAINT "ModelTrace_uploadId_fkey" FOREIGN KEY ("uploadId") REFERENCES "public"."Upload"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "public"."_MessageUploads" ADD CONSTRAINT "_MessageUploads_A_fkey" FOREIGN KEY ("A") REFERENCES "public"."Message"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "public"."_MessageUploads" ADD CONSTRAINT "_MessageUploads_B_fkey" FOREIGN KEY ("B") REFERENCES "public"."Upload"("id") ON DELETE CASCADE ON UPDATE CASCADE;
