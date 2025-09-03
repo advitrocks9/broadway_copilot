@@ -27,10 +27,6 @@ CREATE TABLE "public"."Message" (
     "content" TEXT,
     "additionalKwargs" JSONB,
     "intent" TEXT,
-    "embedding" vector,
-    "embeddingModel" TEXT,
-    "embeddingDim" INTEGER,
-    "embeddingAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
@@ -41,7 +37,6 @@ CREATE TABLE "public"."Upload" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "fileId" TEXT NOT NULL,
-    "imagePath" TEXT,
     "filename" TEXT,
     "mimeType" TEXT,
     "bytes" INTEGER,

@@ -16,21 +16,34 @@ enum MessageRole {
   TOOL
 }
 
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum AgeGroup {
+  AGE_13_17
+  AGE_18_25
+  AGE_26_35
+  AGE_36_45
+  AGE_46_55
+  AGE_55_PLUS
+}
+
 model User {
   id          String   @id @default(cuid())
   waId        String   @unique
   createdAt   DateTime @default(now())
 
-  uploads     Upload[]
   wardrobe    WardrobeItem[]
   messages    Message[]
   traces      ModelTrace[]
 
-  inferredGender    String?
-  inferredAgeGroup  String?
+  inferredGender    Gender?
+  inferredAgeGroup  AgeGroup?
 
-  confirmedGender   String?
-  confirmedAgeGroup String?
+  confirmedGender   Gender?
+  confirmedAgeGroup AgeGroup?
 
   lastVibeCheckAt      DateTime?
   lastColorAnalysisAt  DateTime?
@@ -44,55 +57,29 @@ model Message {
   userId           String
 
   role             MessageRole
-  content          String?
-  additionalKwargs Json?
+  content          Json?
+  additionalKwargs Json? 
 
   intent           String?
-
-  embedding        Unsupported("vector")?
-  embeddingModel   String?
-  embeddingDim     Int?
-  embeddingAt      DateTime?
-
+  buttonText       String?
+  buttonPayload    String?
   createdAt        DateTime     @default(now())
 
-  uploads          Upload[]     @relation("MessageUploads")
   feedback         Feedback?
   traces           ModelTrace[]
+  vibeCheck        VibeCheck?
+  color            ColorAnalysis?
 
   @@index([userId, createdAt])
   @@index([role, createdAt])
-}
-
-model Upload {
-  id         String   @id @default(cuid())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId     String
-
-  fileId     String   @unique
-
-  imagePath  String?
-
-  filename   String?
-  mimeType   String?
-  bytes      Int?
-  width      Int?
-  height     Int?
-
-  createdAt  DateTime @default(now())
-
-  messages   Message[]    @relation("MessageUploads")
-  vibeCheck  VibeCheck?
-  color      ColorAnalysis?
-  traces     ModelTrace[]
-
-  @@index([userId, createdAt])
+  @@index([buttonPayload])
+  @@index([threadId, createdAt])
 }
 
 model VibeCheck {
   id                  String  @id @default(cuid())
-  upload              Upload  @relation(fields: [uploadId], references: [id], onDelete: Cascade)
-  uploadId            String  @unique
+  message             Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId           String  @unique
 
   fit_silhouette      Float?
   color_harmony       Float?
@@ -108,8 +95,8 @@ model VibeCheck {
 
 model ColorAnalysis {
   id            String   @id @default(cuid())
-  upload        Upload   @relation(fields: [uploadId], references: [id], onDelete: Cascade)
-  uploadId      String   @unique
+  message       Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId     String   @unique
 
   skin_tone     String?
   eye_color     String?
@@ -165,9 +152,6 @@ model ModelTrace {
 
   message         Message?  @relation(fields: [messageId], references: [id], onDelete: SetNull)
   messageId       String?
-
-  upload          Upload?   @relation(fields: [uploadId], references: [id], onDelete: SetNull)
-  uploadId        String?
 
   model           String?
   rawRequest      Json
