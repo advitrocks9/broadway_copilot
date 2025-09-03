@@ -9,7 +9,7 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => {
    const waId = (req.body.waId || 'anon') as string;
    const dir = userUploadDir(waId);
-    ensureDir(dir).then(() => cb(null, dir)).catch((err) => cb(err as any, dir));
+    ensureDir(dir).then(() => cb(null, dir)).catch((err) => cb(err, dir));
   },
   filename: (req, file, cb) => {
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
