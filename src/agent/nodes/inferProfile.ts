@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { Gender, AgeGroup, PendingType } from '@prisma/client';
 
-import prisma from '../../db/client';
+import prisma from '../../lib/prisma';
 import { getNanoLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';

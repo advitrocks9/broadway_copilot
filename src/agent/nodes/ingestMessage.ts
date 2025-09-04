@@ -1,4 +1,4 @@
-import prisma from '../../db/client';
+import prisma from '../../lib/prisma';
 import { getOrCreateUserByWaId } from '../../utils/user';
 import { downloadTwilioMedia } from '../../utils/media';
 import { getLogger } from '../../utils/logger';

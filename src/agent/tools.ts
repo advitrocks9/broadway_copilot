@@ -1,4 +1,4 @@
-import prisma from '../db/client';
+import prisma from '../lib/prisma';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { OpenAIEmbeddings } from '@langchain/openai';
@@ -47,7 +47,7 @@ export const fetchColorAnalysis = new DynamicStructuredTool({
         avoid3_colors: true,
         undertone: true,
       },
-      where: { upload: { userId: userId } },
+      where: { message: { userId: userId } },
       orderBy: { createdAt: 'desc' },
     });
     return result;

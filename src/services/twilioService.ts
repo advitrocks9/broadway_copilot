@@ -2,8 +2,8 @@ import 'dotenv/config';
 import twilio, { Twilio } from 'twilio';
 import RequestClient from 'twilio/lib/base/RequestClient';
 import { getLogger } from '../utils/logger';
-import { TwilioApiError, TwilioMessageOptions, TwilioWebhookPayload, StatusResolvers } from '../types/twilio';
-import { addStatusCallback, handleTwilioError, validateTwilioRequest } from '../utils/twilioHelpers';
+import { TwilioApiError, TwilioMessageOptions, StatusResolvers } from '../types/twilio';
+import { addStatusCallback, handleTwilioError } from '../utils/twilioHelpers';
 import { QuickReplyButton } from '../types/common';
 import {TWILIO_WHATSAPP_FROM, TWILIO_QUICKREPLY2_SID, TWILIO_QUICKREPLY3_SID } from '../utils/constants';
 

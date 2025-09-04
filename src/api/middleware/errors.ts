@@ -6,18 +6,6 @@ import { errorHandler as appErrorHandler, AppError, createErrorResponse } from '
  */
 
 /**
- * Legacy HTTP error class for backward compatibility.
- * @deprecated Use AppError from utils/errors instead
- */
-export class HttpError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
-
-/**
  * Express error handling middleware with standardized error processing.
  */
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {

@@ -1,10 +1,5 @@
 import { z } from 'zod';
-import { GraphMessages, ModelMessage, WardrobeContext, LatestColorAnalysis, Reply, UserGender, MessageMode } from '../types/common';
-/**
- * Re-export Reply type for backward compatibility and convenience.
- */
-export type { Reply };
-
+import { QuickReplyButton } from '../types/common';
 /**
  * Available intent labels for routing user requests to appropriate handlers.
  */
@@ -24,62 +19,25 @@ export const IntentSchema = z.object({
   intent: z.enum(['general', 'occasion', 'vacation', 'pairing', 'vibe_check', 'color_analysis', 'suggest']),
 });
 
-/**
- * Input parameters for running the agent graph.
- */
-export interface RunInput {
-  /** Unique identifier for the user */
-  userId: string;
-  /** WhatsApp identifier for the user */
-  waId: string;
-  /** Text content of the message */
-  text?: string;
-  /** Path to uploaded image file */
-  imagePath?: string;
-  /** OpenAI file ID for vision processing */
-  fileId?: string;
-  /** Payload from interactive buttons */
-  buttonPayload?: string;
-  /** User's gender preference for personalization */
-  gender?: UserGender;
-  /** Runtime generation identifier for tracking */
-  runGen?: number;
-}
+export type AvailableService = 'vibe_check' | 'occasion' | 'vacation' | 'color_analysis' | 'suggest';
 
 /**
- * Output result from running the agent graph.
+ * Standard reply structure for each node in the graph.
  */
-export interface RunOutput {
-  /** The text response to send to the user */
-  replyText: string;
-  /** The response mode (text, menu, or card) */
-  mode?: MessageMode;
-}
+export type Reply =
+  | {
+      reply_type: 'text';
+      reply_text: string;
+    }
+  | {
+      reply_type: 'quick_reply';
+      reply_text: string;
+      buttons: QuickReplyButton[];
+    }
+  | {
+      reply_type: 'image';
+      media_url: string;
+      reply_text?: string;
+    };
 
-/**
- * Required profile fields that may need to be collected from users.
- */
-export type RequiredProfileField = 'gender';
-
-/**
- * Additional context items that can be requested for downstream prompts.
- */
-export type AdditionalContextItem = 'wardrobeItems' | 'latestColorAnalysis';
-
-/**
- * Zod schema for validating inferred profile information.
- */
-export const InferredProfileSchema = z.object({
-  gender: z.enum(['male', 'female']).nullable().optional(),
-});
-
-/**
- * Final state type returned by the agent graph execution.
- * Represents the processed result containing reply information and metadata.
- */
-export interface FinalState {
-  reply?: string | Reply;
-  replies?: Array<string | Reply>;
-  mode?: MessageMode;
-  intent?: IntentLabel;
-}
+export type Replies = Reply[];

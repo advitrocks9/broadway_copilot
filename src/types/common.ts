@@ -16,31 +16,6 @@ export interface OpenAIFileResponse {
 }
 
 /**
- * Graph state messages array type.
- */
-export type GraphMessages = ModelMessage[];
-
-/**
- * Message format for model interactions with role-based content.
- */
-export type ModelMessage =
-  | {
-      role: 'user';
-      content: string | Array<
-        | { type: 'input_text'; text: string }
-        | { type: 'input_image'; file_id: string; detail?: 'auto' | 'low' | 'high' }
-      >;
-      intent?: string | null;
-      metadata?: Record<string, unknown>;
-    }
-  | {
-      role: 'assistant';
-      content: string;
-      intent?: string | null;
-      metadata?: Record<string, unknown>;
-    };
-
-/**
  * Wardrobe context data structure containing user's clothing items.
  */
 export interface WardrobeContext {
@@ -71,25 +46,6 @@ export interface QuickReplyButton {
   text: string;
   id: string;
 }
-
-/**
- * Standard reply structure used throughout the application.
- */
-export type Reply =
-  | {
-      reply_type: 'text';
-      reply_text: string;
-    }
-  | {
-      reply_type: 'quick_reply';
-      reply_text: string;
-      buttons: QuickReplyButton[];
-    }
-  | {
-      reply_type: 'image';
-      media_url: string;
-      reply_text?: string;
-    };
 
 /**
  * Color object with name and hex code representation.
