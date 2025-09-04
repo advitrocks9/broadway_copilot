@@ -5,6 +5,7 @@ import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
 import { PendingType } from '@prisma/client';
+import { numImagesInMessage } from '../../utils/conversation';
 
 
 /**
@@ -30,16 +31,12 @@ export async function routeIntent(state: any): Promise<any> {
     return { intent: buttonPayload, missingProfileField: null };
   }
 
-  if (state.conversationHistory?.[0]?.content?.includes('image_url')) {
+  if (numImagesInMessage(state.conversationHistory) > 0) {
     if (state.pending === PendingType.VIBE_CHECK_IMAGE) {
       return { intent: 'vibe_check', missingProfileField: null };
     } else if (state.pending === PendingType.COLOR_ANALYSIS_IMAGE) {
       return { intent: 'color_analysis', missingProfileField: null };
     }
-  }
-  
-  if (state.pending === PendingType.ASK_USER_INFO) {
-    return { intent: 'infer_profile', missingProfileField: null };
   }
 
   const systemPrompt = await loadPrompt('route_intent.txt');

@@ -3,7 +3,7 @@ import { getOrCreateUserByWaId } from '../../utils/user';
 import { downloadTwilioMedia } from '../../utils/media';
 import { getLogger } from '../../utils/logger';
 import { HumanMessage, AIMessage, type MessageContent } from '@langchain/core/messages';
-import { MessageRole, PendingType } from '@prisma/client';
+import { MessageRole, PendingType, User } from '@prisma/client';
 
 const logger = getLogger('node:ingest_message');
 
@@ -17,7 +17,8 @@ export async function ingestMessageNode(state: any): Promise<any> {
   const mediaContentType0 = state.input.MediaContentType0;
   const waId = state.input.From;
 
-  const user = await getOrCreateUserByWaId(waId);
+  const user: User = await getOrCreateUserByWaId(waId);
+
   let content: MessageContent = [{ type: 'text', text }];
   if (numMedia == 1 && mediaUrl0 && mediaContentType0.startsWith('image/')) {
 
@@ -139,5 +140,6 @@ export async function ingestMessageNode(state: any): Promise<any> {
     conversationHistory,
     conversationHistoryLight,
     pending,
+    user,
   };
 }

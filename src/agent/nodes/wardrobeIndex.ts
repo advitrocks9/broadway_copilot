@@ -1,78 +1,79 @@
-import { z } from 'zod';
-
 import prisma from '../../db/client';
-import { RunInput } from '../state';
-import { WardrobeIndexResponseSchema, WardrobeIndexResponse } from '../../types/contracts';
 import { getVisionLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
-import { toNameLower } from '../../utils/text';
-import { ensureVisionFileId } from '../../utils/media';
 import { getLogger } from '../../utils/logger';
+import { numImagesInMessage } from '../../utils/conversation';
+import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
+import { WardrobeIndexResponseSchema, WardrobeIndexResponse } from '../../types/contracts';
+import { toNameLower } from '../../utils/text';
 
 /**
  * Indexes wardrobe items from an image to persist context for future chats.
  */
 const logger = getLogger('node:wardrobe_index');
 
-interface WardrobeIndexState {
-  input: RunInput;
-}
+export async function wardrobeIndexNode(state: any): Promise<void> {
 
-interface WardrobeIndexResult extends Record<string, never> {}
-
-export async function wardrobeIndexNode(state: WardrobeIndexState): Promise<WardrobeIndexResult> {
-  const { input } = state;
-  const imagePath = input.imagePath as string;
-  if (!imagePath) {
-    return {};
+  if (numImagesInMessage(state.conversationHistory) === 0) {
+    return;
   }
-  const ensuredFileId = await ensureVisionFileId(imagePath, input.fileId);
-  const schema = WardrobeIndexResponseSchema as unknown as z.ZodType<WardrobeIndexResponse>;
-  const prompt = await loadPrompt('wardrobe_index.txt');
 
-  type VisionPart = { type: 'input_text'; text: string } | { type: 'input_image'; file_id: string; detail?: 'auto' | 'low' | 'high' };
-  type VisionContent = string | VisionPart[];
+  const LLMOutputSchema = WardrobeIndexResponseSchema;
 
-  const content: Array<{ role: 'system' | 'user'; content: VisionContent }> = [
-    { role: 'system', content: prompt },
-    { role: 'user', content: [{ type: 'input_image', file_id: ensuredFileId as string, detail: 'high' }] },
-  ];
-  logger.info({ hasImage: true }, 'WardrobeIndex: input');
-  logger.debug({ content }, 'WardrobeIndex: model input');
-  let result: WardrobeIndexResponse;
   try {
-    result = await getVisionLLM().withStructuredOutput(schema as any).invoke(content as any) as WardrobeIndexResponse;
-  } catch (err: any) {
-    logger.error({ message: err?.message }, 'WardrobeIndex: error');
-    return {};
-  }
-  if (result.status === 'bad_photo') {
-    logger.info({ status: 'bad_photo', itemsCount: 0 }, 'WardrobeIndex: output');
-    return {};
-  }
-  const items = result.items ?? [];
-  logger.info({ status: 'ok', itemsCount: Array.isArray(items) ? items.length : 0 }, 'WardrobeIndex: output');
-  for (const item of items) {
-    const displayName = `${item.type}`;
-    const nameLower = toNameLower(displayName);
-    const existing = await prisma.wardrobeItem.findFirst({ where: { userId: input.userId, nameLower, category: item.category } });
-    if (!existing) {
-      const colors: string[] = [item.attributes.color_primary, item.attributes.color_secondary].filter(Boolean) as string[];
-      await prisma.wardrobeItem.create({
-        data: {
-          userId: input.userId,
-          name: displayName,
+    const systemPrompt = await loadPrompt('wardrobe_index.txt');
+    const llm = getVisionLLM();
+
+
+    const promptTemplate = ChatPromptTemplate.fromMessages([
+      ["system", systemPrompt],
+      new MessagesPlaceholder("history"),
+    ]);
+
+    let history = state.conversationHistory
+
+    const formattedPrompt = await promptTemplate.invoke({ history });
+    const output = await llm.withStructuredOutput(LLMOutputSchema).invoke(formattedPrompt.toChatMessages()) as WardrobeIndexResponse;
+
+    logger.info(output, 'WardrobeIndex: output');
+
+    const items = output.items ?? [];
+    logger.info({ status: output.status, itemsCount: Array.isArray(items) ? items.length : 0 }, 'WardrobeIndex: processing');
+
+
+    // Persist wardrobe items to database
+    for (const item of items) {
+      const displayName = `${item.type}`;
+      const nameLower = toNameLower(displayName);
+      const existing = await prisma.wardrobeItem.findFirst({
+        where: {
+          userId: state.conversationHistory[0].userId,
           nameLower,
-          category: item.category,
-          colors: colors,
-          type: item.type,
-          subtype: item.subtype ?? null,
-          attributes: item.attributes,
-        },
+          category: item.category
+        }
       });
+      if (!existing) {
+        const colors: string[] = [item.attributes.color_primary, item.attributes.color_secondary].filter(Boolean) as string[];
+        await prisma.wardrobeItem.create({
+          data: {
+            userId: state.conversationHistory[0].userId,
+            name: displayName,
+            nameLower,
+            category: item.category,
+            colors: colors,
+            type: item.type,
+            subtype: item.subtype ?? null,
+            attributes: item.attributes,
+          },
+        });
+      }
     }
+
+    return;
+  } catch (err) {
+    logger.error({ err }, 'Error in wardrobe indexing');
+    return;
   }
-  return {};
 }
 
 

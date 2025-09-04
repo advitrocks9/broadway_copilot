@@ -1,83 +1,48 @@
 import { z } from 'zod';
+import { Gender, AgeGroup, PendingType } from '@prisma/client';
 
 import prisma from '../../db/client';
-import { RunInput } from '../state';
 import { getNanoLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
+import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 
 /**
  * Infers and optionally persists the user's gender from recent conversation.
  */
 const logger = getLogger('node:infer_profile');
 
-interface GenderJson {
-  inferred_gender: 'male' | 'female' | null;
-  confirmed: boolean;
-}
+const LLMOutputSchema = z.object({
+  inferred_gender: z.enum(Gender),
+  confirmed: z.boolean(),
+  inferred_age_group: z.enum(AgeGroup),
+});
 
-interface InferProfileState {
-  input: RunInput;
-  messages?: unknown[];
-}
+export async function inferProfileNode(state: any): Promise<void>{
+  const systemPrompt = await loadPrompt('infer_profile.txt');
+  
+  const promptTemplate = ChatPromptTemplate.fromMessages([
+    ["system", systemPrompt],
+    new MessagesPlaceholder("history"),
+  ]);
 
-interface InferProfileResult {
-  input?: RunInput;
-}
+  const partialPrompt = await promptTemplate.partial({});
 
-export async function inferProfileNode(state: InferProfileState): Promise<InferProfileResult>{
-  const { input } = state;
-  if (input.gender === 'male' || input.gender === 'female') {
-    return { input };
-  }
+  const formattedPrompt = await partialPrompt.invoke({ history: state.conversationHistory || [] });
 
-  const user = await prisma.user.findUnique({ where: { id: input.userId } });
-  const existingGender: 'male' | 'female' | null = (user?.confirmedGender as any) ?? (user?.inferredGender as any) ?? null;
-  if (existingGender) {
-    return { input: { ...input, gender: existingGender } };
-  }
+  const llm = getNanoLLM();
+  const response = await (llm as any)
+    .withStructuredOutput(LLMOutputSchema as any)
+    .invoke(formattedPrompt.toChatMessages()) as z.infer<typeof LLMOutputSchema>;
 
-  const prompt = await loadPrompt('infer_profile.txt');
-  const content: Array<{ role: 'system' | 'user'; content: string }> = [
-    { role: 'system', content: prompt },
-    { role: 'user', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
-    { role: 'user', content: input.text || '' },
-  ];
-
-  const Schema = z.object({
-    inferred_gender: z.union([z.literal('male'), z.literal('female')]).nullable(),
-    confirmed: z.boolean()
+  const user = await prisma.user.update({
+    where: { id: state.user.id },
+    data: { inferredGender: response.inferred_gender, inferredAgeGroup: response.inferred_age_group }
   });
 
-  logger.info({ userText: input.text || '' }, 'InferProfile: input');
-  logger.debug({ content }, 'InferProfile: model input');
-
-  let response: GenderJson;
-  try {
-    response = await getNanoLLM().withStructuredOutput(Schema as any).invoke(content as any) as GenderJson;
-  } catch (err: any) {
-    logger.error({ message: err?.message }, 'InferProfile: error');
-    return { input };
-  }
+  state.user = user;
+  state.pending = PendingType.NONE;
   logger.info(response, 'InferProfile: output');
-
-  const inferred = response.inferred_gender;
-  if (!inferred) {
-    return { input };
-  }
-
-  if (response.confirmed) {
-    await prisma.user.update({
-      where: { id: input.userId },
-      data: { confirmedGender: inferred, inferredGender: null }
-    });
-  } else {
-    await prisma.user.update({
-      where: { id: input.userId },
-      data: { inferredGender: inferred }
-    });
-  }
-
-  return { input: { ...input, gender: inferred } };
+  return;
 }
 

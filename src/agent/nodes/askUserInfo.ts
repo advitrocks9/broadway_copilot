@@ -1,45 +1,38 @@
 import { z } from 'zod';
 
-import { RunInput } from '../state';
-import { Reply } from '../../types/common';
 import { getNanoLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
+import { Replies } from '../state';
+import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 
 /**
  * Asks the user for required profile fields and returns a text reply.
  */
 const logger = getLogger('node:ask_user_info');
 
-interface AskUserInfoState {
-  input: RunInput;
-  messages?: unknown[];
-  missingProfileFields?: Array<'gender'>;
-}
+const LLMOutputSchema = z.object({ text: z.string() });
 
-interface AskUserInfoResult {
-  replies: Reply[];
-}
+export async function askUserInfoNode(state: any): Promise<Replies>{
+  const systemPrompt = await loadPrompt('ask_user_info.txt');
+  
+  const promptTemplate = ChatPromptTemplate.fromMessages([
+    ["system", systemPrompt],
+    new MessagesPlaceholder("history"),
+  ]);
 
-export async function askUserInfoNode(state: AskUserInfoState): Promise<AskUserInfoResult>{
+  const partialPrompt = await promptTemplate.partial({
+    missingField: state.missingProfileField || 'required information'
+  });
+
+  const formattedPrompt = await partialPrompt.invoke({ history: state.conversationHistory || [] });
+
   const llm = getNanoLLM();
-  const { input } = state;
-  const missing: Array<'gender'> = state.missingProfileFields || [];
-  const convo = (state.messages as unknown[]) || [];
+  const response = await (llm as any)
+    .withStructuredOutput(LLMOutputSchema as any)
+    .invoke(formattedPrompt.toChatMessages()) as z.infer<typeof LLMOutputSchema>;
 
-  const system = await loadPrompt('ask_user_info.txt');
-  const list = missing.join(', ').replace(/, ([^,]*)$/, ' and $1');
-  const promptMessages: Array<{ role: 'system' | 'user'; content: string }> = [
-    { role: 'system', content: system },
-    { role: 'user', content: `ConversationContext: ${JSON.stringify(convo)}` },
-    { role: 'user', content: `Missing Fields: ${JSON.stringify({ fields: list })}` },
-  ];
-  const AskSchema = z.object({ text: z.string() });
-  logger.info({ userId: input.userId, missing }, 'AskUserInfo: input');
-  logger.debug({ promptMessages }, 'AskUserInfo: model input');
-  const response = await llm.withStructuredOutput(AskSchema as any).invoke(promptMessages) as { text: string };
   logger.info(response, 'AskUserInfo: output');
-  const replyText = response.text;
-  const replies: Reply[] = [{ reply_type: 'text', reply_text: replyText }];
-  return { replies };
+  const replies: Replies = [{ reply_type: 'text', reply_text: response.text }];
+  return replies;
 }

@@ -1,139 +1,57 @@
-import { AdditionalContextItem, RunInput } from '../state';
+import { z } from 'zod';
+
+import { Replies } from '../state';
 import { getNanoLLM } from '../../services/openaiService';
-import { queryActivityTimestamps } from '../tools';
 import { loadPrompt } from '../../utils/prompts';
-import { getLogger } from '../../utils/logger';
-import { WELCOME_IMAGE_URL } from '../../utils/constants';
-import {
-  buildCompletePrompt,
-  processResponseWithFollowup,
-  StructuredReplySchema,
-  Reply,
-} from '../../utils/handlerUtils';
+import { SERVICES, WELCOME_IMAGE_URL } from '../../utils/constants';
+import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 
 /**
  * Handles general chat; may return text, menu, or card per prompt schema.
  */
-const logger = getLogger('node:handle_general');
+const LLMOutputSchema = z.object({
+  reply_type: z.enum(['greeting', 'menu', 'chat']),
+  message1_text: z.string(),
+  message2_text: z.string().nullable(),
+  
+});
 
-interface HandleGeneralState {
-  input: RunInput;
-  messages?: unknown[];
-  wardrobe?: unknown;
-  latestColorAnalysis?: unknown;
-  additionalContext?: AdditionalContextItem[];
-}
+export async function handleGeneralNode(state: any): Promise<Replies> {
 
-interface HandleGeneralResult {
-  replies: Reply[];
-}
+  let availableActions = SERVICES;
+  if (state.user.lastColorAnalysisAt && state.user.lastColorAnalysisAt < new Date(Date.now() - 1000 * 60 * 60 * 24)) {
+    availableActions.push({ text: 'Color Analysis', id: 'color_analysis' });
+  }
+  if (state.user.lastVibeCheckAt && state.user.lastVibeCheckAt < new Date(Date.now() - 1000 * 60 * 60 * 24)) {
+    availableActions.push({ text: 'Vibe Check', id: 'vibe_check' });
+  }
+  
+  availableActions = availableActions.slice(0, 3);
 
-export async function handleGeneralNode(state: HandleGeneralState): Promise<HandleGeneralResult> {
-  const { input } = state;
   const systemPrompt = await loadPrompt('handle_general.txt');
-  const activity = await queryActivityTimestamps(input.userId);
-  const userQuestion = input.text || 'Help with style.';
 
-  const prompt = buildCompletePrompt(
-    systemPrompt,
-    input.gender,
-    state.messages,
-    state,
-    activity,
-    userQuestion
-  );
+  const promptTemplate = ChatPromptTemplate.fromMessages([
+    ["system", systemPrompt],
+    new MessagesPlaceholder("history"),
+  ]);
 
-  logger.info({ userText: userQuestion }, 'HandleGeneral: input');
-  logger.debug({ prompt }, 'HandleGeneral: model input');
+  const formattedPrompt = await promptTemplate.invoke({ history: state.conversationHistory || [] });
 
   const llm = getNanoLLM();
   const response = await (llm as any)
-    .withStructuredOutput(StructuredReplySchema)
-    .invoke(prompt) as {
-      reply_type: 'text' | 'quick_reply' | 'greeting';
-      reply_text: string;
-      followup_text: string | null;
-    };
+    .withStructuredOutput(LLMOutputSchema)
+    .invoke(formattedPrompt.toChatMessages()) as z.infer<typeof LLMOutputSchema>;
 
-  logger.info(response, 'HandleGeneral: output');
+  const replies: Replies = [];
 
-  // Handle greeting type specially - send image first, then text
   if (response.reply_type === 'greeting') {
-    const replies: Reply[] = [
-      {
-        reply_type: 'image',
-        media_url: WELCOME_IMAGE_URL,
-        reply_text: response.reply_text
-      }
-    ];
-
-    // Add followup text as a separate text reply if present
-    if (response.followup_text) {
-      replies.push({
-        reply_type: 'text',
-        reply_text: response.followup_text
-      });
-    } 
-
-    return { replies };
+    replies.push({ reply_type: 'image', media_url: WELCOME_IMAGE_URL });
+    replies.push({ reply_type: 'quick_reply', reply_text: response.message1_text, buttons: availableActions, });
+  } else if (response.reply_type === 'menu') {
+    replies.push({ reply_type: 'quick_reply', reply_text: response.message1_text, buttons: availableActions, });
+  } else if (response.reply_type === 'chat') {
+    replies.push({ reply_type: 'text', reply_text: response.message1_text });
+    if (response.message2_text) replies.push({reply_type:'text', reply_text: response.message2_text});
   }
-
-  // Handle different reply types
-  if (response.reply_type === 'text') {
-    const replies: Reply[] = [
-      {
-        reply_type: 'text',
-        reply_text: response.reply_text
-      }
-    ];
-
-    if (response.followup_text) {
-      replies.push({
-        reply_type: 'text',
-        reply_text: response.followup_text
-      });
-    }
-
-    return { replies };
-  }
-
-  if (response.reply_type === 'quick_reply') {
-    // For quick_reply, we need buttons - let's create some default ones based on the response
-    const replies: Reply[] = [
-      {
-        reply_type: 'quick_reply',
-        reply_text: response.reply_text,
-        buttons: [
-          { text: 'Yes', id: 'positive_response' },
-          { text: 'No', id: 'negative_response' }
-        ]
-      }
-    ];
-
-    if (response.followup_text) {
-      replies.push({
-        reply_type: 'text',
-        reply_text: response.followup_text
-      });
-    }
-
-    return { replies };
-  }
-
-  // Fallback to text for any unhandled types
-  const replies: Reply[] = [
-    {
-      reply_type: 'text',
-      reply_text: response.reply_text
-    }
-  ];
-
-  if (response.followup_text) {
-    replies.push({
-      reply_type: 'text',
-      reply_text: response.followup_text
-    });
-  }
-
-  return { replies };
+  return replies;
 }

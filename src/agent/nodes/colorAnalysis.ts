@@ -1,87 +1,89 @@
 import { z } from 'zod';
 
 import prisma from '../../db/client';
-import { RunInput } from '../state';
-import { GraphMessages, Reply } from '../../types/common';
-import { ColorAnalysis, ColorAnalysisSchema } from '../../types/contracts';
 import { getVisionLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
-import { ensureVisionFileId, persistUpload } from '../../utils/media';
 import { getLogger } from '../../utils/logger';
+import { Replies } from '../state';
+import { numImagesInMessage } from '../../utils/conversation';
+import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 
 /**
  * Performs color analysis from a portrait and returns a text reply; logs and persists results.
  */
 const logger = getLogger('node:color_analysis');
 
-interface ColorAnalysisState {
-  input: RunInput;
-  messages?: GraphMessages;
-}
+export async function colorAnalysisNode(state: any): Promise<Replies> {
 
-interface ColorAnalysisResult {
-  replies: Reply[];
-}
-
-export async function colorAnalysisNode(state: ColorAnalysisState): Promise<ColorAnalysisResult>{
-  const { input } = state;
-  const imagePath = input.imagePath as string;
-  const ensuredFileId = await ensureVisionFileId(imagePath, input.fileId);
-  const upload = await persistUpload(input.userId, imagePath, ensuredFileId);
-  const schema = ColorAnalysisSchema as unknown as z.ZodType<ColorAnalysis>;
-  const prompt = await loadPrompt('color_analysis.txt');
-  type VisionPart = { type: 'input_text'; text: string } | { type: 'input_image'; file_id: string; detail?: 'auto' | 'low' | 'high' };
-  type VisionContent = string | VisionPart[];
-  const content: Array<{ role: 'system' | 'user'; content: VisionContent }> = [
-    { role: 'system', content: prompt },
-    { role: 'user', content: `UserGender: ${input.gender ?? 'unknown'} (adjust color guidance if relevant).` },
-    { role: 'user', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
-    { role: 'user', content: [ { type: 'input_image', file_id: ensuredFileId as string, detail: 'high' } ] },
-  ];
-  logger.info({ hasImage: true }, 'ColorAnalysis: input');
-  logger.debug({ content }, 'ColorAnalysis: model input');
-  const result = await getVisionLLM().withStructuredOutput(schema as any).invoke(content as any) as ColorAnalysis;
-  logger.info(result, 'ColorAnalysis: output');
-  await prisma.colorAnalysis.create({
-    data: {
-      uploadId: upload.id,
-      skin_tone: result.skin_tone?.name ?? null,
-      eye_color: result.eye_color?.name ?? null,
-      hair_color: result.hair_color?.name ?? null,
-      undertone: result.undertone ?? null,
-      palette_name: result.palette_name ?? null,
-      top3_colors: result.top3_colors as unknown as z.infer<typeof schema>['top3_colors'],
-      avoid3_colors: result.avoid3_colors as unknown as z.infer<typeof schema>['avoid3_colors'],
-      rawJson: result as unknown as z.infer<typeof schema>,
-    },
-  });
-  await prisma.user.update({
-    where: { id: input.userId },
-    data: { lastColorAnalysisAt: new Date() },
-  });
-  const palette = result.palette_name ? `${result.palette_name}` : 'Unknown palette';
-  const descParts: string[] = [];
-  if (result.skin_tone?.name) descParts.push(`skin: ${result.skin_tone.name}`);
-  if (result.eye_color?.name) descParts.push(`eyes: ${result.eye_color.name}`);
-  if (result.hair_color?.name) descParts.push(`hair: ${result.hair_color.name}`);
-  if (result.undertone) descParts.push(`undertone: ${result.undertone}`);
-  const description = descParts.join(', ');
-  const top3 = (result.top3_colors || []).map(c => c.name).join(', ');
-  const bottom3 = (result.avoid3_colors || []).map(c => c.name).join(', ');
-  const lines: string[] = [
-    'Color Analysis',
-    `- Palette: ${palette}`,
-    `- Description: ${description || 'N/A'}`,
-    `- Comment: ${result.palette_comment ?? 'N/A'}`,
-    `- Top 3: ${top3 || 'N/A'}`,
-    `- Bottom 3: ${bottom3 || 'N/A'}`,
-  ];
-  const combinedText = [lines.join('\n'), result.reply_text].filter(Boolean).join('\n\n');
-  const replies: Reply[] = [
-    { reply_type: 'text', reply_text: combinedText },
-  ];
-  if (result.followup_text) {
-    replies.push({ reply_type: 'text', reply_text: result.followup_text });
+  if (numImagesInMessage(state.conversationHistory) === 0) {
+    const responses = [
+      "Darling, I can't analyze your texts — only your tones! Step into the spotlight and upload a photo so we can begin your color performance.",
+      "No image, no curtain call! Please upload your photo so I can reveal your starring shades.",
+      "I can't hit the right note without your photo! Send me an image, and I'll orchestrate your perfect color palette.",
+      "Your words are dazzling, but I need visuals for this act! Upload a photo and let's put your true colors center stage.",
+      "I can't analyze text messages, only leading looks! Drop a photo so we can get this show on the road.",
+      "Every star needs their spotlight — upload your image and I'll cue the color analysis!",
+      "Scene one is missing its star… that's you! Upload your photo so I can roll the color analysis."
+    ];
+    
+    const replies: Replies = [{ reply_type: 'text', reply_text: responses[Math.floor(Math.random() * responses.length)] }];
+    return replies;
   }
-  return { replies };
+
+  const LLMOutputSchema = z.object({
+    message1_text: z.string(),
+    message2_text: z.string().nullable(),
+    skin_tone: z.object({ name: z.string(), hex: z.string() }).nullable(),
+    eye_color: z.object({ name: z.string(), hex: z.string() }).nullable(),
+    hair_color: z.object({ name: z.string(), hex: z.string() }).nullable(),
+    undertone: z.enum(['Warm', 'Cool', 'Neutral']).nullable(),
+    palette_name: z.string().nullable(),
+    palette_comment: z.string().nullable(),
+    top3_colors: z.array(z.object({ name: z.string(), hex: z.string() })),
+    avoid3_colors: z.array(z.object({ name: z.string(), hex: z.string() })),
+  });
+
+  try {
+    const systemPrompt = await loadPrompt('color_analysis.txt');
+    const llm = getVisionLLM();
+
+
+  const promptTemplate = ChatPromptTemplate.fromMessages([
+    ["system", systemPrompt],
+    new MessagesPlaceholder("history"),
+  ]);
+
+  let history = state.conversationHistory
+
+  const formattedPrompt = await promptTemplate.invoke({ history });
+    const output = await llm.withStructuredOutput(LLMOutputSchema).invoke(formattedPrompt.toChatMessages()) as z.infer<typeof LLMOutputSchema>;
+
+    logger.info(output, 'Color analysis output');
+
+    await prisma.colorAnalysis.create({
+      data: {
+        messageId: state.conversationHistory[0].id,
+        skin_tone: output.skin_tone?.name ?? null,
+        eye_color: output.eye_color?.name ?? null,
+        hair_color: output.hair_color?.name ?? null,
+        undertone: output.undertone ?? null,
+        palette_name: output.palette_name ?? null,
+        top3_colors: output.top3_colors,
+        avoid3_colors: output.avoid3_colors
+      }
+    });
+
+    await prisma.user.update({
+      where: { id: state.conversationHistory[0].userId },
+      data: { lastColorAnalysisAt: new Date() }
+    });
+
+    const replies: Replies = [{ reply_type: 'text', reply_text: output.message1_text }];
+    if (output.message2_text) replies.push({ reply_type: 'text', reply_text: output.message2_text });
+
+    return replies;
+  } catch (err) {
+    logger.error({ err }, 'Error in color analysis');
+    return [{ reply_type: 'text', reply_text: 'Sorry, an error occurred during color analysis. Please try again.' }];
+  }
 }

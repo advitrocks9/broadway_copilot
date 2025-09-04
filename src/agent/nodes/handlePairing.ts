@@ -1,60 +1,35 @@
 import { z } from 'zod';
 
-import { AdditionalContextItem, RunInput } from '../state';
-import { Reply } from '../../types/common';
+import { Replies } from '../state';
 import { getNanoLLM } from '../../services/openaiService';
-import { queryActivityTimestamps } from '../tools';
 import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
-import { buildAdditionalContextSections } from '../../utils/context';
+import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 
 /**
  * Suggests complementary pairing tags; outputs text reply_type.
  */
 const logger = getLogger('node:handle_pairing');
 
-interface HandlePairingState {
-  input: RunInput;
-  messages?: unknown[];
-  wardrobe?: unknown;
-  latestColorAnalysis?: unknown;
-  additionalContext?: AdditionalContextItem[];
-}
+const LLMOutputSchema = z.object({ message1_text: z.string(), message2_text: z.string().nullable() });
 
-interface HandlePairingResult {
-  replies: Reply[];
-}
-
-export async function handlePairingNode(state: HandlePairingState): Promise<HandlePairingResult>{
-  const { input } = state;
-  const question = input.text || 'How to pair items?';
+export async function handlePairingNode(state: any): Promise<Replies>{
   const systemPrompt = await loadPrompt('handle_pairing.txt');
-  const activity = await queryActivityTimestamps(input.userId);
-  const prompt: Array<{ role: 'system' | 'user'; content: string }> = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: `UserGender: ${input.gender ?? 'unknown'} (choose examples and fits appropriate to gender).` },
-    { role: 'user', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
-    ...buildAdditionalContextSections(state),
-    { role: 'user', content: `LastColorAnalysisHoursAgo: ${activity.colorAnalysisHoursAgo ?? 'unknown'}` },
-    { role: 'user', content: `LastVibeCheckHoursAgo: ${activity.vibeCheckHoursAgo ?? 'unknown'}` },
-    { role: 'user', content: question },
-  ];
-  const Schema = z.object({
-    reply_text: z.string(),
-    followup_text: z.string().nullable()
-  });
 
-  logger.info({ userText: question }, 'HandlePairing: input');
-  logger.debug({ prompt }, 'HandlePairing: model input');
-  const response = await getNanoLLM().withStructuredOutput(Schema as any).invoke(prompt as any) as {
-    reply_text: string;
-    followup_text: string | null;
-  };
+  const promptTemplate = ChatPromptTemplate.fromMessages([
+    ["system", systemPrompt],
+    new MessagesPlaceholder("history"),
+  ]);
+
+  const formattedPrompt = await promptTemplate.invoke({ history: state.conversationHistory || [] });
+
+  const llm = getNanoLLM();
+  const response = await (llm as any)
+    .withStructuredOutput(LLMOutputSchema as any)
+    .invoke(formattedPrompt.toChatMessages()) as z.infer<typeof LLMOutputSchema>;
+
   logger.info(response, 'HandlePairing: output');
-
-  const replies: Reply[] = [{ reply_type: 'text', reply_text: response.reply_text }];
-  if (response.followup_text) {
-    replies.push({ reply_type: 'text', reply_text: response.followup_text });
-  }
-  return { replies };
+  const replies: Replies = [{ reply_type: 'text', reply_text: response.message1_text }];
+  if (response.message2_text) replies.push({ reply_type: 'text', reply_text: response.message2_text });
+  return replies;
 }
