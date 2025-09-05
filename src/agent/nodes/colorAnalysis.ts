@@ -13,7 +13,25 @@ import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts
  */
 const logger = getLogger('node:color_analysis');
 
-export async function colorAnalysisNode(state: any): Promise<Replies> {
+const ColorObjectSchema = z.object({
+  name: z.string().describe("A concise, shopper-friendly color name (e.g., 'Warm Ivory', 'Deep Espresso')."),
+  hex: z.string().regex(/^#[0-9a-fA-F]{6}$/).describe("The representative hex color code (#RRGGBB)."),
+});
+
+const LLMOutputSchema = z.object({
+  message1_text: z.string().describe("The primary analysis result message to be sent to the user."),
+  message2_text: z.string().nullable().describe("An optional, short follow-up message to suggest next steps (e.g., 'Want me to suggest outfits using your palette colors?')."),
+  skin_tone: ColorObjectSchema.nullable().describe("The user's skin tone, including a friendly name and a representative hex code."),
+  eye_color: ColorObjectSchema.nullable().describe("The user's eye color, including a friendly name and a representative hex code."),
+  hair_color: ColorObjectSchema.nullable().describe("The user's hair color, including a friendly name and a representative hex code."),
+  undertone: z.enum(['Warm', 'Cool', 'Neutral']).nullable().describe("The user's skin undertone."),
+  palette_name: z.string().nullable().describe("The name of the 12-season color palette that best fits the user."),
+  palette_comment: z.string().nullable().describe("A short, helpful comment on how to style within the assigned palette."),
+  top3_colors: z.array(ColorObjectSchema).describe("An array of the top 3 most flattering colors for the user."),
+  avoid3_colors: z.array(ColorObjectSchema).describe("An array of 3 colors the user might want to avoid."),
+});
+
+export async function colorAnalysisNode(state: any) {
 
   if (numImagesInMessage(state.conversationHistory) === 0) {
     const responses = [
@@ -27,24 +45,11 @@ export async function colorAnalysisNode(state: any): Promise<Replies> {
     ];
     
     const replies: Replies = [{ reply_type: 'text', reply_text: responses[Math.floor(Math.random() * responses.length)] }];
-    return replies;
+    return { assistantReply: replies };
   }
 
-  const LLMOutputSchema = z.object({
-    message1_text: z.string(),
-    message2_text: z.string().nullable(),
-    skin_tone: z.object({ name: z.string(), hex: z.string() }).nullable(),
-    eye_color: z.object({ name: z.string(), hex: z.string() }).nullable(),
-    hair_color: z.object({ name: z.string(), hex: z.string() }).nullable(),
-    undertone: z.enum(['Warm', 'Cool', 'Neutral']).nullable(),
-    palette_name: z.string().nullable(),
-    palette_comment: z.string().nullable(),
-    top3_colors: z.array(z.object({ name: z.string(), hex: z.string() })),
-    avoid3_colors: z.array(z.object({ name: z.string(), hex: z.string() })),
-  });
-
   try {
-    const systemPrompt = await loadPrompt('color_analysis.txt');
+    const systemPrompt = await loadPrompt('color_analysis');
     const llm = getVisionLLM();
 
 
@@ -81,9 +86,9 @@ export async function colorAnalysisNode(state: any): Promise<Replies> {
     const replies: Replies = [{ reply_type: 'text', reply_text: output.message1_text }];
     if (output.message2_text) replies.push({ reply_type: 'text', reply_text: output.message2_text });
 
-    return replies;
+    return { assistantReply: replies };
   } catch (err) {
     logger.error({ err }, 'Error in color analysis');
-    return [{ reply_type: 'text', reply_text: 'Sorry, an error occurred during color analysis. Please try again.' }];
+    return { assistantReply: [{ reply_type: 'text', reply_text: 'Sorry, an error occurred during color analysis. Please try again.' }] };
   }
 }

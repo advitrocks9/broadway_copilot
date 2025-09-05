@@ -13,12 +13,12 @@ import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts
 const logger = getLogger('node:infer_profile');
 
 const LLMOutputSchema = z.object({
-  inferred_gender: z.enum(Gender),
-  confirmed: z.boolean(),
-  inferred_age_group: z.enum(AgeGroup),
+  inferred_gender: z.enum(Gender).describe("The user's inferred gender, which must be one of the values from the Gender enum."),
+  confirmed: z.boolean().describe("A boolean flag indicating whether the gender was explicitly confirmed by the user in the conversation."),
+  inferred_age_group: z.enum(AgeGroup).describe("The user's inferred age group, which must be one of the values from the AgeGroup enum."),
 });
 
-export async function inferProfileNode(state: any): Promise<void>{
+export async function inferProfileNode(state: any) {
   const systemPrompt = await loadPrompt('infer_profile.txt');
   
   const promptTemplate = ChatPromptTemplate.fromMessages([
@@ -40,9 +40,7 @@ export async function inferProfileNode(state: any): Promise<void>{
     data: { inferredGender: response.inferred_gender, inferredAgeGroup: response.inferred_age_group }
   });
 
-  state.user = user;
-  state.pending = PendingType.NONE;
   logger.info(response, 'InferProfile: output');
-  return;
+  return { ...state, user, pending: PendingType.NONE };
 }
 

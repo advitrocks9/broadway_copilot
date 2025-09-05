@@ -11,9 +11,12 @@ import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts
  */
 const logger = getLogger('node:handle_suggest');
 
-const LLMOutputSchema = z.object({ message1_text: z.string(), message2_text: z.string().nullable() });
+const LLMOutputSchema = z.object({
+  message1_text: z.string().describe("The main message containing actionable style improvements or outfit suggestions."),
+  message2_text: z.string().nullable().describe("An optional, short follow-up message to suggest a next step or ask a clarifying question.")
+});
 
-export async function handleSuggestNode(state: any): Promise<Replies>{
+export async function handleSuggestNode(state: any) {
   const systemPrompt = await loadPrompt('handle_suggest.txt');
 
   const promptTemplate = ChatPromptTemplate.fromMessages([
@@ -31,5 +34,5 @@ export async function handleSuggestNode(state: any): Promise<Replies>{
   logger.info(response, 'HandleSuggest: output');
   const replies: Replies = [{ reply_type: 'text', reply_text: response.message1_text }];
   if (response.message2_text) replies.push({ reply_type: 'text', reply_text: response.message2_text });
-  return replies;
+  return { ...state, assistantReply: replies };
 }

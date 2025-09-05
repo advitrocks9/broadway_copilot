@@ -4,7 +4,7 @@ import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
 import { numImagesInMessage } from '../../utils/conversation';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
-import { WardrobeIndexResponseSchema, WardrobeIndexResponse } from '../../types/contracts';
+import { z } from 'zod';
 import { toNameLower } from '../../utils/text';
 
 /**
@@ -12,16 +12,40 @@ import { toNameLower } from '../../utils/text';
  */
 const logger = getLogger('node:wardrobe_index');
 
-export async function wardrobeIndexNode(state: any): Promise<void> {
+const WardrobeItemAttributesSchema = z.object({
+  style: z.string().nullable().describe("The overall style of the item (e.g., 'bohemian', 'classic', 'minimalist')."),
+  pattern: z.string().nullable().describe("The pattern of the item (e.g., 'floral', 'striped', 'plaid')."),
+  color_primary: z.string().describe("The dominant color of the item."),
+  color_secondary: z.string().nullable().describe("The secondary color of the item, if applicable."),
+  material: z.string().nullable().describe("The material of the item (e.g., 'cotton', 'denim', 'silk')."),
+  fit: z.string().nullable().describe("The fit of the item (e.g., 'slim', 'relaxed', 'oversized')."),
+  length: z.string().nullable().describe("The length of the item (e.g., 'cropped', 'midi', 'maxi')."),
+  details: z.string().nullable().describe("Any other specific details (e.g., 'ruffles', 'embroidery')."),
+});
+
+const WardrobeItemSchema = z.object({
+  category: z.enum(['top', 'bottom', 'outerwear', 'shoes', 'accessory']).describe("The broad category of the clothing item."),
+  type: z.string().describe("The specific type of the item (e.g., 't-shirt', 'jeans', 'sneakers')."),
+  subtype: z.string().nullable().describe("A more specific subtype, if applicable (e.g., 'v-neck' for a t-shirt)."),
+  attributes: WardrobeItemAttributesSchema.describe("A set of descriptive attributes for the item."),
+});
+
+const LLMOutputSchema = z.object({
+  status: z.enum(['ok', 'bad_photo']).describe("The status of the image analysis. 'ok' if successful, 'bad_photo' if the image is unusable."),
+  items: z.array(WardrobeItemSchema).describe("An array of wardrobe items identified in the image."),
+});
+
+type WardrobeIndexResponse = z.infer<typeof LLMOutputSchema>;
+
+
+export async function wardrobeIndexNode(state: any) {
 
   if (numImagesInMessage(state.conversationHistory) === 0) {
-    return;
+    return {};
   }
 
-  const LLMOutputSchema = WardrobeIndexResponseSchema;
-
   try {
-    const systemPrompt = await loadPrompt('wardrobe_index.txt');
+    const systemPrompt = await loadPrompt('wardrobe_index');
     const llm = getVisionLLM();
 
 
@@ -69,10 +93,10 @@ export async function wardrobeIndexNode(state: any): Promise<void> {
       }
     }
 
-    return;
+    return {};
   } catch (err) {
     logger.error({ err }, 'Error in wardrobe indexing');
-    return;
+    return {};
   }
 }
 

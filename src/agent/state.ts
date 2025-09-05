@@ -5,18 +5,15 @@ import { QuickReplyButton } from '../types/common';
  */
 export type IntentLabel =
   | 'general'
-  | 'occasion'
-  | 'vacation'
-  | 'pairing'
   | 'vibe_check'
   | 'color_analysis'
-  | 'suggest';
+  | 'styling';
 
 /**
  * Zod schema for validating intent labels.
  */
 export const IntentSchema = z.object({
-  intent: z.enum(['general', 'occasion', 'vacation', 'pairing', 'vibe_check', 'color_analysis', 'suggest']),
+  intent: z.enum(['general', 'vibe_check', 'color_analysis', 'styling']),
 });
 
 export type AvailableService = 'vibe_check' | 'occasion' | 'vacation' | 'color_analysis' | 'suggest';
@@ -41,3 +38,5 @@ export type Reply =
     };
 
 export type Replies = Reply[];
+
+export type StylingIntent = 'occasion' | 'vacation' | 'pairing' | 'suggest';

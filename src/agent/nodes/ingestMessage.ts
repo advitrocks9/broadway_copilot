@@ -54,7 +54,7 @@ export async function ingestMessageNode(state: any): Promise<any> {
     const mergedContent = [...existingContent, ...content];
 
     const updateData: any = { content: mergedContent };
-    if (buttonPayload !== null && buttonText !== null) {
+    if (buttonPayload !== null) {
       updateData.buttonPayload = buttonPayload;
       updateData.buttonText = buttonText;
     }
@@ -134,9 +134,8 @@ export async function ingestMessageNode(state: any): Promise<any> {
       return new AIMessage({ content, additional_kwargs: msg.additional_kwargs });
     }
   });
-
+  
   return {
-    ...state,
     conversationHistory,
     conversationHistoryLight,
     pending,

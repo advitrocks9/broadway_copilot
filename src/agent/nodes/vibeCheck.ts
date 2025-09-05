@@ -13,7 +13,20 @@ import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts
  */
 const logger = getLogger('node:vibe_check');
 
-export async function vibeCheckNode(state: any): Promise<Replies> {
+const VibeCategorySchema = z.object({
+  heading: z.string().describe("The name of the scoring category (e.g., 'Fit & Silhouette', 'Color Harmony')."),
+  score: z.number().min(0).max(10).describe("The score for this category, from 0 to 10."),
+});
+
+const LLMOutputSchema = z.object({
+  vibe_score: z.number().min(0).max(10).nullable().describe("The overall vibe score from 0 to 10. Null if the image is unsuitable."),
+  vibe_reply: z.string().describe("A short, witty, and punchy reply about the outfit's vibe (under 8 words)."),
+  categories: z.array(VibeCategorySchema).length(4).describe("An array of exactly 4 scoring categories, each with a heading and a score."),
+  reply_text: z.string().describe("The main reply message that is compliment-forward and provides a brief rationale for the score."),
+  followup_text: z.string().nullable().describe("An optional, short follow-up question to suggest a next step (e.g., 'Want some tips to elevate this look?')."),
+});
+
+export async function vibeCheckNode(state: any) {
   if (numImagesInMessage(state.conversationHistory) === 0) {
     const responses = [
       "Darling, I can't analyze your texts — only your tones! Step into the spotlight and upload a photo so we can begin your color performance.",
@@ -26,22 +39,11 @@ export async function vibeCheckNode(state: any): Promise<Replies> {
     ];
 
     const replies: Replies = [{ reply_type: 'text', reply_text: responses[Math.floor(Math.random() * responses.length)] }];
-    return replies;
+    return { assistantReply: replies };
   }
 
-  const LLMOutputSchema = z.object({
-    vibe_score: z.number().nullable(),
-    vibe_reply: z.string(),
-    categories: z.array(z.object({
-      heading: z.string(),
-      score: z.number()
-    })),
-    reply_text: z.string(),
-    followup_text: z.string().nullable(),
-  });
-
   try {
-    const systemPrompt = await loadPrompt('vibe_check.txt');
+    const systemPrompt = await loadPrompt('vibe_check');
     const llm = getVisionLLM();
 
 
@@ -96,10 +98,10 @@ export async function vibeCheckNode(state: any): Promise<Replies> {
       replies.push({ reply_type: 'text', reply_text: result.followup_text });
     }
 
-    return replies;
+    return { assistantReply: replies };
   } catch (err) {
     logger.error({ err }, 'Error in vibe check');
-    return [{ reply_type: 'text', reply_text: 'Sorry, an error occurred during vibe check. Please try again.' }];
+    return { assistantReply: [{ reply_type: 'text', reply_text: 'Sorry, an error occurred during vibe check. Please try again.' }] };
   }
 }
 

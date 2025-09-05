@@ -14,13 +14,13 @@ import redis from '../../lib/redis';
 const logger = getLogger('node:send_reply');
 
 
-export async function sendReplyNode(state: any): Promise<void> {
+export async function sendReplyNode(state: any): Promise<{}> {
 
   const messageKey = `message:${state.input.MessageSid}`;
   await redis.hSet(messageKey, { status: 'sending' });
 
 
-  const replies = state.replies;
+  const replies = state.assistantReply;
   const userId = state.user.id;
   const waId = state.user.waId;
 
@@ -62,5 +62,5 @@ export async function sendReplyNode(state: any): Promise<void> {
 
   await redis.hSet(messageKey, { status: success ? 'delivered' : 'failed' });
   
-  return; 
+  return {}; 
 }

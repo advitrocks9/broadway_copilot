@@ -11,9 +11,9 @@ import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts
  */
 const logger = getLogger('node:ask_user_info');
 
-const LLMOutputSchema = z.object({ text: z.string() });
+const LLMOutputSchema = z.object({ text: z.string().describe("The sentence asking the user for the missing information.") });
 
-export async function askUserInfoNode(state: any): Promise<Replies>{
+export async function askUserInfoNode(state: any) {
   const systemPrompt = await loadPrompt('ask_user_info.txt');
   
   const promptTemplate = ChatPromptTemplate.fromMessages([
@@ -34,5 +34,5 @@ export async function askUserInfoNode(state: any): Promise<Replies>{
 
   logger.info(response, 'AskUserInfo: output');
   const replies: Replies = [{ reply_type: 'text', reply_text: response.text }];
-  return replies;
+  return { ...state, assistantReply: replies };
 }

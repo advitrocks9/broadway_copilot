@@ -17,8 +17,8 @@ const logger = getLogger('node:route_intent');
  * Schema for LLM output for route intent
  */
 const LLMOutputSchema = z.object({
-  intent: z.enum(['general', 'occasion', 'vacation', 'pairing', 'vibe_check', 'color_analysis', 'suggest']),
-  missingProfileField: z.enum(['gender','age_group']).nullable(),
+  intent: z.enum(['general', 'vibe_check', 'color_analysis', 'styling']).describe("The primary intent of the user's message, used to route to the appropriate handler."),
+  missingProfileField: z.enum(['gender','age_group']).nullable().describe("The profile field that is missing and required to fulfill the user's intent. Null if no field is missing."),
 });
 
 
@@ -28,7 +28,11 @@ export async function routeIntent(state: any): Promise<any> {
 
   if (buttonPayload) {
     logger.debug({ input: state.input, intent: buttonPayload }, 'RouteIntent: skip LLM due to button payload');
-    return { intent: buttonPayload, missingProfileField: null };
+    if (['general', 'vibe_check', 'color_analysis', 'styling'].includes(buttonPayload)) {
+      return { intent: buttonPayload, missingProfileField: null };
+    } else {
+      return { intent: 'styling', missingProfileField: null };
+    }
   }
 
   if (numImagesInMessage(state.conversationHistory) > 0) {

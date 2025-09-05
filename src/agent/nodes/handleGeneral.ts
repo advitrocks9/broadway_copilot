@@ -10,19 +10,19 @@ import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts
  * Handles general chat; may return text, menu, or card per prompt schema.
  */
 const LLMOutputSchema = z.object({
-  reply_type: z.enum(['greeting', 'menu', 'chat']),
-  message1_text: z.string(),
-  message2_text: z.string().nullable(),
+  reply_type: z.enum(['greeting', 'menu', 'chat']).describe("The type of reply to generate. Use 'greeting' for initial hellos, 'menu' if the user asks for help or what you can do, and 'chat' for conversational replies."),
+  message1_text: z.string().describe("The primary text response to the user."),
+  message2_text: z.string().nullable().describe("An optional second message to provide more details or continue the conversation."),
   
 });
 
-export async function handleGeneralNode(state: any): Promise<Replies> {
+export async function handleGeneralNode(state: any) {
 
   let availableActions = SERVICES;
-  if (state.user.lastColorAnalysisAt && state.user.lastColorAnalysisAt < new Date(Date.now() - 1000 * 60 * 60 * 24)) {
+  if (state.user.lastColorAnalysisAt && new Date(state.user.lastColorAnalysisAt) < new Date(Date.now() - 1000 * 60 * 60 * 24)) {
     availableActions.push({ text: 'Color Analysis', id: 'color_analysis' });
   }
-  if (state.user.lastVibeCheckAt && state.user.lastVibeCheckAt < new Date(Date.now() - 1000 * 60 * 60 * 24)) {
+  if (state.user.lastVibeCheckAt && new Date(state.user.lastVibeCheckAt) < new Date(Date.now() - 1000 * 60 * 60 * 24)) {
     availableActions.push({ text: 'Vibe Check', id: 'vibe_check' });
   }
   
@@ -53,5 +53,5 @@ export async function handleGeneralNode(state: any): Promise<Replies> {
     replies.push({ reply_type: 'text', reply_text: response.message1_text });
     if (response.message2_text) replies.push({reply_type:'text', reply_text: response.message2_text});
   }
-  return replies;
+  return { assistantReply: replies };
 }

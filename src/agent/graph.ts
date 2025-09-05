@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
-import { IntentLabel, AvailableService, Replies } from './state';
+import { IntentLabel, AvailableService, Replies, StylingIntent } from './state';
 import { routeIntent } from './nodes/routeIntent';
 import { askUserInfoNode } from './nodes/askUserInfo';
 import { handleOccasionNode } from './nodes/handleOccasion';
@@ -14,6 +14,7 @@ import { ingestMessageNode } from './nodes/ingestMessage';
 import { inferProfileNode } from './nodes/inferProfile';
 import { handleSuggestNode } from './nodes/handleSuggest';
 import { sendReplyNode } from './nodes/sendReply';
+import { routeStyling } from './nodes/routeStyling';
 import { getLogger } from '../utils/logger';
 import { BaseMessage } from '@langchain/core/messages';
 import { User, PendingType } from '@prisma/client';
@@ -26,8 +27,9 @@ const GraphAnnotation = Annotation.Root({
   conversationHistory: Annotation<BaseMessage[] | undefined>(),
   conversationHistoryLight: Annotation<BaseMessage[] | undefined>(),
   intent: Annotation<IntentLabel | undefined>(),
+  stylingIntent: Annotation<StylingIntent | undefined>(),
   availableServices: Annotation<AvailableService[] | undefined>(),
-  assistantReply: Annotation<Replies | string | undefined>(),
+  assistantReply: Annotation<Replies | undefined>(),
   pending: Annotation<PendingType | undefined>(),
 });
 
@@ -52,6 +54,7 @@ export function buildAgentGraph() {
     .addNode('handle_suggest', handleSuggestNode)
     .addNode('handle_general', handleGeneralNode)
     .addNode('send_reply', sendReplyNode)
+    .addNode('route_styling', routeStyling)
     .addEdge(START, 'ingest_message')
     .addConditionalEdges(
       'ingest_message',
@@ -72,18 +75,23 @@ export function buildAgentGraph() {
       if (s.missingProfileField) {
         return 'ask_user_info';
       }
-      return s.intent || 'handle_general';
+      return s.intent || 'general';
     }, {
+      ask_user_info: 'ask_user_info',
       general: 'handle_general',
+      vibe_check: 'vibe_check',
+      color_analysis: 'color_analysis',
+      styling: 'route_styling',
+    })
+    .addConditionalEdges('route_styling', (s: any) => {
+      return s.stylingIntent || 'handle_general';
+    }, {
       occasion: 'handle_occasion',
       vacation: 'handle_vacation',
       pairing: 'handle_pairing',
       suggest: 'handle_suggest',
-      ask_user_info: 'ask_user_info',
-      color_analysis: 'color_analysis',
-      vibe_check: 'vibe_check',
+      handle_general: 'handle_general',
     })
-    .addEdge('vibe_check', 'send_reply')
     .addEdge('vibe_check', 'wardrobe_index')
     .addEdge('wardrobe_index', END)
     .addEdge('ask_user_info', 'send_reply')
@@ -93,6 +101,7 @@ export function buildAgentGraph() {
     .addEdge('handle_suggest', 'send_reply')
     .addEdge('color_analysis', 'send_reply')
     .addEdge('handle_general', 'send_reply')
+    .addEdge('wardrobe_index', 'send_reply')
     .addEdge('send_reply', END);
 
   return graph.compile();

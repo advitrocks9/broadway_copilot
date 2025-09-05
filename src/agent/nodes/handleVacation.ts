@@ -11,9 +11,12 @@ import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts
  */
 const logger = getLogger('node:handle_vacation');
 
-const LLMOutputSchema = z.object({ message1_text: z.string(), message2_text: z.string().nullable() });
+const LLMOutputSchema = z.object({
+  message1_text: z.string().describe("The main message containing vacation-specific styling advice and outfit recommendations."),
+  message2_text: z.string().nullable().describe("An optional, short follow-up message to suggest a next step, like a Vibe Check or Color Analysis.")
+});
 
-export async function handleVacationNode(state: any): Promise<Replies>{
+export async function handleVacationNode(state: any) {
   const systemPrompt = await loadPrompt('handle_vacation.txt');
 
   const promptTemplate = ChatPromptTemplate.fromMessages([
@@ -31,5 +34,5 @@ export async function handleVacationNode(state: any): Promise<Replies>{
   logger.info(response, 'HandleVacation: output');
   const replies: Replies = [{ reply_type: 'text', reply_text: response.message1_text }];
   if (response.message2_text) replies.push({ reply_type: 'text', reply_text: response.message2_text });
-  return replies;
+  return { ...state, assistantReply: replies };
 }
