@@ -15,14 +15,24 @@ const logger = getLogger('node:send_reply');
 
 
 export async function sendReplyNode(state: any): Promise<{}> {
-
   const messageKey = `message:${state.input.MessageSid}`;
   await redis.hSet(messageKey, { status: 'sending' });
-
 
   const replies = state.assistantReply;
   const userId = state.user.id;
   const waId = state.user.waId;
+
+  logger.info({
+    messageId: state.input.MessageSid,
+    userId,
+    waId,
+    replyCount: replies.length
+  }, 'Sending replies to user');
+
+  logger.debug({
+    messageId: state.input.MessageSid,
+    replies: replies.map((r: any) => ({ type: r.reply_type, hasMedia: !!r.media_url }))
+  }, 'SendReply: reply details');
 
   const formattedContent: MessageContent = [];
   for (const r of replies) {
@@ -49,18 +59,28 @@ export async function sendReplyNode(state: any): Promise<{}> {
     for (const r of replies) {
       if (r.reply_type === 'text') {
         await sendText(waId, r.reply_text);
+        logger.debug({ messageId: state.input.MessageSid, waId }, 'SendReply: sent text message');
       } else if (r.reply_type === 'quick_reply') {
         await sendMenu(waId, r.reply_text, r.buttons);
+        logger.debug({ messageId: state.input.MessageSid, waId, buttonCount: r.buttons?.length }, 'SendReply: sent menu message');
       } else if (r.reply_type === 'image') {
         await sendImage(waId, r.media_url, r.reply_text);
+        logger.debug({ messageId: state.input.MessageSid, waId, mediaUrl: r.media_url }, 'SendReply: sent image message');
       }
     }
+    logger.info({ messageId: state.input.MessageSid, userId, waId }, 'All replies sent successfully');
   } catch (err) {
-    logger.error({ err }, 'SendReply: Twilio send failed');
+    logger.error({
+      messageId: state.input.MessageSid,
+      userId,
+      waId,
+      err: (err as Error)?.message
+    }, 'Failed to send replies');
     success = false;
   }
 
   await redis.hSet(messageKey, { status: success ? 'delivered' : 'failed' });
-  
-  return {}; 
+  logger.debug({ messageId: state.input.MessageSid, status: success ? 'delivered' : 'failed' }, 'SendReply: updated message status');
+
+  return {};
 }

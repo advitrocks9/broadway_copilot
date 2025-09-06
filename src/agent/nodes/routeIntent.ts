@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { getNanoLLM } from '../../services/openaiService';
+import { getTextLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
@@ -35,7 +35,7 @@ export async function routeIntent(state: any): Promise<any> {
     }
   }
 
-  if (numImagesInMessage(state.conversationHistory) > 0) {
+  if (numImagesInMessage(state.conversationHistoryWithImages) > 0) {
     if (state.pending === PendingType.VIBE_CHECK_IMAGE) {
       return { intent: 'vibe_check', missingProfileField: null };
     } else if (state.pending === PendingType.COLOR_ANALYSIS_IMAGE) {
@@ -50,16 +50,16 @@ export async function routeIntent(state: any): Promise<any> {
     new MessagesPlaceholder("history"),
   ]);
 
-  let history = state.conversationHistoryLight
+  let history = state.conversationHistoryTextOnly
 
   const formattedPrompt = await promptTemplate.invoke({ history });
 
-  const llm = getNanoLLM();
+  const llm = getTextLLM();
   const response = await (llm as any)
     .withStructuredOutput(LLMOutputSchema)
     .invoke(formattedPrompt.toChatMessages()) as z.infer<typeof LLMOutputSchema>;
 
-  logger.info(response, 'RouteIntent: output');
+  logger.debug({ intent: response.intent, missingField: response.missingProfileField }, 'Intent routed');
 
   return response;
 }

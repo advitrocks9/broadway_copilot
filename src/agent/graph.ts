@@ -24,8 +24,8 @@ import { User, PendingType } from '@prisma/client';
 const GraphAnnotation = Annotation.Root({
   user: Annotation<User | undefined>(),
   input: Annotation<Record<string, unknown> | undefined>(),
-  conversationHistory: Annotation<BaseMessage[] | undefined>(),
-  conversationHistoryLight: Annotation<BaseMessage[] | undefined>(),
+  conversationHistoryWithImages: Annotation<BaseMessage[] | undefined>(),
+  conversationHistoryTextOnly: Annotation<BaseMessage[] | undefined>(),
   intent: Annotation<IntentLabel | undefined>(),
   stylingIntent: Annotation<StylingIntent | undefined>(),
   availableServices: Annotation<AvailableService[] | undefined>(),

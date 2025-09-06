@@ -1,14 +1,14 @@
 import { z } from 'zod';
 
 import { Replies } from '../state';
-import { getNanoLLM } from '../../services/openaiService';
+import { getTextLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
+import { getLogger } from '../../utils/logger';
 import { SERVICES, WELCOME_IMAGE_URL } from '../../utils/constants';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 
-/**
- * Handles general chat; may return text, menu, or card per prompt schema.
- */
+const logger = getLogger('node:handle_general');
+
 const LLMOutputSchema = z.object({
   reply_type: z.enum(['greeting', 'menu', 'chat']).describe("The type of reply to generate. Use 'greeting' for initial hellos, 'menu' if the user asks for help or what you can do, and 'chat' for conversational replies."),
   message1_text: z.string().describe("The primary text response to the user."),
@@ -35,13 +35,14 @@ export async function handleGeneralNode(state: any) {
     new MessagesPlaceholder("history"),
   ]);
 
-  const formattedPrompt = await promptTemplate.invoke({ history: state.conversationHistory || [] });
+  const formattedPrompt = await promptTemplate.invoke({ history: state.conversationHistoryTextOnly || [] });
 
-  const llm = getNanoLLM();
+  const llm = getTextLLM();
   const response = await (llm as any)
     .withStructuredOutput(LLMOutputSchema)
     .invoke(formattedPrompt.toChatMessages()) as z.infer<typeof LLMOutputSchema>;
 
+  logger.debug({ replyType: response.reply_type }, 'HandleGeneral: generated response');
   const replies: Replies = [];
 
   if (response.reply_type === 'greeting') {
@@ -51,7 +52,7 @@ export async function handleGeneralNode(state: any) {
     replies.push({ reply_type: 'quick_reply', reply_text: response.message1_text, buttons: availableActions, });
   } else if (response.reply_type === 'chat') {
     replies.push({ reply_type: 'text', reply_text: response.message1_text });
-    if (response.message2_text) replies.push({reply_type:'text', reply_text: response.message2_text});
+    if (response.message2_text) replies.push({ reply_type: 'text', reply_text: response.message2_text });
   }
   return { assistantReply: replies };
 }

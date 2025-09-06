@@ -33,7 +33,7 @@ const LLMOutputSchema = z.object({
 
 export async function colorAnalysisNode(state: any) {
 
-  if (numImagesInMessage(state.conversationHistory) === 0) {
+  if (numImagesInMessage(state.conversationHistoryWithImages) === 0) {
     const responses = [
       "Darling, I can't analyze your texts — only your tones! Step into the spotlight and upload a photo so we can begin your color performance.",
       "No image, no curtain call! Please upload your photo so I can reveal your starring shades.",
@@ -52,22 +52,21 @@ export async function colorAnalysisNode(state: any) {
     const systemPrompt = await loadPrompt('color_analysis');
     const llm = getVisionLLM();
 
-
-  const promptTemplate = ChatPromptTemplate.fromMessages([
+    const promptTemplate = ChatPromptTemplate.fromMessages([
     ["system", systemPrompt],
     new MessagesPlaceholder("history"),
   ]);
 
-  let history = state.conversationHistory
+  let history = state.conversationHistoryWithImages
 
   const formattedPrompt = await promptTemplate.invoke({ history });
     const output = await llm.withStructuredOutput(LLMOutputSchema).invoke(formattedPrompt.toChatMessages()) as z.infer<typeof LLMOutputSchema>;
 
-    logger.info(output, 'Color analysis output');
+    logger.debug({ messageId: state.conversationHistoryWithImages[0].id, palette: output.palette_name }, 'Color analysis completed');
 
     await prisma.colorAnalysis.create({
       data: {
-        messageId: state.conversationHistory[0].id,
+        messageId: state.conversationHistoryWithImages[0].id,
         skin_tone: output.skin_tone?.name ?? null,
         eye_color: output.eye_color?.name ?? null,
         hair_color: output.hair_color?.name ?? null,
@@ -79,7 +78,7 @@ export async function colorAnalysisNode(state: any) {
     });
 
     await prisma.user.update({
-      where: { id: state.conversationHistory[0].userId },
+      where: { id: state.conversationHistoryWithImages[0].userId },
       data: { lastColorAnalysisAt: new Date() }
     });
 
@@ -88,7 +87,7 @@ export async function colorAnalysisNode(state: any) {
 
     return { assistantReply: replies };
   } catch (err) {
-    logger.error({ err }, 'Error in color analysis');
+    logger.error({ err: (err as Error)?.message }, 'Color analysis failed');
     return { assistantReply: [{ reply_type: 'text', reply_text: 'Sorry, an error occurred during color analysis. Please try again.' }] };
   }
 }

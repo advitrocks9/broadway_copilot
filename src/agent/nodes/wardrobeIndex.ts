@@ -40,7 +40,7 @@ type WardrobeIndexResponse = z.infer<typeof LLMOutputSchema>;
 
 export async function wardrobeIndexNode(state: any) {
 
-  if (numImagesInMessage(state.conversationHistory) === 0) {
+  if (numImagesInMessage(state.conversationHistoryWithImages) === 0) {
     return {};
   }
 
@@ -48,30 +48,27 @@ export async function wardrobeIndexNode(state: any) {
     const systemPrompt = await loadPrompt('wardrobe_index');
     const llm = getVisionLLM();
 
-
     const promptTemplate = ChatPromptTemplate.fromMessages([
       ["system", systemPrompt],
       new MessagesPlaceholder("history"),
     ]);
 
-    let history = state.conversationHistory
+    let history = state.conversationHistoryWithImages
 
     const formattedPrompt = await promptTemplate.invoke({ history });
     const output = await llm.withStructuredOutput(LLMOutputSchema).invoke(formattedPrompt.toChatMessages()) as WardrobeIndexResponse;
 
-    logger.info(output, 'WardrobeIndex: output');
+    logger.debug({ messageId: state.conversationHistoryWithImages[0].id, status: output.status }, 'Wardrobe indexing completed');
 
     const items = output.items ?? [];
-    logger.info({ status: output.status, itemsCount: Array.isArray(items) ? items.length : 0 }, 'WardrobeIndex: processing');
+    logger.debug({ itemsCount: Array.isArray(items) ? items.length : 0 }, 'Processing wardrobe items');
 
-
-    // Persist wardrobe items to database
     for (const item of items) {
       const displayName = `${item.type}`;
       const nameLower = toNameLower(displayName);
       const existing = await prisma.wardrobeItem.findFirst({
         where: {
-          userId: state.conversationHistory[0].userId,
+          userId: state.conversationHistoryWithImages[0].userId,
           nameLower,
           category: item.category
         }
@@ -80,7 +77,7 @@ export async function wardrobeIndexNode(state: any) {
         const colors: string[] = [item.attributes.color_primary, item.attributes.color_secondary].filter(Boolean) as string[];
         await prisma.wardrobeItem.create({
           data: {
-            userId: state.conversationHistory[0].userId,
+            userId: state.conversationHistoryWithImages[0].userId,
             name: displayName,
             nameLower,
             category: item.category,
@@ -95,9 +92,7 @@ export async function wardrobeIndexNode(state: any) {
 
     return {};
   } catch (err) {
-    logger.error({ err }, 'Error in wardrobe indexing');
+    logger.error({ err: (err as Error)?.message }, 'Wardrobe indexing failed');
     return {};
   }
 }
-
-

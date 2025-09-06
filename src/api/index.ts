@@ -11,9 +11,6 @@ import { rateLimiter } from './middleware/rateLimiter';
 import { authenticateRequest } from './middleware/auth';
 import { runAgent } from '../agent/graph';
 
-/**
- * Express API entrypoint for Broadway WhatsApp Bot server.
- */
 const logger = getLogger('api');
 const app = express();
 app.set('trust proxy', true);
@@ -25,20 +22,20 @@ app.use('/uploads', express.static(staticUploadsMount()));
 
 const userControllers: Map<string, { controller: AbortController; messageId: string }> = new Map();
 
-/**
- * Handles Twilio webhooks, validates requests, and runs the agent.
- */
 app.post('/twilio/', authenticateRequest, rateLimiter, async (req, res) => {
-  try {
-
+  try { 
     const userId = req.body.From;
     const messageId = req.body.MessageSid;
+    logger.debug({ userId, messageId }, 'Processing webhook');
+
     if (!userId || !messageId) {
+      logger.warn('Missing userId or messageId in webhook');
       return res.status(400).end();
     }
 
     const messageKey = `message:${messageId}`;
     if (await redis.exists(messageKey) === 1) {
+      logger.debug({ messageId }, 'Message already processed');
       return res.status(200).end();
     }
 
@@ -64,25 +61,19 @@ app.post('/twilio/', authenticateRequest, rateLimiter, async (req, res) => {
     if (currentStatus === 'sending') {
       const queueKey = `user_queue:${userId}`;
       await redis.rPush(queueKey, JSON.stringify({ messageId, input: req.body }));
-      logger.info(`Message ${messageId} queued in Redis for user ${userId} because sending in progress`);
+      logger.debug({ messageId, userId }, 'Queued message due to active sending');
       return res.status(200).end();
     } else {
       await redis.set(userActiveKey, messageId);
+      logger.debug({ messageId, userId }, 'Starting message processing');
       processMessage(userId, messageId, req.body);
       return res.status(200).end();
     }
   } catch (err: any) {
-    logger.error({
-      message: err?.message,
-      stack: err?.stack,
-      body: req?.body,
-      headers: req?.headers,
-    }, 'Inbound webhook error');
-    // Attempt to set failed if messageKey was created
-    const messageId = req.body.MessageSid;
+    logger.error({ err: err?.message, messageId: req.body?.MessageSid }, 'Webhook processing failed');
+    const messageId = req.body?.MessageSid;
     if (messageId) {
-      const messageKey = `message:${messageId}`;
-      await redis.hSet(messageKey, { status: 'failed' });
+      await redis.hSet(`message:${messageId}`, { status: 'failed' });
     }
     return res.status(500).end();
   }
@@ -93,31 +84,30 @@ app.post('/twilio/callback/', authenticateRequest, async (req, res) => {
     processStatusCallback(req.body || {});
     return res.status(200).end();
   } catch (err: any) {
-    logger.error({ message: err?.message, stack: err?.stack, body: req?.body }, 'Callback processing error');
+    logger.error({ err: err?.message }, 'Callback processing failed');
     return res.status(500).end();
   }
 });
 
 app.use(errorHandler);
 
-/**
- * Processes a message for a user, handling execution, status updates, and queue processing.
- */
 async function processMessage(userId: string, messageId: string, input: Record<string, any>): Promise<void> {
   const controller = new AbortController();
   userControllers.set(userId, { controller, messageId });
 
   const messageKey = `message:${messageId}`;
   await redis.hSet(messageKey, { status: 'running' });
+  logger.debug({ userId, messageId }, 'Processing message');
 
   try {
     await runAgent(input, { signal: controller.signal });
     await redis.hSet(messageKey, { status: 'delivered' });
+    logger.debug({ userId, messageId }, 'Message processed successfully');
   } catch (err: any) {
     if (err.name === 'AbortError') {
-      logger.info(`Run for message ${messageId} aborted`);
+      logger.info({ userId, messageId }, 'Message processing aborted');
     } else {
-      logger.error(err, `Run for message ${messageId} failed`);
+      logger.error({ userId, messageId, err: err?.message }, 'Message processing failed');
     }
     await redis.hSet(messageKey, { status: 'failed' });
   } finally {
@@ -131,17 +121,19 @@ async function processMessage(userId: string, messageId: string, input: Record<s
         const next = JSON.parse(nextStr);
         const userActiveKey = `user_active:${userId}`;
         await redis.set(userActiveKey, next.messageId);
+        logger.debug({ userId, nextMessageId: next.messageId }, 'Processing queued message');
         processMessage(userId, next.messageId, next.input);
       } else {
         const userActiveKey = `user_active:${userId}`;
         await redis.del(userActiveKey);
+        logger.debug({ userId }, 'No more queued messages');
       }
     }
   }
 }
 
 async function shutdown(signal: string) {
-  console.log(`\n${signal} received, closing…`);
+  logger.info({ signal }, 'Shutdown signal received, closing gracefully');
   try {
     if (redis.isOpen) await redis.quit();
     await prisma.$disconnect();

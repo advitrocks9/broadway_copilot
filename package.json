@@ -14,8 +14,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@google-cloud/storage": "^7.17.0",
     "@langchain/core": "^0.3.72",
+    "@langchain/groq": "^0.2.3",
     "@langchain/langgraph": "^0.4.8",
     "@langchain/openai": "^0.6.9",
     "@prisma/client": "^6.15.0",

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { getNanoLLM } from '../../services/openaiService';
+import { getTextLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
@@ -31,14 +31,14 @@ export async function routeStyling(state: any): Promise<{ stylingIntent: Styling
     new MessagesPlaceholder("history"),
   ]);
 
-  const formattedPrompt = await promptTemplate.invoke({ history: state.conversationHistoryLight });
+  const formattedPrompt = await promptTemplate.invoke({ history: state.conversationHistoryTextOnly });
 
-  const llm = getNanoLLM();
+  const llm = getTextLLM();
   const response = await (llm as any)
     .withStructuredOutput(LLMOutputSchema)
     .invoke(formattedPrompt.toChatMessages()) as z.infer<typeof LLMOutputSchema>;
 
-  logger.info(response, 'RouteStyling: output');
+  logger.debug({ stylingIntent: response.stylingIntent }, 'Styling intent routed');
 
   return response;
 }

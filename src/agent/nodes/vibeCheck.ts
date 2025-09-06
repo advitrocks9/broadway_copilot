@@ -27,7 +27,7 @@ const LLMOutputSchema = z.object({
 });
 
 export async function vibeCheckNode(state: any) {
-  if (numImagesInMessage(state.conversationHistory) === 0) {
+  if (numImagesInMessage(state.conversationHistoryWithImages) === 0) {
     const responses = [
       "Darling, I can't analyze your texts — only your tones! Step into the spotlight and upload a photo so we can begin your color performance.",
       "No image, no curtain call! Please upload your photo so I can analyze your vibe.",
@@ -46,18 +46,17 @@ export async function vibeCheckNode(state: any) {
     const systemPrompt = await loadPrompt('vibe_check');
     const llm = getVisionLLM();
 
-
     const promptTemplate = ChatPromptTemplate.fromMessages([
       ["system", systemPrompt],
       new MessagesPlaceholder("history"),
     ]);
 
-    let history = state.conversationHistory
+    let history = state.conversationHistoryWithImages
 
     const formattedPrompt = await promptTemplate.invoke({ history });
     const result = await llm.withStructuredOutput(LLMOutputSchema).invoke(formattedPrompt.toChatMessages()) as z.infer<typeof LLMOutputSchema>;
 
-    logger.info(result, 'VibeCheck: output');
+    logger.debug({ messageId: state.conversationHistoryWithImages[0].id, score: result.vibe_score }, 'Vibe check completed');
 
     const categories = Array.isArray(result.categories) ? result.categories : [];
     const byHeading: Record<string, number | undefined> = Object.fromEntries(
@@ -66,7 +65,7 @@ export async function vibeCheckNode(state: any) {
 
     await prisma.vibeCheck.create({
       data: {
-        messageId: state.conversationHistory[0].id,
+        messageId: state.conversationHistoryWithImages[0].id,
         fit_silhouette: byHeading['Fit & Silhouette'] ?? null,
         color_harmony: byHeading['Color Harmony'] ?? null,
         styling_details: byHeading['Styling Details'] ?? null,
@@ -78,7 +77,7 @@ export async function vibeCheckNode(state: any) {
     });
 
     await prisma.user.update({
-      where: { id: state.conversationHistory[0].userId },
+      where: { id: state.conversationHistoryWithImages[0].userId },
       data: { lastVibeCheckAt: new Date() },
     });
 
@@ -100,7 +99,7 @@ export async function vibeCheckNode(state: any) {
 
     return { assistantReply: replies };
   } catch (err) {
-    logger.error({ err }, 'Error in vibe check');
+    logger.error({ err: (err as Error)?.message }, 'Vibe check failed');
     return { assistantReply: [{ reply_type: 'text', reply_text: 'Sorry, an error occurred during vibe check. Please try again.' }] };
   }
 }

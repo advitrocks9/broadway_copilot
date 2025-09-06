@@ -25,12 +25,18 @@ export async function downloadTwilioMedia(
   mimeType: string
 ): Promise<string> {
   if (!twilioAuth.sid || !twilioAuth.token) {
+    logger.error('Twilio credentials missing for media download');
     throw new Error('Twilio credentials missing');
   }
-  if (!mimeType) throw new Error('MIME type is required');
+  if (!mimeType) {
+    logger.error({ url, waId }, 'MIME type missing for media download');
+    throw new Error('MIME type is required');
+  }
 
   const extension = extFromMime(mimeType);
   const filename = `twilio_${randomUUID()}${extension ? `.${extension}` : ''}`;
+
+  logger.debug({ url, waId, mimeType, filename }, 'Downloading Twilio media');
 
   const response = await fetch(url, {
     headers: {
@@ -39,15 +45,18 @@ export async function downloadTwilioMedia(
   });
 
   if (!response.ok) {
+    logger.error({ url, waId, status: response.status }, 'Failed to download Twilio media');
     throw new Error(`Failed to download media: ${response.status}`);
   }
 
   const uploadDir = userUploadDir(waId);
   await ensureDir(uploadDir);
   const filePath = path.join(uploadDir, filename);
-  await fs.writeFile(filePath, Buffer.from(await response.arrayBuffer()));
+  const buffer = Buffer.from(await response.arrayBuffer());
+  await fs.writeFile(filePath, buffer);
 
-  logger.info({ filePath, mimeType }, 'Twilio media saved locally');
+  const publicUrl = `${process.env.SERVER_URL}/uploads/${waId}/${filename}`;
+  logger.info({ waId, filename, filePath, mimeType, size: buffer.length }, 'Twilio media downloaded and saved');
 
-  return `${process.env.SERVER_URL}/uploads/${waId}/${filename}`;
+  return publicUrl;
 }

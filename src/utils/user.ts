@@ -1,22 +1,10 @@
 import prisma from '../lib/prisma';
-import { getLogger } from './logger';
 
-/**
- * User helpers for fetching or creating users by WhatsApp ID.
- */
-const logger = getLogger('utils:user');
-
-/**
- * Finds an existing user by WhatsApp ID or creates a new one if not found.
- * @param waId - WhatsApp identifier for the user
- * @returns The user record from the database
- */
 export async function getOrCreateUserByWaId(waId: string) {
   const user = await prisma.user.upsert({
     where: { waId },
     create: { waId },
     update: {},
   });
-  logger.info({ userId: user.id, waId }, 'Ensured user by waId');
   return user;
 }

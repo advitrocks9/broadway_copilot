@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { getNanoLLM } from '../../services/openaiService';
+import { getTextLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
 import { Replies } from '../state';
@@ -15,7 +15,7 @@ const LLMOutputSchema = z.object({ text: z.string().describe("The sentence askin
 
 export async function askUserInfoNode(state: any) {
   const systemPrompt = await loadPrompt('ask_user_info.txt');
-  
+
   const promptTemplate = ChatPromptTemplate.fromMessages([
     ["system", systemPrompt],
     new MessagesPlaceholder("history"),
@@ -25,14 +25,14 @@ export async function askUserInfoNode(state: any) {
     missingField: state.missingProfileField || 'required information'
   });
 
-  const formattedPrompt = await partialPrompt.invoke({ history: state.conversationHistory || [] });
+  const formattedPrompt = await partialPrompt.invoke({ history: state.conversationHistoryWithTextOnly || [] });
 
-  const llm = getNanoLLM();
+  const llm = getTextLLM();
   const response = await (llm as any)
     .withStructuredOutput(LLMOutputSchema as any)
     .invoke(formattedPrompt.toChatMessages()) as z.infer<typeof LLMOutputSchema>;
 
-  logger.info(response, 'AskUserInfo: output');
+  logger.debug({ missingField: state.missingProfileField }, 'AskUserInfo: generated response');
   const replies: Replies = [{ reply_type: 'text', reply_text: response.text }];
   return { ...state, assistantReply: replies };
 }

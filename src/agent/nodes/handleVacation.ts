@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { Replies } from '../state';
-import { getNanoLLM } from '../../services/openaiService';
+import { getTextLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
@@ -24,9 +24,9 @@ export async function handleVacationNode(state: any) {
     new MessagesPlaceholder("history"),
   ]);
 
-  const formattedPrompt = await promptTemplate.invoke({ history: state.conversationHistory || [] });
+  const formattedPrompt = await promptTemplate.invoke({ history: state.conversationHistoryTextOnly || [] });
 
-  const llm = getNanoLLM();
+  const llm = getTextLLM();
   const response = await (llm as any)
     .withStructuredOutput(LLMOutputSchema as any)
     .invoke(formattedPrompt.toChatMessages()) as z.infer<typeof LLMOutputSchema>;
