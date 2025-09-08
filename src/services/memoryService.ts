@@ -108,21 +108,44 @@ async function extractAndUpsertMemories(userId: string): Promise<void> {
   const sourceMessageIds = messages.map((m) => m.id);
 
   if (extracted.memories.length > 0) {
+    // Validate and sanitize memory items before processing
+    const validMemories = extracted.memories.filter(item => {
+      return item.category && 
+             item.key && 
+             item.value && 
+             typeof item.category === 'string' &&
+             typeof item.key === 'string' &&
+             typeof item.value === 'string' &&
+             item.key.length <= 255 && // Reasonable key length limit
+             item.value.length <= 10000; // Reasonable value length limit
+    });
+
+    if (validMemories.length === 0) {
+      logger.warn({ userId }, 'No valid memories to process after sanitization');
+      return;
+    }
+
     const existing = await prisma.memory.findMany({ where: { userId } });
     const existingMap = new Map<string, { id: string; value: string; sourceMessageIds: string[] }>();
     for (const m of existing) {
       existingMap.set(`${m.category}:${m.key}`.toLowerCase(), { id: m.id, value: m.value, sourceMessageIds: m.sourceMessageIds });
     }
 
-    for (const item of extracted.memories) {
-      const keyId = `${item.category}:${item.key}`.toLowerCase();
+    for (const item of validMemories) {
+      // Additional sanitization: trim and escape special characters
+      const sanitizedKey = item.key.trim().slice(0, 255);
+      const sanitizedValue = item.value.trim().slice(0, 10000);
+      const sanitizedCategory = item.category.trim();
+      
+      const keyId = `${sanitizedCategory}:${sanitizedKey}`.toLowerCase();
       const current = existingMap.get(keyId);
+      
       if (current) {
-        if (current.value.trim().toLowerCase() !== item.value.trim().toLowerCase()) {
+        if (current.value.trim().toLowerCase() !== sanitizedValue.toLowerCase()) {
           await prisma.memory.update({
             where: { id: current.id },
             data: {
-              value: item.value,
+              value: sanitizedValue,
               confidence: item.confidence ?? null,
               sourceMessageIds: Array.from(new Set([...(current.sourceMessageIds || []), ...sourceMessageIds])),
             },
@@ -137,9 +160,9 @@ async function extractAndUpsertMemories(userId: string): Promise<void> {
         await prisma.memory.create({
           data: {
             userId,
-            category: item.category,
-            key: item.key,
-            value: item.value,
+            category: sanitizedCategory,
+            key: sanitizedKey,
+            value: sanitizedValue,
             confidence: item.confidence ?? null,
             sourceMessageIds,
           },

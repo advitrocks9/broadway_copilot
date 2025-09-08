@@ -105,4 +105,5 @@ export interface StatusResolvers {
   sentPromise: Promise<void>;
   deliveredPromise: Promise<void>;
   cleanupTimer?: NodeJS.Timeout;
+  createdAt?: number;
 }

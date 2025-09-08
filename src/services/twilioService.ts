@@ -11,6 +11,27 @@ const logger = getLogger('service:twilio');
 
 export const sidToResolvers = new Map<string, StatusResolvers>();
 export const sidToSeenStatuses = new Map<string, Set<string>>();
+
+// Periodic cleanup to prevent memory leaks
+setInterval(() => {
+  const now = Date.now();
+  const maxAge = 5 * 60 * 1000; // 5 minutes
+  
+  // Clean up old resolvers
+  for (const [sid, resolver] of sidToResolvers.entries()) {
+    if (resolver.createdAt && (now - resolver.createdAt) > maxAge) {
+      sidToResolvers.delete(sid);
+      logger.debug({ sid }, 'Cleaned up expired resolver');
+    }
+  }
+  
+  // Clean up old seen statuses
+  for (const [sid, statuses] of sidToSeenStatuses.entries()) {
+    if (statuses.size === 0) {
+      sidToSeenStatuses.delete(sid);
+    }
+  }
+}, 60000); // Run cleanup every minute
   
 let cachedClient: Twilio | undefined;
 function getClient(): Twilio {
@@ -113,7 +134,13 @@ async function awaitStatuses(sid: string): Promise<void> {
   let resolveDelivered!: () => void;
   const sentPromise = new Promise<void>((resolve) => { resolveSent = resolve; });
   const deliveredPromise = new Promise<void>((resolve) => { resolveDelivered = resolve; });
-  const resolvers: StatusResolvers = { resolveSent, resolveDelivered, sentPromise, deliveredPromise };
+  const resolvers: StatusResolvers = { 
+    resolveSent, 
+    resolveDelivered, 
+    sentPromise, 
+    deliveredPromise,
+    createdAt: Date.now()
+  };
   sidToResolvers.set(sid, resolvers);
 
   const preSeen = sidToSeenStatuses.get(sid);

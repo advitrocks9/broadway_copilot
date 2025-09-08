@@ -107,6 +107,7 @@ export function processStatusCallback(payload: TwilioStatusCallbackPayload): voi
     const seenStatuses = sidToSeenStatuses.get(sid) || new Set<string>();
     seenStatuses.add(status.toLowerCase());
 
+    // Limit the size of seen statuses to prevent memory bloat
     if (seenStatuses.size > 10) {
       const recentStatuses = Array.from(seenStatuses).slice(-5);
       sidToSeenStatuses.set(sid, new Set(recentStatuses));
@@ -114,6 +115,7 @@ export function processStatusCallback(payload: TwilioStatusCallbackPayload): voi
       sidToSeenStatuses.set(sid, seenStatuses);
     }
 
+    // Set a shorter cleanup timeout and ensure proper cleanup
     setTimeout(() => {
       const currentStatuses = sidToSeenStatuses.get(sid);
       if (currentStatuses) {
@@ -122,7 +124,7 @@ export function processStatusCallback(payload: TwilioStatusCallbackPayload): voi
           sidToSeenStatuses.delete(sid);
         }
       }
-    }, 300000);
+    }, 60000); // Reduced from 5 minutes to 1 minute
   }
 }
 

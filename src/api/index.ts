@@ -59,7 +59,10 @@ app.post('/twilio/', authenticateRequest, rateLimiter, async (req, res) => {
     if (hasActiveRun && currentStatus === 'running') {
       const active = userControllers.get(userId);
       if (active) {
+        logger.debug({ userId, messageId: active.messageId }, 'Aborting previous message processing');
         active.controller.abort();
+        // Wait a brief moment for the abort to take effect
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
 
@@ -99,6 +102,15 @@ app.use(errorHandler);
 
 async function processMessage(userId: string, messageId: string, input: Record<string, any>): Promise<void> {
   const controller = new AbortController();
+  
+  // Double-check that we're still the active message before setting the controller
+  const userActiveKey = `user_active:${userId}`;
+  const currentActive = await redis.get(userActiveKey);
+  if (currentActive !== messageId) {
+    logger.debug({ userId, messageId, currentActive }, 'Message no longer active, skipping processing');
+    return;
+  }
+  
   userControllers.set(userId, { controller, messageId });
 
   const messageKey = `message:${messageId}`;
