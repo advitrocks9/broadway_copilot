@@ -30,6 +30,17 @@ enum AgeGroup {
   AGE_55_PLUS
 }
 
+enum MemoryCategory {
+  PROFILE
+  PREFERENCE
+  STYLE
+  COLOR
+  SIZE
+  OCCASION
+  BRAND
+  OTHER
+}
+
 enum PendingType {
   NONE
   VIBE_CHECK_IMAGE
@@ -45,6 +56,7 @@ model User {
   wardrobe    WardrobeItem[]
   messages    Message[]
   traces      ModelTrace[]
+  memories    Memory[]
 
   inferredGender    Gender?
   inferredAgeGroup  AgeGroup?
@@ -72,6 +84,11 @@ model Message {
   pending          PendingType? @default(NONE)
   createdAt        DateTime     @default(now())
 
+  memoriesProcessed Boolean      @default(false)
+  wardrobeProcessed Boolean      @default(false)
+  hasImage          Boolean      @default(false)
+  imageArchived     Boolean      @default(false)
+
   feedback         Feedback?
   traces           ModelTrace[]
   vibeCheck        VibeCheck?
@@ -80,6 +97,24 @@ model Message {
   @@index([userId, createdAt])
   @@index([role, createdAt])
   @@index([buttonPayload])
+}
+
+model Memory {
+  id               String         @id @default(cuid())
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String
+
+  category         MemoryCategory
+  key              String
+  value            String
+  confidence       Float?
+  sourceMessageIds String[]       @default([])
+
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([userId, category, key])
+  @@index([userId, updatedAt])
 }
 
 model VibeCheck {
