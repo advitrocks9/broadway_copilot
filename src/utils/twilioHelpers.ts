@@ -32,16 +32,17 @@ export function handleTwilioError(err: TwilioApiError): never {
 /**
  * Validates that an incoming request is authentic from Twilio.
  */
-export function validateTwilioRequest(
-  url: string,
-  params: TwilioWebhookPayload,
-  signature: string | undefined
-): boolean {
+export function validateTwilioRequest( req: any ): boolean {
+  const signature = req.header('X-Twilio-Signature') || req.header('x-twilio-signature');
+  const protoHeader = (req.headers['x-forwarded-proto'] as string) || req.protocol;
+  const hostHeader = (req.headers['x-forwarded-host'] as string) || (req.get('host') as string);
+  const fullUrl = `${protoHeader}://${hostHeader}${req.originalUrl}`;
+
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   if (process.env.TWILIO_VALIDATE_WEBHOOK === 'false') return true;
   if (!authToken) return false;
   if (!signature) return false;
-  return twilio.validateRequest(authToken, signature, url, params);
+  return twilio.validateRequest(authToken, signature, fullUrl, req.body);
 }
 
 /**

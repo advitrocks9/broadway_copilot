@@ -39,16 +39,8 @@ export const WELCOME_IMAGE_URL = 'https://res.cloudinary.com/dn3g1tzq1/image/upl
  */
 export const SERVICES = [
   {
-    text: 'Vibe Check',
-    id: 'vibe_check',
-  },
-  {
     text: 'Occasion Outfit',
     id: 'handle_occasion',
-  },
-  {
-    text: 'Color Analysis',
-    id: 'color_analysis',
   },
   {
     text: 'Outfit Inspo',
@@ -59,3 +51,9 @@ export const SERVICES = [
     id: 'handle_vacation',
   },
 ];
+export const MESSAGE_TTL_SECONDS = 60 * 60; // 1 hour
+export const USER_STATE_TTL_SECONDS = 24 * 60 * 60; // 24 hours
+
+export const USER_REQUEST_LIMIT = 5;
+export const TOKEN_REFILL_PERIOD_MS = 10 * 1000;
+export const PROCESS_LOCK_TTL_SECONDS = 300;

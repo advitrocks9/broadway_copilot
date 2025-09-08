@@ -1,10 +1,12 @@
 import 'dotenv/config';
 
-import prisma from '../../db/client';
-import type { Reply } from '../state';
+import prisma from '../../lib/prisma';
 import { sendText, sendMenu, sendImage } from '../../services/twilioService';
-import { getLatestGen, sanitizeUserKey } from '../../services/runtimeState';
 import { getLogger } from '../../utils/logger';
+import { MessageRole } from '@prisma/client';
+import { MessageContent } from '@langchain/core/messages';
+import redis from '../../lib/redis';
+import { scheduleMemoryExtractionForUser } from '../../services/memoryService';
 
 /**
  * Sends the reply via Twilio based on state.reply and state.mode.
@@ -12,65 +14,79 @@ import { getLogger } from '../../utils/logger';
  */
 const logger = getLogger('node:send_reply');
 
-interface SendReplyInput {
-  waId: string;
-  userId: string;
-  runGen?: number;
-}
 
-interface SendReplyState {
-  input?: SendReplyInput;
-  reply?: Reply | string;
-  replies?: Array<Reply | string>;
-  intent?: string;
-}
+export async function sendReplyNode(state: any): Promise<{}> {
+  const messageKey = `message:${state.input.MessageSid}`;
+  await redis.hSet(messageKey, { status: 'sending' });
 
-interface SendReplyResult extends Record<string, never> {}
+  const replies = state.assistantReply;
+  const userId = state.user.id;
+  const waId = state.user.waId;
 
-export async function sendReplyNode(state: SendReplyState): Promise<SendReplyResult> {
-  const input = state.input;
-  const waId = input?.waId;
-  const userId = input?.userId;
-  const runGen = input?.runGen;
-  const replyObj: Reply | string | undefined = state.reply;
-  const repliesArray: Array<Reply | string> | undefined = state.replies;
-  const intent: string | undefined = state.intent;
+  logger.info({
+    messageId: state.input.MessageSid,
+    userId,
+    waId,
+    replyCount: replies.length
+  }, 'Sending replies to user');
 
-  const collected = Array.isArray(repliesArray) && repliesArray.length > 0 ? repliesArray : (replyObj ? [replyObj] : []);
-  if (!waId || !userId || collected.length === 0) {
-    return {};
+  logger.debug({
+    messageId: state.input.MessageSid,
+    replies: replies.map((r: any) => ({ type: r.reply_type, hasMedia: !!r.media_url }))
+  }, 'SendReply: reply details');
+
+  const formattedContent: MessageContent = [];
+  for (const r of replies) {
+    if (r.reply_type === 'text' || r.reply_type === 'quick_reply') {
+      formattedContent.push({ type: 'text', text: r.reply_text });
+    } else if (r.reply_type === 'image') {
+      if (r.reply_text) {
+        formattedContent.push({ type: 'text', text: r.reply_text });
+      }
+      formattedContent.push({ type: 'image_url', image_url: { url: r.media_url } });
+    }
   }
+  
+  await prisma.message.create({ 
+    data: {
+      userId,
+      role: MessageRole.AI,
+      content: formattedContent,
+    }
+  });
 
-  if (waId && typeof runGen === 'number') {
-    const latest = getLatestGen(waId);
-    if (latest && latest !== runGen) return {};
-  }
-
-  const normalizedReplies: Reply[] = collected.slice(0, 2).map(r => typeof r === 'string' ? { reply_type: 'text' as const, reply_text: r } : r);
-
-  const createData = {
-    userId: userId,
-    role: 'assistant',
-    text: normalizedReplies.map(r => r.reply_type === 'image' ? r.reply_text || '' : r.reply_text).join('\n\n'),
-    intent: intent || null,
-    metadata: { engine: 'langgraph' },
-    replies: normalizedReplies,
-  };
-  const assistantTurn = await prisma.turn.create({ data: createData as any });
-  logger.info({ userId, waId, turnId: assistantTurn.id, repliesCount: normalizedReplies.length, intent }, 'SendReply: persisted assistant turn');
-
+  let success = true;
   try {
-    for (const r of normalizedReplies) {
+    for (const r of replies) {
       if (r.reply_type === 'text') {
         await sendText(waId, r.reply_text);
+        logger.debug({ messageId: state.input.MessageSid, waId }, 'SendReply: sent text message');
       } else if (r.reply_type === 'quick_reply') {
         await sendMenu(waId, r.reply_text, r.buttons);
+        logger.debug({ messageId: state.input.MessageSid, waId, buttonCount: r.buttons?.length }, 'SendReply: sent menu message');
       } else if (r.reply_type === 'image') {
         await sendImage(waId, r.media_url, r.reply_text);
+        logger.debug({ messageId: state.input.MessageSid, waId, mediaUrl: r.media_url }, 'SendReply: sent image message');
       }
     }
+    logger.info({ messageId: state.input.MessageSid, userId, waId }, 'All replies sent successfully');
   } catch (err) {
-    logger.error({ err }, 'SendReply: Twilio send failed');
+    logger.error({
+      messageId: state.input.MessageSid,
+      userId,
+      waId,
+      err: (err as Error)?.message
+    }, 'Failed to send replies');
+    success = false;
+  }
+
+  await redis.hSet(messageKey, { status: success ? 'delivered' : 'failed' });
+  logger.debug({ messageId: state.input.MessageSid, status: success ? 'delivered' : 'failed' }, 'SendReply: updated message status');
+
+  try {
+    await scheduleMemoryExtractionForUser(userId, 5 * 60 * 1000);
+  } catch (err: any) {
+    logger.warn({ userId, err: err?.message }, 'Failed to schedule memory extraction');
   }
 
   return {};

@@ -1,4 +1,4 @@
-import { QueueEntry, BucketState, RateLimitResult, StatusResolvers, ProcessingState } from './common';
+import { QueueEntry, BucketState, StatusResolvers, ProcessingState } from './common';
 
 /**
  * Twilio-specific types and interfaces for WhatsApp integration.
@@ -40,6 +40,9 @@ export interface TwilioWebhookPayload {
   SmsStatus?: string;
   NumMedia?: string;
   MediaUrl0?: string;
+  MediaContentType0?: string;
+  ButtonText?: string;
+  ButtonPayload?: string;
 }
 
 /**

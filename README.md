@@ -6,9 +6,9 @@ Broadway Copilot is a WhatsApp personal stylist powered by LangGraph and OpenAI.
 
 - **Express API**: Receives Twilio webhooks at `POST /twilio/` and `POST /twilio/callback/`, serves static files under `/uploads/`
 - **LangGraph Agent**: State machine with 17+ nodes that intelligently routes conversations through specialized handlers:
-  - **Core Flow**: `ingest_message` → `hydrate_context` → `infer_profile` → `route_intent`
+  - **Core Flow**: `ingest_message` → `infer_profile` → `route_intent`
   - **Intent Handlers**: `handle_occasion`, `handle_vacation`, `handle_pairing`, `handle_suggest`, `handle_general`
-  - **Image Processing**: `check_image` → `vibe_check` or `color_analysis`
+  - **Image Processing**: `vibe_check` or `color_analysis`
   - **Utilities**: `ask_user_info`, `wardrobe_index`, `hydrate_context`, `send_reply`
 - **Services**:
   - **orchestrator**: Manages inbound message processing with rate limiting and queue management
@@ -250,7 +250,6 @@ This repo includes a GitHub Actions workflow (`.github/workflows/google-cloudrun
   - `ingestMessage.ts`: Message preprocessing and validation
   - `hydrateContext.ts`: Context loading from database
   - `inferProfile.ts`: User profile inference
-  - `checkImage.ts`: Image analysis routing
   - `vibeCheck.ts`, `colorAnalysis.ts`: AI-powered outfit and color analysis
   - `handle*.ts`: Domain-specific conversation handlers (occasion, vacation, pairing, suggest, general)
   - `askUserInfo.ts`: Profile information collection
@@ -265,7 +264,7 @@ This repo includes a GitHub Actions workflow (`.github/workflows/google-cloudrun
 
 **Database & Types:**
 - `prisma/schema.prisma`: Database models and relationships
-- `src/db/client.ts`: Prisma client configuration
+- `src/lib/prisma.ts`: Prisma client configuration
 - `src/types/`: TypeScript type definitions:
   - `common.ts`: Shared types and interfaces
   - `contracts.ts`: Agent communication contracts

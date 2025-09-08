@@ -1,90 +1,63 @@
-import prisma from '../db/client';
+import { extension as extFromMime } from 'mime-types';
+import { randomUUID } from 'crypto';
 import { getLogger } from './logger';
-import fs from 'fs';
-import { promises as fsp } from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
-import OpenAI from 'openai';
-import { ensureDir } from './paths';
-import { OpenAIFileResponse } from '../types/common';
+import { ensureDir, userUploadDir } from './paths';
 
-/**
- * Media utilities for handling image uploads and downloads.
- */
 const logger = getLogger('utils:media');
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID || '';
-const authToken = process.env.TWILIO_AUTH_TOKEN || '';
+const twilioAuth = {
+  sid: process.env.TWILIO_ACCOUNT_SID || '',
+  token: process.env.TWILIO_AUTH_TOKEN || '',
+};
 
 /**
- * Determines file extension from content type header.
- * @param contentType - The content type string from HTTP headers
- * @returns The appropriate file extension (e.g., '.jpg', '.png')
+ * Downloads media from Twilio and saves it locally
+ * @param url - Twilio media URL
+ * @param waId - WhatsApp ID for user directory
+ * @param mimeType - MIME type (e.g., 'image/jpeg')
+ * @returns Public URL to the downloaded file
  */
-function extensionFromContentType(contentType: string | undefined): string {
-  if (!contentType) return '';
-  const map: Record<string, string> = {
-    jpeg: '.jpg',
-    jpg: '.jpg',
-    png: '.png',
-    webp: '.webp',
-    gif: '.gif',
-  };
-  const lower = contentType.toLowerCase();
-  for (const key of Object.keys(map)) {
-    if (lower.includes(key)) return map[key];
+export async function downloadTwilioMedia(
+  url: string,
+  waId: string,
+  mimeType: string
+): Promise<string> {
+  if (!twilioAuth.sid || !twilioAuth.token) {
+    logger.error('Twilio credentials missing for media download');
+    throw new Error('Twilio credentials missing');
   }
-  return '';
+  if (!mimeType) {
+    logger.error({ url, waId }, 'MIME type missing for media download');
+    throw new Error('MIME type is required');
+  }
+
+  const extension = extFromMime(mimeType);
+  const filename = `twilio_${randomUUID()}${extension ? `.${extension}` : ''}`;
+
+  logger.debug({ url, waId, mimeType, filename }, 'Downloading Twilio media');
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${twilioAuth.sid}:${twilioAuth.token}`).toString('base64')}`,
+    },
+  });
+
+  if (!response.ok) {
+    logger.error({ url, waId, status: response.status }, 'Failed to download Twilio media');
+    throw new Error(`Failed to download media: ${response.status}`);
+  }
+
+  const uploadDir = userUploadDir(waId);
+  await ensureDir(uploadDir);
+  const filePath = path.join(uploadDir, filename);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  await fs.writeFile(filePath, buffer);
+
+  const baseUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
+  const publicUrl = `${baseUrl}/uploads/${waId}/${filename}`;
+  logger.info({ waId, filename, filePath, mimeType, size: buffer.length }, 'Twilio media downloaded and saved');
+
+  return publicUrl;
 }
-
-/**
- * Downloads media from Twilio and saves it to the specified directory.
- */
-export async function downloadTwilioMedia(url: string, dir: string, suggestedExt?: string): Promise<string> {
-  if (!accountSid || !authToken) throw new Error('Twilio credentials missing');
-  const authHeader = 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64');
-  const res = await fetch(url, { headers: { Authorization: authHeader } });
-  if (!res.ok) throw new Error(`Failed to download media: ${res.status}`);
-  const ct = res.headers.get('content-type') || undefined;
-  const ext = suggestedExt || extensionFromContentType(ct) || path.extname(new URL(url).pathname) || '';
-  const filename = `twilio_${Date.now()}${ext}`;
-  await ensureDir(dir);
-  const filePath = path.join(dir, filename);
-  const buf = Buffer.from(await res.arrayBuffer());
-  await fsp.writeFile(filePath, buf);
-  logger.info({ filePath }, 'Downloaded Twilio media');
-  return filePath;
-}
-
-/**
- * Uploads an image file to OpenAI's Files API for vision processing.
- */
-export async function uploadImageToOpenAI(filePath: string): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
-  const client = new OpenAI({ apiKey });
-  const stream = fs.createReadStream(filePath);
-  const uploaded = await client.files.create({ file: stream as any, purpose: 'vision' as any });
-  logger.info({ filePath }, 'Uploaded image to OpenAI');
-  const response = uploaded as OpenAIFileResponse;
-  return response.id;
-}
-
-/**
- * Ensures an OpenAI Files API id exists for a given local image path.
- */
-export async function ensureVisionFileId(imagePath?: string, existingFileId?: string): Promise<string | undefined> {
-  if (existingFileId) return existingFileId;
-  if (!imagePath) return undefined;
-  return uploadImageToOpenAI(imagePath);
-}
-
-/**
- * Persists an upload row for analytics and joins.
- */
-export async function persistUpload(userId: string, imagePath: string, fileId?: string) {
-  const row = await prisma.upload.create({ data: { userId, imagePath, fileId: fileId ?? null } });
-  logger.info({ uploadId: row.id, userId }, 'Persisted upload');
-  return row;
-}
-
-

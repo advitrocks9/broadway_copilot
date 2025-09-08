@@ -1,17 +1,20 @@
 import 'dotenv/config';
-import { ValidationUtils } from '../utils/validation';
 import express from 'express';
 import cors from 'cors';
 import { errorHandler } from './middleware/errors';
 import { staticUploadsMount } from '../utils/paths';
-import { sendText } from '../services/twilioService';
-import { validateTwilioRequest, processStatusCallback } from '../utils/twilioHelpers';
-import { orchestrateInbound } from '../services/orchestrator';
+import { processStatusCallback } from '../utils/twilioHelpers';
 import { getLogger } from '../utils/logger';
+import redis, { connectRedis } from '../lib/redis';
+import prisma from '../lib/prisma';
+import { rateLimiter } from './middleware/rateLimiter';
+import { authenticateRequest } from './middleware/auth';
+import { runAgent } from '../agent/graph';
+import { launchMemoryWorker } from '../services/memoryService';
+import { launchWardrobeWorker } from '../services/wardrobeService';
+import { launchImageUploadWorker } from '../services/imageUploadService';
+import { MESSAGE_TTL_SECONDS, USER_STATE_TTL_SECONDS } from '../utils/constants';
 
-/**
- * Express API entrypoint for Broadway WhatsApp Bot server.
- */
 const logger = getLogger('api');
 const app = express();
 app.set('trust proxy', true);
@@ -21,81 +24,139 @@ app.use(express.json());
 
 app.use('/uploads', express.static(staticUploadsMount()));
 
-/**
- * Handles Twilio webhooks, validates requests, and runs the agent.
- */
-app.post('/twilio/', async (req, res) => {
-  try {
-    const signature = req.header('X-Twilio-Signature') || req.header('x-twilio-signature');
-    const protoHeader = (req.headers['x-forwarded-proto'] as string) || req.protocol;
-    const hostHeader = (req.headers['x-forwarded-host'] as string) || (req.get('host') as string);
-    const fullUrl = `${protoHeader}://${hostHeader}${req.originalUrl}`;
-    
-    const isValid = validateTwilioRequest(fullUrl, req.body || {}, signature || undefined);
-    if (!isValid) {
-      logger.warn({
-        url: fullUrl,
-        hasSignature: Boolean(signature),
-        contentType: req.headers['content-type'],
-      }, 'Invalid Twilio request signature');
-      return res.status(403).send('Forbidden');
+const userControllers: Map<string, { controller: AbortController; messageId: string }> = new Map();
+
+app.post('/twilio/', authenticateRequest, rateLimiter, async (req, res) => {
+  try { 
+    const userId = req.body.From;
+    const messageId = req.body.MessageSid;
+    logger.debug({ userId, messageId }, 'Processing webhook');
+
+    if (!userId || !messageId) {
+      logger.warn('Missing userId or messageId in webhook');
+      return res.status(400).end();
     }
 
-    // Validate webhook payload
-    const validatedBody = ValidationUtils.validateTwilioWebhook(req.body);
+    const messageKey = `message:${messageId}`;
+    if (await redis.exists(messageKey) === 1) {
+      logger.debug({ messageId }, 'Message already processed');
+      return res.status(200).end();
+    }
 
-    // Validate message content if present
-    if (validatedBody.Body) {
-      const contentValidation = ValidationUtils.validateMessageContent(validatedBody.Body);
-      if (!contentValidation.isValid) {
-        logger.warn({
-          body: validatedBody,
-          reason: contentValidation.reason
-        }, 'Invalid message content');
-        sendText(validatedBody.From || 'unknown', contentValidation.reason || 'Invalid message');
-        return res.status(200).end();
+    await redis.hSet(messageKey, {
+      userId,
+      status: 'queued',
+      createdAt: Date.now(),
+    });
+    await redis.expire(messageKey, MESSAGE_TTL_SECONDS);
+
+    const userActiveKey = `user_active:${userId}`;
+    const currentActive = await redis.get(userActiveKey);
+    const currentStatus = currentActive ? await redis.hGet(`message:${currentActive}`, 'status') : null;
+
+    const hasActiveRun = userControllers.has(userId);
+
+    if (hasActiveRun && currentStatus === 'running') {
+      const active = userControllers.get(userId);
+      if (active) {
+        active.controller.abort();
       }
     }
 
-    await orchestrateInbound({ body: validatedBody });
-
-    logger.info('Webhook processed successfully');
-    return res.status(200).end();
+    if (currentStatus === 'sending') {
+      const queueKey = `user_queue:${userId}`;
+      await redis.rPush(queueKey, JSON.stringify({ messageId, input: req.body }));
+      await redis.expire(queueKey, USER_STATE_TTL_SECONDS);
+      logger.debug({ messageId, userId }, 'Queued message due to active sending');
+      return res.status(200).end();
+    } else {
+      await redis.set(userActiveKey, messageId, { EX: USER_STATE_TTL_SECONDS });
+      logger.debug({ messageId, userId }, 'Starting message processing');
+      processMessage(userId, messageId, req.body);
+      return res.status(200).end();
+    }
   } catch (err: any) {
-    logger.error({
-      message: err?.message,
-      stack: err?.stack,
-      body: req?.body,
-      headers: req?.headers,
-    }, 'Inbound webhook error');
+    logger.error({ err: err?.message, messageId: req.body?.MessageSid }, 'Webhook processing failed');
+    const messageId = req.body?.MessageSid;
+    if (messageId) {
+      await redis.hSet(`message:${messageId}`, { status: 'failed' });
+    }
     return res.status(500).end();
   }
 });
 
-app.post('/twilio/callback/', async (req, res) => {
+app.post('/twilio/callback/', authenticateRequest, async (req, res) => {
   try {
-    const signature = req.header('X-Twilio-Signature') || req.header('x-twilio-signature');
-    const protoHeader = (req.headers['x-forwarded-proto'] as string) || req.protocol;
-    const hostHeader = (req.headers['x-forwarded-host'] as string) || (req.get('host') as string);
-    const fullUrl = `${protoHeader}://${hostHeader}${req.originalUrl}`;
-
-    const isValid = validateTwilioRequest(fullUrl, req.body || {}, signature || undefined);
-    if (!isValid) {
-      logger.warn({ url: fullUrl, hasSignature: Boolean(signature) }, 'Invalid Twilio callback signature');
-      return res.status(403).send('Forbidden');
-    }
-
     processStatusCallback(req.body || {});
     return res.status(200).end();
   } catch (err: any) {
-    logger.error({ message: err?.message, stack: err?.stack, body: req?.body }, 'Callback processing error');
+    logger.error({ err: err?.message }, 'Callback processing failed');
     return res.status(500).end();
   }
 });
 
 app.use(errorHandler);
 
+async function processMessage(userId: string, messageId: string, input: Record<string, any>): Promise<void> {
+  const controller = new AbortController();
+  userControllers.set(userId, { controller, messageId });
+
+  const messageKey = `message:${messageId}`;
+  await redis.hSet(messageKey, { status: 'running' });
+  logger.debug({ userId, messageId }, 'Processing message');
+
+  try {
+    await runAgent(input, { signal: controller.signal });
+    await redis.hSet(messageKey, { status: 'delivered' });
+    logger.debug({ userId, messageId }, 'Message processed successfully');
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      logger.info({ userId, messageId }, 'Message processing aborted');
+    } else {
+      logger.error({ userId, messageId, err: err?.message }, 'Message processing failed');
+    }
+    await redis.hSet(messageKey, { status: 'failed' });
+  } finally {
+    const current = userControllers.get(userId);
+    if (current && current.messageId === messageId) {
+      userControllers.delete(userId);
+
+      const queueKey = `user_queue:${userId}`;
+      const nextStr = await redis.lPop(queueKey);
+      if (nextStr) {
+        const next = JSON.parse(nextStr);
+        const userActiveKey = `user_active:${userId}`;
+        await redis.set(userActiveKey, next.messageId, { EX: USER_STATE_TTL_SECONDS });
+        logger.debug({ userId, nextMessageId: next.messageId }, 'Processing queued message');
+        processMessage(userId, next.messageId, next.input);
+      } else {
+        const userActiveKey = `user_active:${userId}`;
+        await redis.del(userActiveKey);
+        logger.debug({ userId }, 'No more queued messages');
+      }
+    }
+  }
+}
+
+async function shutdown(signal: string) {
+  logger.info({ signal }, 'Shutdown signal received, closing gracefully');
+  try {
+    if (redis.isOpen) await redis.quit();
+    await prisma.$disconnect();
+  } finally {
+    process.exit(0);
+  }
+}
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+connectRedis();
+logger.info('Connected to Redis');
+
 const PORT = Number(process.env.PORT || 8080);
 app.listen(PORT, '0.0.0.0', async () => {
   logger.info({ port: PORT }, 'Broadway WhatsApp Bot server started');
+  launchMemoryWorker();
+  launchWardrobeWorker();
+  launchImageUploadWorker();
 });

@@ -1,111 +1,97 @@
-import prisma from '../db/client';
-import { getLogger } from '../utils/logger';
-import { THIRTY_MINUTES_MS, HOUR_MS } from '../utils/constants';
+import prisma from '../lib/prisma';
+import { DynamicStructuredTool } from '@langchain/core/tools';
+import { z } from 'zod';
+import { OpenAIEmbeddings } from '@langchain/openai';
 
-/**
- * Agent data helpers: recent turns, wardrobe, colors, and activity timestamps.
- */
-const logger = getLogger('agent:tools');
+const searchWardrobeSchema = z.object({
+  userId: z.string(),
+  query: z.array(z.string()),
+});
 
-/**
- * Fetches recent conversation turns for a user within the last 30 minutes.
- * @param userId - The user identifier
- * @param limit - Maximum number of turns to return (default: 6)
- * @returns Array of formatted conversation turns
- */
-export async function fetchRecentTurns(userId: string, limit = 6) {
-  const thirtyMinutesAgo = new Date(Date.now() - THIRTY_MINUTES_MS);
-  const turns = await prisma.turn.findMany({
-    where: { userId, createdAt: { gte: thirtyMinutesAgo } },
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-    select: { role: true, text: true, imagePath: true },
-  });
-  
-  return turns
-    .reverse()
-    .filter(turn => turn.text && turn.text.trim())
-    .map(turn => `${turn.role}: ${turn.text}`);
-}
+export const searchWardrobe = new DynamicStructuredTool({
+  name: 'searchWardrobe',
+  description: "Performs a vector search on the user's wardrobe",
+  schema: searchWardrobeSchema,
+  func: async ({ userId, query }: z.infer<typeof searchWardrobeSchema>) => {
+    let result = {};
+    const model = new OpenAIEmbeddings({
+      model: 'text-embedding-3-small',
+    });
+    const embeddedQuery = await model.embedDocuments(query);
 
-/**
- * Returns wardrobe items for a user.
- * @param userId - The user identifier
- * @returns Object containing array of wardrobe items
- */
-export async function queryWardrobe(userId: string) {
-  const items = await prisma.wardrobeItem.findMany({
-    where: { userId },
-    orderBy: { createdAt: 'desc' },
-    select: {
-      name: true,
-      category: true,
-      colors: true,
-      subtype: true,
-      attributes: true,
-      createdAt: true,
-    },
-  });
-  return { items };
-}
+    result = await prisma.$queryRaw`
+      SELECT name, category, colors, type, subtype, attributes FROM WardrobeItem
+      WHERE embedding IS NOT NULL AND userId = ${userId}
+      ORDER BY embedding <=> ${embeddedQuery}
+      LIMIT 20
+    `;
+    
+    return result;
+  },
+});
 
-/**
- * Returns the latest color analysis for a user, if any.
- * @param userId - The user identifier
- * @returns Object containing latest color analysis data
- */
-export async function queryColors(userId: string) {
-  const uploadsWithColor = await prisma.upload.findMany({
-    where: { userId, color: { isNot: null } },
-    include: {
-      color: {
-        select: {
-          palette_name: true,
-          top3_colors: true,
-          avoid3_colors: true,
-          undertone: true,
-        },
+
+const fetchColorAnalysisSchema = z.object({
+  userId: z.string(),
+});
+
+export const fetchColorAnalysis = new DynamicStructuredTool({
+  name: 'fetchColorAnalysis',
+  description: "Fetches the users latest color analysis data.",
+  schema: fetchColorAnalysisSchema,
+  func: async ({ userId }: z.infer<typeof fetchColorAnalysisSchema>) => {
+    const result = await prisma.colorAnalysis.findFirst({
+      select: {
+        palette_name: true,
+        top3_colors: true,
+        avoid3_colors: true,
+        undertone: true,
       },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 1,
-  });
-  const raw = uploadsWithColor[0]?.color || null;
-  const latest = raw
-    ? {
-        palette_name: raw.palette_name ?? null,
-        top_3_colors: (raw as any).top3_colors ?? null,
-        bottom_3_colors: (raw as any).avoid3_colors ?? null,
-        undertone: raw.undertone ?? null,
-      }
-    : null;
-  return { latestColorAnalysis: latest };
+      where: { message: { userId: userId } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return result;
+  },
+});
+
+
+const fetchRelevantMemoriesSchema = z.object({
+  userId: z.string().describe('The user ID to fetch memories for'),
+  query: z.string().describe('The semantic query to find relevant memories'),
+});
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+  }
+  const normA = Math.sqrt(a.reduce((sum, v) => sum + v * v, 0));
+  const normB = Math.sqrt(b.reduce((sum, v) => sum + v * v, 0));
+  return normA && normB ? dot / (normA * normB) : 0;
 }
 
-/**
- * Returns activity timestamps for a user's recent interactions.
- * @param userId - The user identifier
- * @returns Object containing last activity timestamps and hours ago calculations
- */
-export async function queryActivityTimestamps(userId: string): Promise<{
-  lastVibeCheckAt: Date | null;
-  lastColorAnalysisAt: Date | null;
-  vibeCheckHoursAgo: number | undefined;
-  colorAnalysisHoursAgo: number | undefined;
-}> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { lastVibeCheckAt: true, lastColorAnalysisAt: true },
-  });
-  const now = Date.now();
-  const hoursAgo = (d: Date | null | undefined) =>
-    d ? Math.floor((now - new Date(d).getTime()) / HOUR_MS) : undefined;
-  const vibeCheckHoursAgo = hoursAgo(user?.lastVibeCheckAt ?? null);
-  const colorAnalysisHoursAgo = hoursAgo(user?.lastColorAnalysisAt ?? null);
-  return {
-    lastVibeCheckAt: user?.lastVibeCheckAt ?? null,
-    lastColorAnalysisAt: user?.lastColorAnalysisAt ?? null,
-    vibeCheckHoursAgo,
-    colorAnalysisHoursAgo,
-  };
-}
+export const fetchRelevantMemories = new DynamicStructuredTool({
+  name: 'fetchRelevantMemories',
+  description: 'Fetches relevant memories for the user based on semantic similarity to the query.',
+  schema: fetchRelevantMemoriesSchema,
+  func: async ({ userId, query }: z.infer<typeof fetchRelevantMemoriesSchema>) => {
+    const memories = await prisma.memory.findMany({
+      where: { userId },
+      select: { id: true, category: true, key: true, value: true, confidence: true, updatedAt: true },
+    });
+    if (memories.length === 0) return [];
+    const model = new OpenAIEmbeddings({ model: 'text-embedding-3-small' });
+    const texts = memories.map(m => `${m.category}: ${m.key} = ${m.value}`);
+    const [embeddings, queryEmb] = await Promise.all([
+      model.embedDocuments(texts),
+      model.embedQuery(query),
+    ]);
+    const similarities = embeddings.map((emb, i) => ({
+      index: i,
+      sim: cosineSimilarity(emb, queryEmb),
+    })).sort((a, b) => b.sim - a.sim);
+    const top = similarities.slice(0, 5).map(s => memories[s.index]);
+    return top;
+  },
+});
+

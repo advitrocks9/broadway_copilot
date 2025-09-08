@@ -1,96 +1,155 @@
-import prisma from '../../db/client';
-import { RunInput } from '../state';
+import prisma from '../../lib/prisma';
 import { getOrCreateUserByWaId } from '../../utils/user';
-import { downloadTwilioMedia, ensureVisionFileId } from '../../utils/media';
-import { userUploadDir } from '../../utils/paths';
-import { sanitizeWaIdForFilesystem } from '../../utils/text';
+import { downloadTwilioMedia } from '../../utils/media';
 import { getLogger } from '../../utils/logger';
+import { HumanMessage, AIMessage, type MessageContent } from '@langchain/core/messages';
+import { MessageRole, PendingType, User } from '@prisma/client';
 
-/**
- * Normalizes Twilio webhook payload into RunInput and records a user turn.
- */
 const logger = getLogger('node:ingest_message');
 
 /**
- * Safely extracts a string value from Twilio webhook payload.
+ * Extracts text content from message content, replacing images with [IMAGE] placeholders
  */
-function extractString(body: Record<string, unknown>, key: string): string | undefined {
-  const value = body?.[key];
-  return value ? value.toString() : undefined;
-}
-
-/**
- * Safely extracts a number value from Twilio webhook payload.
- */
-function extractNumber(body: Record<string, unknown>, key: string): number {
-  const value = body?.[key];
-  return Number(value || 0);
-}
-
-interface IngestMessageState {
-  input: Record<string, unknown>;
-}
-
-interface IngestMessageResult {
-  input?: RunInput;
-  reply?: string;
-}
-
-export async function ingestMessageNode(state: IngestMessageState): Promise<IngestMessageResult> {
-  const twilioBody = state.input as Record<string, unknown>;
-  const from: string = extractString(twilioBody, 'From') || '';
-  const bodyText: string | undefined = extractString(twilioBody, 'Body');
-  const buttonPayload: string | undefined = extractString(twilioBody, 'ButtonPayload');
-  const numMedia: number = extractNumber(twilioBody, 'NumMedia');
-  const mediaUrl0: string | undefined = extractString(twilioBody, 'MediaUrl0');
-
-  if (!from) {
-    return { reply: 'Invalid request: missing sender.' };
+function extractTextContent(content: MessageContent): string {
+  if (Array.isArray(content)) {
+    return content
+      .map((part: any) => {
+        if (part.type === 'image_url') {
+          return '[IMAGE]';
+        } else if (part.type === 'text') {
+          return part.text;
+        }
+        return '';
+      })
+      .join(' ');
   }
+  return content as string;
+}
 
-  const waId = from;
-  const user = await getOrCreateUserByWaId(waId);
+export async function ingestMessageNode(state: any): Promise<any> {
 
-  let imagePath: string | undefined = undefined;
-  let fileId: string | undefined = undefined;
-  if (numMedia > 0 && mediaUrl0) {
+  const text = state.input.Body;
+  const buttonPayload = state.input.ButtonPayload;
+  const numMedia = state.input.NumMedia;
+  const mediaUrl0 = state.input.MediaUrl0;
+  const mediaContentType0 = state.input.MediaContentType0;
+  const waId = state.input.From;
+
+  logger.debug({
+    waId,
+    messageLength: text?.length,
+    hasButtonPayload: !!buttonPayload,
+    numMedia: Number(numMedia) || 0,
+    hasMedia: !!mediaUrl0
+  }, 'IngestMessage: processing incoming message');
+
+  const user: User = await getOrCreateUserByWaId(waId);
+  logger.debug({ waId, userId: user.id }, 'IngestMessage: user resolved');
+
+  let content: MessageContent = [{ type: 'text', text }];
+  if (numMedia == 1 && mediaUrl0 && mediaContentType0.startsWith('image/')) {
     try {
-      const dir = userUploadDir(sanitizeWaIdForFilesystem(waId));
-      imagePath = await downloadTwilioMedia(mediaUrl0, dir);
-      fileId = await ensureVisionFileId(imagePath);
+      const imagePath = await downloadTwilioMedia(mediaUrl0, waId, mediaContentType0);
+      content.push({ type: 'image_url', image_url: { url: imagePath } });
     } catch (err) {
       logger.error({ err }, 'IngestMessage: failed to download/process media');
-      return { reply: 'I had a problem downloading the image. Please try again.' };
     }
   }
 
-  await prisma.turn.create({
-    data: {
-      userId: user.id,
-      role: 'user',
-      text: bodyText || null,
-      imagePath: imagePath || null,
-      fileId: fileId || null,
-      metadata: buttonPayload ? { buttonPayload } : undefined,
-    },
-  });
-  logger.info({ userId: user.id, waId, hasImage: Boolean(imagePath), hasText: Boolean(bodyText) }, 'Ingested user turn');
+  const [lastMessage, latestAssistantMessage] = await Promise.all([
+    prisma.message.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, role: true, content: true, pending: true }
+    }),
+    prisma.message.findFirst({
+      where: {
+        userId: user.id,
+        role: MessageRole.AI
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { pending: true }
+    })
+  ]);
 
-  const normalized: RunInput = {
-    userId: user.id,
-    waId,
-    text: bodyText,
-    imagePath,
-    fileId,
-    buttonPayload,
-    gender: (user.confirmedGender as 'male' | 'female' | null) ?? (user.inferredGender as 'male' | 'female' | null) ?? null,
-  };
+  const pending = latestAssistantMessage?.pending ?? PendingType.NONE;
 
-  // Extract runGen from twilio body
-  const runGen = (twilioBody as { runGen?: number })?.runGen;
-  if (typeof runGen === 'number') {
-    normalized.runGen = runGen;
+  if (lastMessage && lastMessage.role === MessageRole.USER) {
+    const existingContent = lastMessage.content as MessageContent[];
+    const mergedContent = [...existingContent, ...content];
+
+    await prisma.message.update({
+      where: { id: lastMessage.id },
+      data: {
+        content: mergedContent,
+        ...(buttonPayload !== null && { buttonPayload }),
+        hasImage: true // since we're adding image
+      }
+    });
+  } else {
+    await prisma.message.create({
+      data: {
+        userId: user.id,
+        role: MessageRole.USER,
+        content,
+        ...(buttonPayload !== null && { buttonPayload }),
+        hasImage: numMedia > 0
+      }
+    });
   }
 
-  return { input: normalized };
+  const messages = await prisma.message.findMany({
+    where: {
+      userId: user.id,
+      createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 5,
+    select: {
+      id: true,
+      role: true,
+      content: true,
+      buttonPayload: true,
+      createdAt: true,
+    },
+  });
+
+  const conversationHistoryWithImages = messages.reverse().map(msg => {
+    if (msg.role === MessageRole.USER) {
+      return new HumanMessage({
+        content: msg.content as MessageContent,
+        additional_kwargs: { createdAt: msg.createdAt, buttonPayload: msg.buttonPayload, messageId: msg.id }
+      });
+    } else {
+      return new AIMessage({
+        content: msg.content as MessageContent,
+        additional_kwargs: { createdAt: msg.createdAt, messageId: msg.id }
+      });
+    }
+  });
+
+  const conversationHistoryTextOnly = conversationHistoryWithImages.map(msg => {
+    const textContent = extractTextContent(msg.content as MessageContent);
+
+    if (msg instanceof HumanMessage) {
+      return new HumanMessage({ content: textContent, additional_kwargs: msg.additional_kwargs });
+    } else {
+      return new AIMessage({ content: textContent, additional_kwargs: msg.additional_kwargs });
+    }
+  });
+
+  logger.debug({
+    waId,
+    conversationHistoryLength: conversationHistoryWithImages.length,
+    pending,
+    userId: user.id
+  }, 'IngestMessage: completed message processing');
+
+  return {
+    conversationHistoryWithImages,
+    conversationHistoryTextOnly,
+    pending,
+    user,
+    input: state.input
+  };
 }

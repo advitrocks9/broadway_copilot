@@ -1,139 +1,79 @@
-import { AdditionalContextItem, RunInput } from '../state';
-import { getNanoLLM } from '../../services/openaiService';
-import { queryActivityTimestamps } from '../tools';
+import { z } from 'zod';
+
+import { Replies } from '../state';
+import { getTextLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
 import { WELCOME_IMAGE_URL } from '../../utils/constants';
-import {
-  buildCompletePrompt,
-  processResponseWithFollowup,
-  StructuredReplySchema,
-  Reply,
-} from '../../utils/handlerUtils';
+import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 
-/**
- * Handles general chat; may return text, menu, or card per prompt schema.
- */
+import { fetchRelevantMemories } from '../tools';
+
 const logger = getLogger('node:handle_general');
 
-interface HandleGeneralState {
-  input: RunInput;
-  messages?: unknown[];
-  wardrobe?: unknown;
-  latestColorAnalysis?: unknown;
-  additionalContext?: AdditionalContextItem[];
-}
+const LLMOutputSchema = z.object({
+  reply_type: z.enum(['greeting', 'menu', 'chat']).describe("The type of reply to generate. Use 'greeting' for initial hellos, 'menu' if the user asks for help or what you can do, and 'chat' for conversational replies."),
+  message1_text: z.string().describe("The primary text response to the user."),
+  message2_text: z.string().nullable().describe("An optional second message to provide more details or continue the conversation."),
+  
+});
 
-interface HandleGeneralResult {
-  replies: Reply[];
-}
+export async function handleGeneralNode(state: any) {
 
-export async function handleGeneralNode(state: HandleGeneralState): Promise<HandleGeneralResult> {
-  const { input } = state;
-  const systemPrompt = await loadPrompt('handle_general.txt');
-  const activity = await queryActivityTimestamps(input.userId);
-  const userQuestion = input.text || 'Help with style.';
+  const { conversationHistoryTextOnly, userId } = state;
 
-  const prompt = buildCompletePrompt(
-    systemPrompt,
-    input.gender,
-    state.messages,
-    state,
-    activity,
-    userQuestion
-  );
+  const latestMessage = conversationHistoryTextOnly.at(-1)?.content ?? '';
 
-  logger.info({ userText: userQuestion }, 'HandleGeneral: input');
-  logger.debug({ prompt }, 'HandleGeneral: model input');
+  let formattedMemories = 'No relevant memories.';
 
-  const llm = getNanoLLM();
+  try {
+
+    const memories = await fetchRelevantMemories.func({ userId, query: latestMessage });
+
+    if (memories.length > 0) {
+
+      formattedMemories = memories.map(m => `${m.category}: ${m.key} = ${m.value} (confidence: ${m.confidence ?? 'N/A'}, updated: ${m.updatedAt.toISOString()})`).join('\n');
+
+    }
+
+  } catch (err) {
+
+    logger.warn({ err }, 'Failed to fetch memories');
+
+  }
+
+  const systemPrompt = await loadPrompt('handle_general.txt', { injectPersona: true });
+
+  const enhancedPrompt = `${systemPrompt}\n\nRelevant User Memories:\n${formattedMemories}`;
+
+  const availableActions = [
+    { text: 'Vibe check', id: 'vibe_check' },
+    { text: 'Color analysis', id: 'color_analysis' },
+    { text: 'Styling', id: 'styling' },
+  ]
+  const promptTemplate = ChatPromptTemplate.fromMessages([
+    ["system", enhancedPrompt],
+    new MessagesPlaceholder("history"),
+  ]);
+
+  const formattedPrompt = await promptTemplate.invoke({ history: state.conversationHistoryTextOnly || [] });
+
+  const llm = getTextLLM();
   const response = await (llm as any)
-    .withStructuredOutput(StructuredReplySchema)
-    .invoke(prompt) as {
-      reply_type: 'text' | 'quick_reply' | 'greeting';
-      reply_text: string;
-      followup_text: string | null;
-    };
+    .withStructuredOutput(LLMOutputSchema)
+    .invoke(formattedPrompt.toChatMessages()) as z.infer<typeof LLMOutputSchema>;
 
-  logger.info(response, 'HandleGeneral: output');
+  logger.debug({ replyType: response.reply_type }, 'HandleGeneral: generated response');
+  const replies: Replies = [];
 
-  // Handle greeting type specially - send image first, then text
   if (response.reply_type === 'greeting') {
-    const replies: Reply[] = [
-      {
-        reply_type: 'image',
-        media_url: WELCOME_IMAGE_URL,
-        reply_text: response.reply_text
-      }
-    ];
-
-    // Add followup text as a separate text reply if present
-    if (response.followup_text) {
-      replies.push({
-        reply_type: 'text',
-        reply_text: response.followup_text
-      });
-    } 
-
-    return { replies };
+    replies.push({ reply_type: 'image', media_url: WELCOME_IMAGE_URL });
+    replies.push({ reply_type: 'quick_reply', reply_text: response.message1_text, buttons: availableActions, });
+  } else if (response.reply_type === 'menu') {
+    replies.push({ reply_type: 'quick_reply', reply_text: response.message1_text, buttons: availableActions, });
+  } else if (response.reply_type === 'chat') {
+    replies.push({ reply_type: 'text', reply_text: response.message1_text });
+    if (response.message2_text) replies.push({ reply_type: 'text', reply_text: response.message2_text });
   }
-
-  // Handle different reply types
-  if (response.reply_type === 'text') {
-    const replies: Reply[] = [
-      {
-        reply_type: 'text',
-        reply_text: response.reply_text
-      }
-    ];
-
-    if (response.followup_text) {
-      replies.push({
-        reply_type: 'text',
-        reply_text: response.followup_text
-      });
-    }
-
-    return { replies };
-  }
-
-  if (response.reply_type === 'quick_reply') {
-    // For quick_reply, we need buttons - let's create some default ones based on the response
-    const replies: Reply[] = [
-      {
-        reply_type: 'quick_reply',
-        reply_text: response.reply_text,
-        buttons: [
-          { text: 'Yes', id: 'positive_response' },
-          { text: 'No', id: 'negative_response' }
-        ]
-      }
-    ];
-
-    if (response.followup_text) {
-      replies.push({
-        reply_type: 'text',
-        reply_text: response.followup_text
-      });
-    }
-
-    return { replies };
-  }
-
-  // Fallback to text for any unhandled types
-  const replies: Reply[] = [
-    {
-      reply_type: 'text',
-      reply_text: response.reply_text
-    }
-  ];
-
-  if (response.followup_text) {
-    replies.push({
-      reply_type: 'text',
-      reply_text: response.followup_text
-    });
-  }
-
-  return { replies };
+  return { assistantReply: replies };
 }
