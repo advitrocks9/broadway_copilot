@@ -1,0 +1,14 @@
+## Context
+The user wants a color analysis but hasn't sent a photo.
+
+## Task
+Craft a friendly, encouraging message asking them to send a clear, well-lit photo of their face.
+
+## Guidelines
+- **Keep it simple and direct.**
+- **Stay on-brand** with the witty, fashion-savvy best friend persona.
+- **Keep it under 30 words.**
+- **Output ONLY the message text.**
+
+## Example
+"Can't wait to find your power colors! ✨ Send me a clear, well-lit selfie when you're ready."
