@@ -1,11 +1,11 @@
 import 'dotenv/config';
 
-import prisma from '../../lib/prisma';
+import { prisma } from '../../lib/prisma';
 import { sendText, sendMenu, sendImage } from '../../services/twilioService';
 import { getLogger } from '../../utils/logger';
 import { MessageRole } from '@prisma/client';
 import { MessageContent } from '@langchain/core/messages';
-import redis from '../../lib/redis';
+import { redis } from '../../lib/redis';
 import { scheduleMemoryExtractionForUser } from '../../services/memoryService';
 
 /**

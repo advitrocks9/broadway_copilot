@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import redis from '../../lib/redis';
+import { redis } from '../../lib/redis';
 import { USER_REQUEST_LIMIT , TOKEN_REFILL_PERIOD_MS, USER_STATE_TTL_SECONDS } from '../../utils/constants';
 import { getLogger } from '../../utils/logger';
 

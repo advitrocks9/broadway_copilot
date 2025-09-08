@@ -1,4 +1,4 @@
-import prisma from '../../lib/prisma';
+import { prisma } from '../../lib/prisma';
 import { getOrCreateUserByWaId } from '../../utils/user';
 import { downloadTwilioMedia } from '../../utils/media';
 import { getLogger } from '../../utils/logger';
@@ -114,7 +114,7 @@ export async function ingestMessageNode(state: any): Promise<any> {
     },
   });
 
-  const conversationHistoryWithImages = messages.reverse().map(msg => {
+  const conversationHistoryWithImages = messages.reverse().map((msg: any) => {
     if (msg.role === MessageRole.USER) {
       return new HumanMessage({
         content: msg.content as MessageContent,
@@ -128,7 +128,7 @@ export async function ingestMessageNode(state: any): Promise<any> {
     }
   });
 
-  const conversationHistoryTextOnly = conversationHistoryWithImages.map(msg => {
+  const conversationHistoryTextOnly = conversationHistoryWithImages.map((msg: any) => {
     const textContent = extractTextContent(msg.content as MessageContent);
 
     if (msg instanceof HumanMessage) {

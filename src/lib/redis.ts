@@ -32,5 +32,3 @@ export const connectRedis = async () => {
     logger.debug('Redis client already connected');
   }
 };
-
-export default redis;

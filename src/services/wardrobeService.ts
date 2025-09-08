@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { HumanMessage } from '@langchain/core/messages';
-import redis from '../lib/redis';
-import prisma from '../lib/prisma';
+import { redis } from '../lib/redis';
+import { prisma } from '../lib/prisma';
 import { getLogger } from '../utils/logger';
 import { getVisionLLM } from '../services/openaiService';
 import { loadPrompt } from '../utils/prompts';
@@ -18,7 +18,7 @@ export async function scheduleWardrobeIndexForMessage(messageId: string, delayMs
   logger.debug({ messageId, runAt }, 'Scheduled wardrobe indexing');
 }
 
-export async function processDueWardrobeJobs(maxBatch: number = 50): Promise<void> {
+async function processDueWardrobeJobs(maxBatch: number = 50): Promise<void> {
   const now = Date.now();
   const dueMessageIds = await redis.zRangeByScore(WARDROBE_ZSET_KEY, 0, now, { LIMIT: { offset: 0, count: maxBatch } });
   if (dueMessageIds.length === 0) return;
@@ -149,9 +149,3 @@ async function indexWardrobeFromMessage(messageId: string): Promise<void> {
     // Optionally, don't mark as processed to retry, or mark with error
   }
 }
-
-export default {
-  scheduleWardrobeIndexForMessage,
-  processDueWardrobeJobs,
-  launchWardrobeWorker,
-};

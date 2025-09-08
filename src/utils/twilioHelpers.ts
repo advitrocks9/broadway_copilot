@@ -4,7 +4,7 @@
 
 import twilio from 'twilio';
 import { getLogger } from './logger';
-import { TwilioMessageOptions, TwilioWebhookPayload, TwilioStatusCallbackPayload, TwilioApiError } from '../types/twilio';
+import { TwilioMessageOptions, TwilioStatusCallbackPayload, TwilioApiError } from '../types/twilio';
 import { sidToResolvers, sidToSeenStatuses } from '../services/twilioService';
 
 const logger = getLogger('utils:twilio-helpers');
@@ -124,29 +124,4 @@ export function processStatusCallback(payload: TwilioStatusCallbackPayload): voi
       }
     }, 300000);
   }
-}
-
-/**
- * Combines multiple Twilio webhook bodies into a single body for processing.
- * Merges text messages and uses the latest media attachment.
- */
-export function combineBodies(bodies: TwilioWebhookPayload[]): TwilioWebhookPayload {
-  if (bodies.length === 1) return bodies[0];
-  const first = bodies[0] || {};
-  const texts = bodies.map(b => (b?.Body || '').toString()).filter(Boolean);
-  const latestMedia = [...bodies].reverse().find(b => b?.NumMedia && Number(b.NumMedia) > 0);
-  return {
-    ...first,
-    Body: texts.join('\n\n'),
-    NumMedia: latestMedia?.NumMedia || first.NumMedia,
-    MediaUrl0: latestMedia?.MediaUrl0 || first.MediaUrl0,
-  };
-}
-
-/**
- * Checks if an error is an AbortError (from AbortController).
- */
-export function isAbortError(err: unknown): boolean {
-  const e = err as any;
-  return e?.name === 'AbortError' || e?.message === 'Aborted' || e?.code === 'ABORT_ERR';
 }

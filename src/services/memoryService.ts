@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { AIMessage, BaseMessage, HumanMessage } from '@langchain/core/messages';
-import redis from '../lib/redis';
-import prisma from '../lib/prisma';
+import { redis } from '../lib/redis';
+import { prisma } from '../lib/prisma';
 import { getLogger } from '../utils/logger';
 import { getTextLLM } from './openaiService';
 import { loadPrompt } from '../utils/prompts';
@@ -17,7 +17,7 @@ export async function scheduleMemoryExtractionForUser(userId: string, delayMs: n
   logger.debug({ userId, runAt }, 'Scheduled memory extraction');
 }
 
-export async function processDueMemoryJobs(maxBatch: number = 50): Promise<void> {
+async function processDueMemoryJobs(maxBatch: number = 50): Promise<void> {
   const now = Date.now();
   const dueUserIds = await redis.zRangeByScore(MEMORY_ZSET_KEY, 0, now, { LIMIT: { offset: 0, count: maxBatch } });
   if (dueUserIds.length === 0) return;
@@ -75,7 +75,7 @@ async function extractAndUpsertMemories(userId: string): Promise<void> {
     return;
   }
 
-  const history: BaseMessage[] = messages.map((m) => {
+  const history: BaseMessage[] = messages.map((m: any) => {
     if (m.role === MessageRole.USER) {
       return new HumanMessage({ content: m.content as any, additional_kwargs: { createdAt: m.createdAt, messageId: m.id } });
     }
@@ -105,7 +105,7 @@ async function extractAndUpsertMemories(userId: string): Promise<void> {
     extracted = { memories: [], inferredGender: null, inferredAgeGroup: null };
   }
 
-  const sourceMessageIds = messages.map((m) => m.id);
+  const sourceMessageIds = messages.map((m: any) => m.id);
 
   if (extracted.memories.length > 0) {
     const existing = await prisma.memory.findMany({ where: { userId } });
@@ -162,9 +162,3 @@ async function extractAndUpsertMemories(userId: string): Promise<void> {
   await prisma.message.updateMany({ where: { id: { in: sourceMessageIds } }, data: { memoriesProcessed: true } });
   logger.info({ userId, processedCount: sourceMessageIds.length, memoryCount: extracted.memories.length }, 'Memory extraction complete');
 }
-
-export default {
-  scheduleMemoryExtractionForUser,
-  processDueMemoryJobs,
-  launchMemoryWorker,
-};

@@ -5,7 +5,7 @@ import pino, { Logger as PinoLogger } from 'pino';
  * - Pretty prints in development, JSON in production
  * - Supports module-scoped child loggers via getLogger(name)
  */
-export type Logger = PinoLogger;
+type Logger = PinoLogger;
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -34,5 +34,3 @@ const baseLogger: PinoLogger = pino({
 export function getLogger(moduleName?: string): Logger {
   return moduleName ? baseLogger.child({ module: moduleName }) : baseLogger;
 }
-
-export default baseLogger;

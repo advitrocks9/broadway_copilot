@@ -35,7 +35,7 @@ const logger = getLogger('agent:graph');
 /**
  * Builds and compiles the agent's state graph.
  */
-export function buildAgentGraph() {
+function buildAgentGraph() {
   const graph = new StateGraph(GraphAnnotation)
     .addNode('ingest_message', ingestMessageNode)
     .addNode('infer_profile', inferProfileNode)

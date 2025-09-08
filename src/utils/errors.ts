@@ -31,63 +31,9 @@ export class AppError extends Error {
 }
 
 /**
- * Validation error for invalid input data.
- */
-export class ValidationError extends AppError {
-  constructor(message: string, details?: Record<string, unknown>) {
-    super(message, 'VALIDATION_ERROR', 400, true, details);
-  }
-}
-
-/**
- * Not found error for missing resources.
- */
-export class NotFoundError extends AppError {
-  constructor(resource: string, details?: Record<string, unknown>) {
-    super(`${resource} not found`, 'NOT_FOUND', 404, true, details);
-  }
-}
-
-/**
- * External service error for third-party API failures.
- */
-export class ExternalServiceError extends AppError {
-  constructor(service: string, message: string, details?: Record<string, unknown>) {
-    super(`${service}: ${message}`, 'EXTERNAL_SERVICE_ERROR', 502, true, details);
-  }
-}
-
-/**
- * Database operation error.
- */
-export class DatabaseError extends AppError {
-  constructor(message: string, details?: Record<string, unknown>) {
-    super(message, 'DATABASE_ERROR', 500, false, details);
-  }
-}
-
-/**
- * Rate limiting error.
- */
-export class RateLimitError extends AppError {
-  constructor(message: string = 'Rate limit exceeded', details?: Record<string, unknown>) {
-    super(message, 'RATE_LIMIT_ERROR', 429, true, details);
-  }
-}
-
-/**
- * Authentication/Authorization error.
- */
-export class AuthError extends AppError {
-  constructor(message: string = 'Authentication required', details?: Record<string, unknown>) {
-    super(message, 'AUTH_ERROR', 401, true, details);
-  }
-}
-
-/**
  * Standardized error handler for consistent error processing.
  */
-export class ErrorHandler {
+class ErrorHandler {
   private logger = getLogger('utils:errors');
 
   /**

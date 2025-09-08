@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import prisma from '../../lib/prisma';
+import { prisma } from '../../lib/prisma';
 import { getVisionLLM, getTextLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';

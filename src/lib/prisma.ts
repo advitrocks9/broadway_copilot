@@ -30,5 +30,3 @@ if (process.env.NODE_ENV !== 'production') {
 });
 
 logger.info('Prisma client initialized');
-
-export default prisma;

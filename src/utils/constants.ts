@@ -3,26 +3,6 @@
  */
 
 /**
- * Time constants (in milliseconds)
- */
-export const THIRTY_MINUTES_MS = 30 * 60 * 1000;
-export const HOUR_MS = 60 * 60 * 1000;
-export const TEN_MINUTES_MS = 10 * 60 * 1000;
-export const SIX_SECONDS_MS = 6000;
-
-/**
- * User data cleanup settings
- */
-export const TTL_MS = HOUR_MS; // 1 hour
-export const SWEEP_MS = TEN_MINUTES_MS; // 10 minutes
-
-/**
- * Rate limiting settings
- */
-export const CAPACITY = 5; // tokens per user
-export const REFILL_MS_PER_TOKEN = SIX_SECONDS_MS; // 6 seconds between tokens
-
-/**
  * Twilio constants
  */
 export const TWILIO_WHATSAPP_FROM = 'whatsapp:+14155238886';
@@ -33,27 +13,8 @@ export const TWILIO_QUICKREPLY3_SID = 'HX60e62906ce18d4b64ac6d214fac74d8a';
  * Media links
  */
 export const WELCOME_IMAGE_URL = 'https://res.cloudinary.com/dn3g1tzq1/image/upload/v1755066077/photo.png';
-
-/**
- * List of services
- */
-export const SERVICES = [
-  {
-    text: 'Occasion Outfit',
-    id: 'handle_occasion',
-  },
-  {
-    text: 'Outfit Inspo',
-    id: 'handle_suggest',
-  },
-  { 
-    text: 'Vacation Looks',
-    id: 'handle_vacation',
-  },
-];
 export const MESSAGE_TTL_SECONDS = 60 * 60; // 1 hour
 export const USER_STATE_TTL_SECONDS = 24 * 60 * 60; // 24 hours
 
 export const USER_REQUEST_LIMIT = 5;
 export const TOKEN_REFILL_PERIOD_MS = 10 * 1000;
-export const PROCESS_LOCK_TTL_SECONDS = 300;

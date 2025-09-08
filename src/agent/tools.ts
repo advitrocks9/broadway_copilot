@@ -1,4 +1,4 @@
-import prisma from '../lib/prisma';
+import { prisma } from '../lib/prisma';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { OpenAIEmbeddings } from '@langchain/openai';
@@ -81,7 +81,7 @@ export const fetchRelevantMemories = new DynamicStructuredTool({
     });
     if (memories.length === 0) return [];
     const model = new OpenAIEmbeddings({ model: 'text-embedding-3-small' });
-    const texts = memories.map(m => `${m.category}: ${m.key} = ${m.value}`);
+    const texts = memories.map((m: any) => `${m.category}: ${m.key} = ${m.value}`);
     const [embeddings, queryEmb] = await Promise.all([
       model.embedDocuments(texts),
       model.embedQuery(query),
