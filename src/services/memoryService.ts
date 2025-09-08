@@ -51,7 +51,7 @@ export function launchMemoryWorker(pollIntervalMs: number = 10_000): NodeJS.Time
 }
 
 const MemoryItemSchema = z.object({
-  category: z.enum(MemoryCategory),
+  category: z.nativeEnum(MemoryCategory),
   key: z.string().min(1),
   value: z.string().min(1),
   confidence: z.number().min(0).max(1).optional(),
@@ -59,8 +59,8 @@ const MemoryItemSchema = z.object({
 
 const ExtractionSchema = z.object({
   memories: z.array(MemoryItemSchema).default([]),
-  inferredGender: z.enum(Gender).nullable().optional(),
-  inferredAgeGroup: z.enum(AgeGroup).nullable().optional(),
+  inferredGender: z.nativeEnum(Gender).nullable().optional(),
+  inferredAgeGroup: z.nativeEnum(AgeGroup).nullable().optional(),
 });
 
 async function extractAndUpsertMemories(userId: string): Promise<void> {

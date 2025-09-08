@@ -150,13 +150,21 @@ async function shutdown(signal: string) {
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-connectRedis();
-logger.info('Connected to Redis');
+// Ensure Redis is connected before starting the server to avoid false-positive logs
+(async () => {
+  try {
+    await connectRedis();
+    logger.info('Connected to Redis');
 
-const PORT = Number(process.env.PORT || 8080);
-app.listen(PORT, '0.0.0.0', async () => {
-  logger.info({ port: PORT }, 'Broadway WhatsApp Bot server started');
-  launchMemoryWorker();
-  launchWardrobeWorker();
-  launchImageUploadWorker();
-});
+    const PORT = Number(process.env.PORT || 8080);
+    app.listen(PORT, '0.0.0.0', async () => {
+      logger.info({ port: PORT }, 'Broadway WhatsApp Bot server started');
+      launchMemoryWorker();
+      launchWardrobeWorker();
+      launchImageUploadWorker();
+    });
+  } catch (err: any) {
+    logger.error({ err: err?.message }, 'Failed to initialize services');
+    process.exit(1);
+  }
+})();

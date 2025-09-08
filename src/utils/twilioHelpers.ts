@@ -86,8 +86,11 @@ export function processStatusCallback(payload: TwilioStatusCallbackPayload): voi
       case 'failed':
       case 'undelivered':
         logger.warn({ sid, status }, 'Message delivery failed');
-        resolvers.resolveDelivered();
-
+        // Do not resolve as delivered on failure; just clean up promptly
+        if (resolvers.cleanupTimer) {
+          clearTimeout(resolvers.cleanupTimer);
+          resolvers.cleanupTimer = undefined;
+        }
         setTimeout(() => {
           sidToResolvers.delete(sid);
         }, 1000);
