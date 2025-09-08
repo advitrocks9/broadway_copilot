@@ -107,60 +107,80 @@ async function extractAndUpsertMemories(userId: string): Promise<void> {
 
   const sourceMessageIds = messages.map((m) => m.id);
 
-  if (extracted.memories.length > 0) {
-    const existing = await prisma.memory.findMany({ where: { userId } });
-    const existingMap = new Map<string, { id: string; value: string; sourceMessageIds: string[] }>();
-    for (const m of existing) {
-      existingMap.set(`${m.category}:${m.key}`.toLowerCase(), { id: m.id, value: m.value, sourceMessageIds: m.sourceMessageIds });
-    }
+  // Use a transaction to ensure atomicity of memory operations
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (extracted.memories.length > 0) {
+        const existing = await tx.memory.findMany({ where: { userId } });
+        const existingMap = new Map<string, { id: string; value: string; sourceMessageIds: string[] }>();
+        for (const m of existing) {
+          existingMap.set(`${m.category}:${m.key}`.toLowerCase(), { id: m.id, value: m.value, sourceMessageIds: m.sourceMessageIds });
+        }
 
-    for (const item of extracted.memories) {
-      const keyId = `${item.category}:${item.key}`.toLowerCase();
-      const current = existingMap.get(keyId);
-      if (current) {
-        if (current.value.trim().toLowerCase() !== item.value.trim().toLowerCase()) {
-          await prisma.memory.update({
-            where: { id: current.id },
-            data: {
-              value: item.value,
-              confidence: item.confidence ?? null,
-              sourceMessageIds: Array.from(new Set([...(current.sourceMessageIds || []), ...sourceMessageIds])),
-            },
-          });
-        } else {
-          const mergedSources = Array.from(new Set([...(current.sourceMessageIds || []), ...sourceMessageIds]));
-          if (mergedSources.length !== (current.sourceMessageIds || []).length) {
-            await prisma.memory.update({ where: { id: current.id }, data: { sourceMessageIds: mergedSources } });
+        for (const item of extracted.memories) {
+          try {
+            const keyId = `${item.category}:${item.key}`.toLowerCase();
+            const current = existingMap.get(keyId);
+            if (current) {
+              if (current.value.trim().toLowerCase() !== item.value.trim().toLowerCase()) {
+                await tx.memory.update({
+                  where: { id: current.id },
+                  data: {
+                    value: item.value,
+                    confidence: item.confidence ?? null,
+                    sourceMessageIds: Array.from(new Set([...(current.sourceMessageIds || []), ...sourceMessageIds])),
+                  },
+                });
+              } else {
+                const mergedSources = Array.from(new Set([...(current.sourceMessageIds || []), ...sourceMessageIds]));
+                if (mergedSources.length !== (current.sourceMessageIds || []).length) {
+                  await tx.memory.update({ where: { id: current.id }, data: { sourceMessageIds: mergedSources } });
+                }
+              }
+            } else {
+              await tx.memory.create({
+                data: {
+                  userId,
+                  category: item.category,
+                  key: item.key,
+                  value: item.value,
+                  confidence: item.confidence ?? null,
+                  sourceMessageIds,
+                },
+              });
+            }
+          } catch (memoryErr: any) {
+            logger.error({ userId, item, err: memoryErr?.message }, 'Failed to process individual memory item');
+            // Continue processing other memories instead of failing the entire batch
           }
         }
-      } else {
-        await prisma.memory.create({
-          data: {
-            userId,
-            category: item.category,
-            key: item.key,
-            value: item.value,
-            confidence: item.confidence ?? null,
-            sourceMessageIds,
-          },
-        });
       }
-    }
-  }
 
-  const updates: any = {};
-  if (extracted.inferredGender) updates.inferredGender = extracted.inferredGender;
-  if (extracted.inferredAgeGroup) updates.inferredAgeGroup = extracted.inferredAgeGroup;
-  if (Object.keys(updates).length > 0) {
-    try {
-      await prisma.user.update({ where: { id: userId }, data: updates });
-    } catch (err: any) {
-      logger.warn({ userId, err: err?.message }, 'Failed to update inferred profile fields');
-    }
-  }
+      // Update user profile fields
+      const updates: any = {};
+      if (extracted.inferredGender) updates.inferredGender = extracted.inferredGender;
+      if (extracted.inferredAgeGroup) updates.inferredAgeGroup = extracted.inferredAgeGroup;
+      if (Object.keys(updates).length > 0) {
+        try {
+          await tx.user.update({ where: { id: userId }, data: updates });
+        } catch (err: any) {
+          logger.warn({ userId, err: err?.message }, 'Failed to update inferred profile fields');
+        }
+      }
 
-  await prisma.message.updateMany({ where: { id: { in: sourceMessageIds } }, data: { memoriesProcessed: true } });
-  logger.info({ userId, processedCount: sourceMessageIds.length, memoryCount: extracted.memories.length }, 'Memory extraction complete');
+      // Only mark messages as processed if memory operations succeeded
+      await tx.message.updateMany({ 
+        where: { id: { in: sourceMessageIds } }, 
+        data: { memoriesProcessed: true } 
+      });
+    });
+
+    logger.info({ userId, processedCount: sourceMessageIds.length, memoryCount: extracted.memories.length }, 'Memory extraction complete');
+  } catch (txErr: any) {
+    logger.error({ userId, err: txErr?.message }, 'Memory extraction transaction failed');
+    // Don't mark messages as processed if the transaction failed
+    throw new Error(`Memory extraction failed for user ${userId}: ${txErr?.message}`);
+  }
 }
 
 export default {

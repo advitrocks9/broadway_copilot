@@ -111,6 +111,9 @@ async function awaitStatuses(sid: string): Promise<void> {
 
   let resolveSent!: () => void;
   let resolveDelivered!: () => void;
+  let sentTimeoutId: NodeJS.Timeout | undefined;
+  let deliveredTimeoutId: NodeJS.Timeout | undefined;
+  
   const sentPromise = new Promise<void>((resolve) => { resolveSent = resolve; });
   const deliveredPromise = new Promise<void>((resolve) => { resolveDelivered = resolve; });
   const resolvers: StatusResolvers = { resolveSent, resolveDelivered, sentPromise, deliveredPromise };
@@ -125,19 +128,37 @@ async function awaitStatuses(sid: string): Promise<void> {
 
   const sentOrTimeout = Promise.race([
     sentPromise,
-    new Promise<void>((resolve) => setTimeout(resolve, sentTimeoutMs)),
+    new Promise<void>((resolve) => { 
+      sentTimeoutId = setTimeout(resolve, sentTimeoutMs);
+    }),
   ]);
   await sentOrTimeout;
+  
+  // Clear sent timeout if it's still pending
+  if (sentTimeoutId) {
+    clearTimeout(sentTimeoutId);
+    sentTimeoutId = undefined;
+  }
 
   const deliveredOrTimeout = Promise.race([
     deliveredPromise,
-    new Promise<void>((resolve) => setTimeout(resolve, deliveredTimeoutMs)),
+    new Promise<void>((resolve) => { 
+      deliveredTimeoutId = setTimeout(resolve, deliveredTimeoutMs);
+    }),
   ]);
   await deliveredOrTimeout;
+  
+  // Clear delivered timeout if it's still pending
+  if (deliveredTimeoutId) {
+    clearTimeout(deliveredTimeoutId);
+    deliveredTimeoutId = undefined;
+  }
 
+  // Set cleanup timer with proper cleanup of all references
   const cleanupTimer = setTimeout(() => {
     logger.debug({ sid }, 'Cleaning up expired message resolvers');
     sidToResolvers.delete(sid);
+    sidToSeenStatuses.delete(sid);
   }, 300000); // 5 minutes
   resolvers.cleanupTimer = cleanupTimer;
 }

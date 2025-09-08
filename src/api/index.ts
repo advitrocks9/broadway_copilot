@@ -51,7 +51,12 @@ app.post('/twilio/', authenticateRequest, rateLimiter, async (req, res) => {
     await redis.expire(messageKey, MESSAGE_TTL_SECONDS);
 
     const userActiveKey = `user_active:${userId}`;
-    const currentActive = await redis.get(userActiveKey);
+    
+    // Use Redis transaction to atomically check and set active message
+    const multi = redis.multi();
+    multi.get(userActiveKey);
+    const results = await multi.exec();
+    const currentActive = results?.[0] as string | null;
     const currentStatus = currentActive ? await redis.hGet(`message:${currentActive}`, 'status') : null;
 
     const hasActiveRun = userControllers.has(userId);
@@ -70,10 +75,24 @@ app.post('/twilio/', authenticateRequest, rateLimiter, async (req, res) => {
       logger.debug({ messageId, userId }, 'Queued message due to active sending');
       return res.status(200).end();
     } else {
-      await redis.set(userActiveKey, messageId, { EX: USER_STATE_TTL_SECONDS });
-      logger.debug({ messageId, userId }, 'Starting message processing');
-      processMessage(userId, messageId, req.body);
-      return res.status(200).end();
+      // Use SET NX (set if not exists) to prevent race conditions
+      const setResult = await redis.set(userActiveKey, messageId, { 
+        EX: USER_STATE_TTL_SECONDS,
+        NX: true  // Only set if key doesn't exist
+      });
+      
+      if (setResult) {
+        logger.debug({ messageId, userId }, 'Starting message processing');
+        processMessage(userId, messageId, req.body);
+        return res.status(200).end();
+      } else {
+        // Another message is already being processed, queue this one
+        const queueKey = `user_queue:${userId}`;
+        await redis.rPush(queueKey, JSON.stringify({ messageId, input: req.body }));
+        await redis.expire(queueKey, USER_STATE_TTL_SECONDS);
+        logger.debug({ messageId, userId }, 'Queued message due to race condition');
+        return res.status(200).end();
+      }
     }
   } catch (err: any) {
     logger.error({ err: err?.message, messageId: req.body?.MessageSid }, 'Webhook processing failed');
