@@ -54,3 +54,44 @@ export const fetchColorAnalysis = new DynamicStructuredTool({
   },
 });
 
+
+const fetchRelevantMemoriesSchema = z.object({
+  userId: z.string().describe('The user ID to fetch memories for'),
+  query: z.string().describe('The semantic query to find relevant memories'),
+});
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+  }
+  const normA = Math.sqrt(a.reduce((sum, v) => sum + v * v, 0));
+  const normB = Math.sqrt(b.reduce((sum, v) => sum + v * v, 0));
+  return normA && normB ? dot / (normA * normB) : 0;
+}
+
+export const fetchRelevantMemories = new DynamicStructuredTool({
+  name: 'fetchRelevantMemories',
+  description: 'Fetches relevant memories for the user based on semantic similarity to the query.',
+  schema: fetchRelevantMemoriesSchema,
+  func: async ({ userId, query }: z.infer<typeof fetchRelevantMemoriesSchema>) => {
+    const memories = await prisma.memory.findMany({
+      where: { userId },
+      select: { id: true, category: true, key: true, value: true, confidence: true, updatedAt: true },
+    });
+    if (memories.length === 0) return [];
+    const model = new OpenAIEmbeddings({ model: 'text-embedding-3-small' });
+    const texts = memories.map(m => `${m.category}: ${m.key} = ${m.value}`);
+    const [embeddings, queryEmb] = await Promise.all([
+      model.embedDocuments(texts),
+      model.embedQuery(query),
+    ]);
+    const similarities = embeddings.map((emb, i) => ({
+      index: i,
+      sim: cosineSimilarity(emb, queryEmb),
+    })).sort((a, b) => b.sim - a.sim);
+    const top = similarities.slice(0, 5).map(s => memories[s.index]);
+    return top;
+  },
+});
+

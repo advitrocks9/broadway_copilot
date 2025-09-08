@@ -6,6 +6,7 @@ import { getLogger } from '../../utils/logger';
 import { MessageRole } from '@prisma/client';
 import { MessageContent } from '@langchain/core/messages';
 import redis from '../../lib/redis';
+import { scheduleMemoryExtractionForUser } from '../../services/memoryService';
 
 /**
  * Sends the reply via Twilio based on state.reply and state.mode.
@@ -81,6 +82,12 @@ export async function sendReplyNode(state: any): Promise<{}> {
 
   await redis.hSet(messageKey, { status: success ? 'delivered' : 'failed' });
   logger.debug({ messageId: state.input.MessageSid, status: success ? 'delivered' : 'failed' }, 'SendReply: updated message status');
+
+  try {
+    await scheduleMemoryExtractionForUser(userId, 5 * 60 * 1000);
+  } catch (err: any) {
+    logger.warn({ userId, err: err?.message }, 'Failed to schedule memory extraction');
+  }
 
   return {};
 }

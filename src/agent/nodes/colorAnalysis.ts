@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import prisma from '../../lib/prisma';
-import { getVisionLLM } from '../../services/openaiService';
+import { getVisionLLM, getTextLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
 import { Replies } from '../state';
@@ -34,22 +34,16 @@ const LLMOutputSchema = z.object({
 export async function colorAnalysisNode(state: any) {
 
   if (numImagesInMessage(state.conversationHistoryWithImages) === 0) {
-    const responses = [
-      "Darling, I can't analyze your texts — only your tones! Step into the spotlight and upload a photo so we can begin your color performance.",
-      "No image, no curtain call! Please upload your photo so I can reveal your starring shades.",
-      "I can't hit the right note without your photo! Send me an image, and I'll orchestrate your perfect color palette.",
-      "Your words are dazzling, but I need visuals for this act! Upload a photo and let's put your true colors center stage.",
-      "I can't analyze text messages, only leading looks! Drop a photo so we can get this show on the road.",
-      "Every star needs their spotlight — upload your image and I'll cue the color analysis!",
-      "Scene one is missing its star… that's you! Upload your photo so I can roll the color analysis."
-    ];
-    
-    const replies: Replies = [{ reply_type: 'text', reply_text: responses[Math.floor(Math.random() * responses.length)] }];
+    const defaultPrompt = await loadPrompt('color_analysis_no_image.txt', { injectPersona: true });
+    const llm = getTextLLM();
+    const response = await llm.invoke(defaultPrompt);
+    const reply_text = response.content as string;
+    const replies: Replies = [{ reply_type: 'text', reply_text: reply_text }];
     return { assistantReply: replies };
   }
 
   try {
-    const systemPrompt = await loadPrompt('color_analysis');
+    const systemPrompt = await loadPrompt('color_analysis.txt', { injectPersona: true });
     const llm = getVisionLLM();
 
     const promptTemplate = ChatPromptTemplate.fromMessages([

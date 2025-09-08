@@ -4,8 +4,10 @@ import { Replies } from '../state';
 import { getTextLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
-import { SERVICES, WELCOME_IMAGE_URL } from '../../utils/constants';
+import { WELCOME_IMAGE_URL } from '../../utils/constants';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
+
+import { fetchRelevantMemories } from '../tools';
 
 const logger = getLogger('node:handle_general');
 
@@ -18,20 +20,39 @@ const LLMOutputSchema = z.object({
 
 export async function handleGeneralNode(state: any) {
 
-  let availableActions = SERVICES;
-  if (state.user.lastColorAnalysisAt && new Date(state.user.lastColorAnalysisAt) < new Date(Date.now() - 1000 * 60 * 60 * 24)) {
-    availableActions.push({ text: 'Color Analysis', id: 'color_analysis' });
-  }
-  if (state.user.lastVibeCheckAt && new Date(state.user.lastVibeCheckAt) < new Date(Date.now() - 1000 * 60 * 60 * 24)) {
-    availableActions.push({ text: 'Vibe Check', id: 'vibe_check' });
-  }
-  
-  availableActions = availableActions.slice(0, 3);
+  const { conversationHistoryTextOnly, userId } = state;
 
-  const systemPrompt = await loadPrompt('handle_general.txt');
+  const latestMessage = conversationHistoryTextOnly.at(-1)?.content ?? '';
 
+  let formattedMemories = 'No relevant memories.';
+
+  try {
+
+    const memories = await fetchRelevantMemories.func({ userId, query: latestMessage });
+
+    if (memories.length > 0) {
+
+      formattedMemories = memories.map(m => `${m.category}: ${m.key} = ${m.value} (confidence: ${m.confidence ?? 'N/A'}, updated: ${m.updatedAt.toISOString()})`).join('\n');
+
+    }
+
+  } catch (err) {
+
+    logger.warn({ err }, 'Failed to fetch memories');
+
+  }
+
+  const systemPrompt = await loadPrompt('handle_general.txt', { injectPersona: true });
+
+  const enhancedPrompt = `${systemPrompt}\n\nRelevant User Memories:\n${formattedMemories}`;
+
+  const availableActions = [
+    { text: 'Vibe check', id: 'vibe_check' },
+    { text: 'Color analysis', id: 'color_analysis' },
+    { text: 'Styling', id: 'styling' },
+  ]
   const promptTemplate = ChatPromptTemplate.fromMessages([
-    ["system", systemPrompt],
+    ["system", enhancedPrompt],
     new MessagesPlaceholder("history"),
   ]);
 

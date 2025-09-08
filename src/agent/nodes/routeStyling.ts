@@ -4,7 +4,7 @@ import { getTextLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
-import { StylingIntent } from '../state';
+import { StylingIntent, Replies } from '../state';
 
 const logger = getLogger('node:route_styling');
 
@@ -16,8 +16,26 @@ const LLMOutputSchema = z.object({
   stylingIntent: z.enum(['occasion', 'vacation', 'pairing', 'suggest']).describe("The specific styling intent of the user's message, used to route to the appropriate styling handler."),
 });
 
-export async function routeStyling(state: any): Promise<{ stylingIntent: StylingIntent }> {
-  const buttonPayload = state.input.buttonPayload;
+export async function routeStyling(state: any): Promise<{ stylingIntent?: StylingIntent; assistantReply?: Replies }> {
+  const buttonPayload = state.input.ButtonPayload;
+
+  if (buttonPayload == 'styling') {
+
+    const stylingButtons = [
+      { text: 'Occasion', id: 'occasion' },
+      { text: 'Pairing', id: 'pairing' },
+      { text: 'Vacation', id: 'vacation' },
+    ];
+
+    const replies: Replies = [{
+      reply_type: 'quick_reply',
+      reply_text: 'Please select which styling service you need',
+      buttons: stylingButtons
+    }];
+
+    logger.debug({ buttonPayload }, 'RouteStyling: generated styling menu reply');
+    return { assistantReply: replies };
+  }
 
   if (buttonPayload && ['occasion', 'vacation', 'pairing', 'suggest'].includes(buttonPayload)) {
     logger.debug({ buttonPayload }, 'RouteStyling: using button payload');

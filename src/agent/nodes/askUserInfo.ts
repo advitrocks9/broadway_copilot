@@ -14,7 +14,7 @@ const logger = getLogger('node:ask_user_info');
 const LLMOutputSchema = z.object({ text: z.string().describe("The sentence asking the user for the missing information.") });
 
 export async function askUserInfoNode(state: any) {
-  const systemPrompt = await loadPrompt('ask_user_info.txt');
+  const systemPrompt = await loadPrompt('ask_user_info.txt', { injectPersona: true });
 
   const promptTemplate = ChatPromptTemplate.fromMessages([
     ["system", systemPrompt],

@@ -3,16 +3,12 @@ import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
 import { IntentLabel, AvailableService, Replies, StylingIntent } from './state';
 import { routeIntent } from './nodes/routeIntent';
 import { askUserInfoNode } from './nodes/askUserInfo';
-import { handleOccasionNode } from './nodes/handleOccasion';
-import { handleVacationNode } from './nodes/handleVacation';
-import { handlePairingNode } from './nodes/handlePairing';
+import { handleStylingNode } from './nodes/handleStyling';
 import { vibeCheckNode } from './nodes/vibeCheck';
 import { colorAnalysisNode } from './nodes/colorAnalysis';
 import { handleGeneralNode } from './nodes/handleGeneral';
-import { wardrobeIndexNode } from './nodes/wardrobeIndex';
 import { ingestMessageNode } from './nodes/ingestMessage';
 import { inferProfileNode } from './nodes/inferProfile';
-import { handleSuggestNode } from './nodes/handleSuggest';
 import { sendReplyNode } from './nodes/sendReply';
 import { routeStyling } from './nodes/routeStyling';
 import { getLogger } from '../utils/logger';
@@ -45,13 +41,9 @@ export function buildAgentGraph() {
     .addNode('infer_profile', inferProfileNode)
     .addNode('route_intent', routeIntent)
     .addNode('ask_user_info', askUserInfoNode)
-    .addNode('handle_occasion', handleOccasionNode)
-    .addNode('handle_vacation', handleVacationNode)
-    .addNode('handle_pairing', handlePairingNode)
+    .addNode('handle_styling', handleStylingNode)
     .addNode('vibe_check', vibeCheckNode)
     .addNode('color_analysis', colorAnalysisNode)
-    .addNode('wardrobe_index', wardrobeIndexNode)
-    .addNode('handle_suggest', handleSuggestNode)
     .addNode('handle_general', handleGeneralNode)
     .addNode('send_reply', sendReplyNode)
     .addNode('route_styling', routeStyling)
@@ -83,25 +75,28 @@ export function buildAgentGraph() {
       color_analysis: 'color_analysis',
       styling: 'route_styling',
     })
-    .addConditionalEdges('route_styling', (s: any) => {
-      return s.stylingIntent || 'handle_general';
-    }, {
-      occasion: 'handle_occasion',
-      vacation: 'handle_vacation',
-      pairing: 'handle_pairing',
-      suggest: 'handle_suggest',
-      handle_general: 'handle_general',
-    })
-    .addEdge('vibe_check', 'wardrobe_index')
-    .addEdge('wardrobe_index', END)
+    .addConditionalEdges(
+      'route_styling',
+      (s: any) => {
+        if (s.assistantReply) {
+          return 'send_reply';
+        }
+        if (s.stylingIntent) {
+          return 'handle_styling';
+        }
+        return 'handle_general';
+      },
+      {
+        handle_styling: 'handle_styling',
+        handle_general: 'handle_general',
+        send_reply: 'send_reply',
+      },
+    )
+    .addEdge('vibe_check', 'send_reply')
     .addEdge('ask_user_info', 'send_reply')
-    .addEdge('handle_occasion', 'send_reply')
-    .addEdge('handle_vacation', 'send_reply')
-    .addEdge('handle_pairing', 'send_reply')
-    .addEdge('handle_suggest', 'send_reply')
+    .addEdge('handle_styling', 'send_reply')
     .addEdge('color_analysis', 'send_reply')
     .addEdge('handle_general', 'send_reply')
-    .addEdge('wardrobe_index', 'send_reply')
     .addEdge('send_reply', END);
 
   return graph.compile();

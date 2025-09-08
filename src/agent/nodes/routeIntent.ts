@@ -24,7 +24,7 @@ const LLMOutputSchema = z.object({
 
 export async function routeIntent(state: any): Promise<any> {
 
-  const buttonPayload = state.input.buttonPayload;
+  const buttonPayload = state.input.ButtonPayload;
 
   if (buttonPayload) {
     logger.debug({ input: state.input, intent: buttonPayload }, 'RouteIntent: skip LLM due to button payload');

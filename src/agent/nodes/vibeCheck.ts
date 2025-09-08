@@ -1,12 +1,13 @@
 import { z } from 'zod';
 
 import prisma from '../../lib/prisma';
-import { getVisionLLM } from '../../services/openaiService';
+import { getVisionLLM, getTextLLM } from '../../services/openaiService';
 import { loadPrompt } from '../../utils/prompts';
 import { getLogger } from '../../utils/logger';
 import { Replies } from '../state';
 import { numImagesInMessage } from '../../utils/conversation';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
+import { scheduleWardrobeIndexForMessage } from '../../services/wardrobeService';
 
 /**
  * Rates outfit from an image and returns a concise text summary; logs and persists results.
@@ -22,28 +23,23 @@ const LLMOutputSchema = z.object({
   vibe_score: z.number().min(0).max(10).nullable().describe("The overall vibe score from 0 to 10. Null if the image is unsuitable."),
   vibe_reply: z.string().describe("A short, witty, and punchy reply about the outfit's vibe (under 8 words)."),
   categories: z.array(VibeCategorySchema).length(4).describe("An array of exactly 4 scoring categories, each with a heading and a score."),
-  reply_text: z.string().describe("The main reply message that is compliment-forward and provides a brief rationale for the score."),
-  followup_text: z.string().nullable().describe("An optional, short follow-up question to suggest a next step (e.g., 'Want some tips to elevate this look?')."),
+  message1_text: z.string().describe("The main reply message that is compliment-forward and provides a brief rationale for the score."),
+  message2_text: z.string().nullable().describe("An optional, short follow-up question to suggest a next step (e.g., 'Want some tips to elevate this look?')."),
 });
 
 export async function vibeCheckNode(state: any) {
+  console.log(state.conversationHistoryWithImages)
   if (numImagesInMessage(state.conversationHistoryWithImages) === 0) {
-    const responses = [
-      "Darling, I can't analyze your texts — only your tones! Step into the spotlight and upload a photo so we can begin your color performance.",
-      "No image, no curtain call! Please upload your photo so I can analyze your vibe.",
-      "I can't hit the right note without your photo! Send me an image, and I'll orchestrate your perfect vibe check.",
-      "Your words are dazzling, but I need visuals for this act! Upload a photo and let's put your true vibe center stage.",
-      "I can't analyze text messages, only leading looks! Drop a photo so we can get this show on the road.",
-      "Every star needs their spotlight — upload your image and I'll cue the vibe check!",
-      "Scene one is missing its star… that's you! Upload your photo so I can roll the vibe check."
-    ];
-
-    const replies: Replies = [{ reply_type: 'text', reply_text: responses[Math.floor(Math.random() * responses.length)] }];
+    const defaultPrompt = await loadPrompt('vibe_check_no_image.txt', { injectPersona: true });
+    const llm = getTextLLM();
+    const response = await llm.invoke(defaultPrompt);
+    const reply_text = response.content as string;
+    const replies: Replies = [{ reply_type: 'text', reply_text: reply_text }];
     return { assistantReply: replies };
   }
 
   try {
-    const systemPrompt = await loadPrompt('vibe_check');
+    const systemPrompt = await loadPrompt('vibe_check.txt', { injectPersona: true });
     const llm = getVisionLLM();
 
     const promptTemplate = ChatPromptTemplate.fromMessages([
@@ -56,7 +52,9 @@ export async function vibeCheckNode(state: any) {
     const formattedPrompt = await promptTemplate.invoke({ history });
     const result = await llm.withStructuredOutput(LLMOutputSchema).invoke(formattedPrompt.toChatMessages()) as z.infer<typeof LLMOutputSchema>;
 
-    logger.debug({ messageId: state.conversationHistoryWithImages[0].id, score: result.vibe_score }, 'Vibe check completed');
+    const latestMessage = state.conversationHistoryWithImages.at(-1);
+    const messageId = latestMessage.additional_kwargs.messageId;
+    logger.debug({ messageId, score: result.vibe_score }, 'Vibe check completed');
 
     const categories = Array.isArray(result.categories) ? result.categories : [];
     const byHeading: Record<string, number | undefined> = Object.fromEntries(
@@ -72,7 +70,7 @@ export async function vibeCheckNode(state: any) {
         accessories_texture: null,
         context_confidence: byHeading['Context & Confidence'] ?? null,
         overall_score: typeof result.vibe_score === 'number' ? result.vibe_score : null,
-        comment: result.reply_text || result.vibe_reply,
+        comment: result.message1_text || result.vibe_reply,
       },
     });
 
@@ -80,6 +78,7 @@ export async function vibeCheckNode(state: any) {
       where: { id: state.conversationHistoryWithImages[0].userId },
       data: { lastVibeCheckAt: new Date() },
     });
+    await scheduleWardrobeIndexForMessage(messageId);
 
     const scoreLines: string[] = [
       'Vibe Check',
@@ -88,13 +87,13 @@ export async function vibeCheckNode(state: any) {
       '',
     ];
 
-    const combinedText = [scoreLines.join('\n'), result.reply_text].filter(Boolean).join('\n\n');
+    const combinedText = [scoreLines.join('\n'), result.message1_text].filter(Boolean).join('\n\n');
     const replies: Replies = [
       { reply_type: 'text', reply_text: combinedText },
     ];
 
-    if (result.followup_text) {
-      replies.push({ reply_type: 'text', reply_text: result.followup_text });
+    if (result.message2_text) {
+      replies.push({ reply_type: 'text', reply_text: result.message2_text });
     }
 
     return { assistantReply: replies };

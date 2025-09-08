@@ -82,7 +82,8 @@ export async function ingestMessageNode(state: any): Promise<any> {
       where: { id: lastMessage.id },
       data: {
         content: mergedContent,
-        ...(buttonPayload !== null && { buttonPayload })
+        ...(buttonPayload !== null && { buttonPayload }),
+        hasImage: true // since we're adding image
       }
     });
   } else {
@@ -91,7 +92,8 @@ export async function ingestMessageNode(state: any): Promise<any> {
         userId: user.id,
         role: MessageRole.USER,
         content,
-        ...(buttonPayload !== null && { buttonPayload })
+        ...(buttonPayload !== null && { buttonPayload }),
+        hasImage: numMedia > 0
       }
     });
   }
@@ -104,6 +106,7 @@ export async function ingestMessageNode(state: any): Promise<any> {
     orderBy: { createdAt: 'desc' },
     take: 5,
     select: {
+      id: true,
       role: true,
       content: true,
       buttonPayload: true,
@@ -115,12 +118,12 @@ export async function ingestMessageNode(state: any): Promise<any> {
     if (msg.role === MessageRole.USER) {
       return new HumanMessage({
         content: msg.content as MessageContent,
-        additional_kwargs: { createdAt: msg.createdAt, buttonPayload: msg.buttonPayload }
+        additional_kwargs: { createdAt: msg.createdAt, buttonPayload: msg.buttonPayload, messageId: msg.id }
       });
     } else {
       return new AIMessage({
         content: msg.content as MessageContent,
-        additional_kwargs: { createdAt: msg.createdAt }
+        additional_kwargs: { createdAt: msg.createdAt, messageId: msg.id }
       });
     }
   });
@@ -147,5 +150,6 @@ export async function ingestMessageNode(state: any): Promise<any> {
     conversationHistoryTextOnly,
     pending,
     user,
+    input: state.input
   };
 }
