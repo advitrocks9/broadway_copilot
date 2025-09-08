@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import redis from '../../lib/redis';
-import { USER_REQUEST_LIMIT , TOKEN_REFILL_PERIOD_MS } from '../../utils/constants';
+import { USER_REQUEST_LIMIT , TOKEN_REFILL_PERIOD_MS, USER_STATE_TTL_SECONDS } from '../../utils/constants';
 import { getLogger } from '../../utils/logger';
 
 const logger = getLogger('middleware:rate_limiter');
@@ -24,6 +24,7 @@ export const rateLimiter = async (req: Request, res: Response, next: NextFunctio
         updatedAt: Date.now(),
         lastMessageAt: Date.now(),
       });
+      await redis.expire(key, USER_STATE_TTL_SECONDS);
       logger.debug({ waId }, 'Rate limiter: initialized new user token bucket');
     }
 
@@ -46,6 +47,7 @@ export const rateLimiter = async (req: Request, res: Response, next: NextFunctio
         updatedAt: Date.now(),
         lastMessageAt: Date.now(),
       });
+      await redis.expire(key, USER_STATE_TTL_SECONDS);
       logger.debug({ waId, tokensRemaining: tokenRemaining - 1 }, 'Rate limiter: token consumed');
     }
 

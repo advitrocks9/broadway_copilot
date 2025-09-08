@@ -10,6 +10,10 @@ import prisma from '../lib/prisma';
 import { rateLimiter } from './middleware/rateLimiter';
 import { authenticateRequest } from './middleware/auth';
 import { runAgent } from '../agent/graph';
+import { launchMemoryWorker } from '../services/memoryService';
+import { launchWardrobeWorker } from '../services/wardrobeService';
+import { launchImageUploadWorker } from '../services/imageUploadService';
+import { MESSAGE_TTL_SECONDS, USER_STATE_TTL_SECONDS } from '../utils/constants';
 
 const logger = getLogger('api');
 const app = express();
@@ -44,6 +48,7 @@ app.post('/twilio/', authenticateRequest, rateLimiter, async (req, res) => {
       status: 'queued',
       createdAt: Date.now(),
     });
+    await redis.expire(messageKey, MESSAGE_TTL_SECONDS);
 
     const userActiveKey = `user_active:${userId}`;
     const currentActive = await redis.get(userActiveKey);
@@ -61,10 +66,11 @@ app.post('/twilio/', authenticateRequest, rateLimiter, async (req, res) => {
     if (currentStatus === 'sending') {
       const queueKey = `user_queue:${userId}`;
       await redis.rPush(queueKey, JSON.stringify({ messageId, input: req.body }));
+      await redis.expire(queueKey, USER_STATE_TTL_SECONDS);
       logger.debug({ messageId, userId }, 'Queued message due to active sending');
       return res.status(200).end();
     } else {
-      await redis.set(userActiveKey, messageId);
+      await redis.set(userActiveKey, messageId, { EX: USER_STATE_TTL_SECONDS });
       logger.debug({ messageId, userId }, 'Starting message processing');
       processMessage(userId, messageId, req.body);
       return res.status(200).end();
@@ -120,7 +126,7 @@ async function processMessage(userId: string, messageId: string, input: Record<s
       if (nextStr) {
         const next = JSON.parse(nextStr);
         const userActiveKey = `user_active:${userId}`;
-        await redis.set(userActiveKey, next.messageId);
+        await redis.set(userActiveKey, next.messageId, { EX: USER_STATE_TTL_SECONDS });
         logger.debug({ userId, nextMessageId: next.messageId }, 'Processing queued message');
         processMessage(userId, next.messageId, next.input);
       } else {
@@ -150,4 +156,7 @@ logger.info('Connected to Redis');
 const PORT = Number(process.env.PORT || 8080);
 app.listen(PORT, '0.0.0.0', async () => {
   logger.info({ port: PORT }, 'Broadway WhatsApp Bot server started');
+  launchMemoryWorker();
+  launchWardrobeWorker();
+  launchImageUploadWorker();
 });

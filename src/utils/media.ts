@@ -55,7 +55,8 @@ export async function downloadTwilioMedia(
   const buffer = Buffer.from(await response.arrayBuffer());
   await fs.writeFile(filePath, buffer);
 
-  const publicUrl = `${process.env.SERVER_URL}/uploads/${waId}/${filename}`;
+  const baseUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
+  const publicUrl = `${baseUrl}/uploads/${waId}/${filename}`;
   logger.info({ waId, filename, filePath, mimeType, size: buffer.length }, 'Twilio media downloaded and saved');
 
   return publicUrl;

@@ -51,8 +51,8 @@ export const SERVICES = [
     id: 'handle_vacation',
   },
 ];
-
-export const CONVERSATION_TIMEOUT_SECONDS = 1800; // 30 minutes
+export const MESSAGE_TTL_SECONDS = 60 * 60; // 1 hour
+export const USER_STATE_TTL_SECONDS = 24 * 60 * 60; // 24 hours
 
 export const USER_REQUEST_LIMIT = 5;
 export const TOKEN_REFILL_PERIOD_MS = 10 * 1000;
