@@ -1,58 +1,47 @@
-import { prisma } from '../../lib/prisma';
-import { getOrCreateUserByWaId } from '../../utils/user';
-import { downloadTwilioMedia } from '../../utils/media';
-import { getLogger } from '../../utils/logger';
-import { HumanMessage, AIMessage, type MessageContent } from '@langchain/core/messages';
-import { MessageRole, PendingType, User } from '@prisma/client';
+import { AIMessage, HumanMessage, type MessageContent } from '@langchain/core/messages';
+import { MessageRole, PendingType, type User } from '@prisma/client';
 
-const logger = getLogger('node:ingest_message');
+import { prisma } from '../../lib/prisma';
+import { createError } from '../../utils/errors';
+import { downloadTwilioMedia } from '../../utils/media';
+import { extractTextContent } from '../../utils/text';
+import { getUser } from '../../utils/user';
+import { logger } from '../../utils/logger';
 
 /**
- * Extracts text content from message content, replacing images with [IMAGE] placeholders
+ * Ingests incoming Twilio messages, processes media attachments, manages conversation history,
+ * and prepares data for downstream processing in the agent graph.
+ *
+ * Handles message merging for multi-part messages, media download and storage,
+ * and conversation history preparation with both image and text-only versions.
  */
-function extractTextContent(content: MessageContent): string {
-  if (Array.isArray(content)) {
-    return content
-      .map((part: any) => {
-        if (part.type === 'image_url') {
-          return '[IMAGE]';
-        } else if (part.type === 'text') {
-          return part.text;
-        }
-        return '';
-      })
-      .join(' ');
-  }
-  return content as string;
-}
-
 export async function ingestMessageNode(state: any): Promise<any> {
+  const { input } = state;
+  const {
+    Body: text,
+    ButtonPayload: buttonPayload,
+    NumMedia: numMedia,
+    MediaUrl0: mediaUrl0,
+    MediaContentType0: mediaContentType0,
+    From: waId,
+    MessageSid: messageId
+  } = input;
 
-  const text = state.input.Body;
-  const buttonPayload = state.input.ButtonPayload;
-  const numMedia = state.input.NumMedia;
-  const mediaUrl0 = state.input.MediaUrl0;
-  const mediaContentType0 = state.input.MediaContentType0;
-  const waId = state.input.From;
+  if (!waId) {
+    throw createError.badRequest('WhatsApp ID is required');
+  }
 
-  logger.debug({
-    waId,
-    messageLength: text?.length,
-    hasButtonPayload: !!buttonPayload,
-    numMedia: Number(numMedia) || 0,
-    hasMedia: !!mediaUrl0
-  }, 'IngestMessage: processing incoming message');
-
-  const user: User = await getOrCreateUserByWaId(waId);
-  logger.debug({ waId, userId: user.id }, 'IngestMessage: user resolved');
+  const user: User = await getUser(waId);
 
   let content: MessageContent = [{ type: 'text', text }];
-  if (numMedia == 1 && mediaUrl0 && mediaContentType0.startsWith('image/')) {
+  let hasImageInCurrent = false;
+  if (numMedia === '1' && mediaUrl0 && mediaContentType0?.startsWith('image/')) {
     try {
       const imagePath = await downloadTwilioMedia(mediaUrl0, waId, mediaContentType0);
       content.push({ type: 'image_url', image_url: { url: imagePath } });
-    } catch (err) {
-      logger.error({ err }, 'IngestMessage: failed to download/process media');
+      hasImageInCurrent = true;
+    } catch (error) {
+      logger.warn({ error, waId, mediaUrl0 }, 'Failed to download image');
     }
   }
 
@@ -60,13 +49,10 @@ export async function ingestMessageNode(state: any): Promise<any> {
     prisma.message.findFirst({
       where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, role: true, content: true, pending: true }
+      select: { id: true, role: true, content: true, pending: true, hasImage: true }
     }),
     prisma.message.findFirst({
-      where: {
-        userId: user.id,
-        role: MessageRole.AI
-      },
+      where: { userId: user.id, role: MessageRole.AI },
       orderBy: { createdAt: 'desc' },
       select: { pending: true }
     })
@@ -82,8 +68,8 @@ export async function ingestMessageNode(state: any): Promise<any> {
       where: { id: lastMessage.id },
       data: {
         content: mergedContent,
-        ...(buttonPayload !== null && { buttonPayload }),
-        hasImage: true // since we're adding image
+        ...(buttonPayload != null && { buttonPayload }),
+        hasImage: lastMessage.hasImage || hasImageInCurrent
       }
     });
   } else {
@@ -92,8 +78,8 @@ export async function ingestMessageNode(state: any): Promise<any> {
         userId: user.id,
         role: MessageRole.USER,
         content,
-        ...(buttonPayload !== null && { buttonPayload }),
-        hasImage: numMedia > 0
+        ...(buttonPayload != null && { buttonPayload }),
+        hasImage: hasImageInCurrent
       }
     });
   }
@@ -114,7 +100,7 @@ export async function ingestMessageNode(state: any): Promise<any> {
     },
   });
 
-  const conversationHistoryWithImages = messages.reverse().map((msg: any) => {
+  const conversationHistoryWithImages = messages.reverse().map((msg) => {
     if (msg.role === MessageRole.USER) {
       return new HumanMessage({
         content: msg.content as MessageContent,
@@ -128,7 +114,7 @@ export async function ingestMessageNode(state: any): Promise<any> {
     }
   });
 
-  const conversationHistoryTextOnly = conversationHistoryWithImages.map((msg: any) => {
+  const conversationHistoryTextOnly = conversationHistoryWithImages.map((msg) => {
     const textContent = extractTextContent(msg.content as MessageContent);
 
     if (msg instanceof HumanMessage) {
@@ -138,12 +124,7 @@ export async function ingestMessageNode(state: any): Promise<any> {
     }
   });
 
-  logger.debug({
-    waId,
-    conversationHistoryLength: conversationHistoryWithImages.length,
-    pending,
-    userId: user.id
-  }, 'IngestMessage: completed message processing');
+  logger.debug({ waId, messageId }, 'Message ingested successfully');
 
   return {
     conversationHistoryWithImages,

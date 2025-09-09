@@ -1,120 +1,88 @@
-import { getLogger } from './logger';
+import { logger } from './logger';
 
 /**
- * Standardized error types for the Broadway Copilot application.
+ * Simple error handling system for the Broadway Copilot application.
+ * Uses standard Error objects with HTTP status codes.
  */
 
 /**
- * Base application error class with consistent structure.
+ * Extended Error class that includes HTTP status code.
  */
-export class AppError extends Error {
-  public readonly code: string;
+export class HttpError extends Error {
   public readonly statusCode: number;
-  public readonly isOperational: boolean;
-  public readonly details?: Record<string, unknown>;
 
-  constructor(
-    message: string,
-    code: string,
-    statusCode: number = 500,
-    isOperational: boolean = true,
-    details?: Record<string, unknown>
-  ) {
-    super(message);
-    this.code = code;
+  constructor(message: string, statusCode: number = 500, options?: { cause?: any }) {
+    super(message, options);
     this.statusCode = statusCode;
-    this.isOperational = isOperational;
-    this.details = details;
-
+    this.name = 'HttpError';
     Error.captureStackTrace(this, this.constructor);
   }
 }
 
 /**
- * Standardized error handler for consistent error processing.
+ * Utility functions to create errors with specific HTTP status codes.
  */
-class ErrorHandler {
-  private logger = getLogger('utils:errors');
+export const createError = {
+  badRequest: (message: string, options?: { cause?: any }) => new HttpError(message, 400, options),
+  unauthorized: (message: string, options?: { cause?: any }) => new HttpError(message, 401, options),
+  forbidden: (message: string, options?: { cause?: any }) => new HttpError(message, 403, options),
+  notFound: (message: string, options?: { cause?: any }) => new HttpError(message, 404, options),
+  internalServerError: (message: string, options?: { cause?: any }) => new HttpError(message, 500, options),
+  serviceUnavailable: (message: string, options?: { cause?: any }) => new HttpError(message, 503, options),
+};
 
-  /**
-   * Handles errors consistently across the application.
-   * @param error - The error to handle
-   * @param context - Additional context about where the error occurred
-   * @returns Standardized error response
-   */
-  handle(error: unknown, context?: Record<string, unknown>): AppError {
-    if (error instanceof AppError) {
-      this.logError(error, context);
-      return error;
-    }
+/**
+ * Logs an HttpError with consistent formatting.
+ * @param error The error to log.
+ * @param context Additional context about where the error occurred.
+ */
+export function logError(error: HttpError, context?: Record<string, unknown>): void {
+  const logData = {
+    statusCode: error.statusCode,
+    message: error.message,
+    stack: error.stack,
+    cause: error.cause ? (error.cause instanceof Error ? { message: error.cause.message, stack: error.cause.stack } : String(error.cause)) : undefined,
+    ...context,
+  };
 
-    if (error instanceof Error) {
-      const appError = new AppError(
-        error.message || 'Unknown error occurred',
-        'INTERNAL_ERROR',
-        500,
-        false,
-        { originalStack: error.stack }
-      );
-      this.logError(appError, context);
-      return appError;
-    }
-
-    const unknownError = new AppError(
-      'An unknown error occurred',
-      'UNKNOWN_ERROR',
-      500,
-      false,
-      { originalError: error }
-    );
-    this.logError(unknownError, context);
-    return unknownError;
-  }
-
-  /**
-   * Logs errors with consistent formatting.
-   */
-  private logError(error: AppError, context?: Record<string, unknown>): void {
-    const logData = {
-      code: error.code,
-      statusCode: error.statusCode,
-      message: error.message,
-      isOperational: error.isOperational,
-      details: error.details,
-      stack: error.stack,
-      ...context,
-    };
-
-    if (error.isOperational) {
-      this.logger.warn(logData, 'Operational error');
-    } else {
-      this.logger.error(logData, 'System error');
-    }
+  if (error.statusCode >= 500) {
+    logger.error(logData, 'System error');
+  } else {
+    logger.warn(logData, 'Client error');
   }
 }
 
 /**
- * Global error handler instance.
+ * Normalizes an unknown error into an HttpError.
+ * This ensures that any thrown value is handled consistently.
+ * @param error The error to normalize.
+ * @returns An HttpError instance.
  */
-export const errorHandler = new ErrorHandler();
+export function normalizeError(error: unknown): HttpError {
+  if (error instanceof HttpError) {
+    return error;
+  }
+
+  if (error instanceof Error) {
+    return new HttpError(error.message || 'Unknown error occurred', 500, { cause: error });
+  }
+
+  return new HttpError('An unknown error occurred', 500);
+}
 
 /**
  * Utility function to create standardized error responses.
  */
-export function createErrorResponse(error: AppError): {
+export function createErrorResponse(error: HttpError): {
   error: {
-    code: string;
     message: string;
     statusCode: number;
-    details?: Record<string, unknown>;
   };
 } {
   return {
     error: {
-      code: error.code,
       message: error.message,
       statusCode: error.statusCode,
-      ...(error.details && { details: error.details }),
     },
   };
 }

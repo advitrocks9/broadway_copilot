@@ -1,11 +1,12 @@
-import { extension as extFromMime } from 'mime-types';
 import { randomUUID } from 'crypto';
-import { getLogger } from './logger';
 import fs from 'fs/promises';
 import path from 'path';
-import { ensureDir, userUploadDir } from './paths';
 
-const logger = getLogger('utils:media');
+import { extension as extFromMime } from 'mime-types';
+
+import { createError } from './errors';
+import { logger } from './logger';
+import { ensureDir, userUploadDir } from './paths';
 
 const twilioAuth = {
   sid: process.env.TWILIO_ACCOUNT_SID || '',
@@ -25,18 +26,14 @@ export async function downloadTwilioMedia(
   mimeType: string
 ): Promise<string> {
   if (!twilioAuth.sid || !twilioAuth.token) {
-    logger.error('Twilio credentials missing for media download');
-    throw new Error('Twilio credentials missing');
+    throw createError.internalServerError('Twilio credentials missing');
   }
   if (!mimeType) {
-    logger.error({ url, waId }, 'MIME type missing for media download');
-    throw new Error('MIME type is required');
+    throw createError.badRequest('MIME type is required');
   }
 
   const extension = extFromMime(mimeType);
   const filename = `twilio_${randomUUID()}${extension ? `.${extension}` : ''}`;
-
-  logger.debug({ url, waId, mimeType, filename }, 'Downloading Twilio media');
 
   const response = await fetch(url, {
     headers: {
@@ -45,8 +42,7 @@ export async function downloadTwilioMedia(
   });
 
   if (!response.ok) {
-    logger.error({ url, waId, status: response.status }, 'Failed to download Twilio media');
-    throw new Error(`Failed to download media: ${response.status}`);
+    throw createError.internalServerError(`Failed to download media: ${response.status}`);
   }
 
   const uploadDir = userUploadDir(waId);
@@ -57,7 +53,7 @@ export async function downloadTwilioMedia(
 
   const baseUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
   const publicUrl = `${baseUrl}/uploads/${waId}/${filename}`;
-  logger.info({ waId, filename, filePath, mimeType, size: buffer.length }, 'Twilio media downloaded and saved');
+  logger.debug({ waId, filename, filePath, mimeType, size: buffer.length }, 'Twilio media downloaded and saved');
 
   return publicUrl;
 }

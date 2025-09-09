@@ -2,12 +2,11 @@ import 'dotenv/config';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { buildAgentGraph } from '../src/agent/graph';
-import { getLogger } from '../src/utils/logger';
+import { logger }  from '../src/utils/logger';
 
 /**
  * Renders the agent graph to a PNG file for visualization.
  */
-const logger = getLogger('script:visualizeGraph');
 
 async function main() {
   const compiled = buildAgentGraph();

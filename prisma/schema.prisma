@@ -57,6 +57,8 @@ model User {
   messages    Message[]
   traces      ModelTrace[]
   memories    Memory[]
+  vibeChecks  VibeCheck[]
+  colorAnalyses ColorAnalysis[]
 
   inferredGender    Gender?
   inferredAgeGroup  AgeGroup?
@@ -91,8 +93,6 @@ model Message {
 
   feedback         Feedback?
   traces           ModelTrace[]
-  vibeCheck        VibeCheck?
-  color            ColorAnalysis?
 
   @@index([userId, createdAt])
   @@index([role, createdAt])
@@ -119,8 +119,8 @@ model Memory {
 
 model VibeCheck {
   id                  String  @id @default(cuid())
-  message             Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  messageId           String  @unique
+  user                User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId              String
 
   fit_silhouette      Float?
   color_harmony       Float?
@@ -132,12 +132,14 @@ model VibeCheck {
   comment             String?
 
   createdAt           DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model ColorAnalysis {
   id            String   @id @default(cuid())
-  message       Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  messageId     String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
 
   skin_tone     String?
   eye_color     String?
@@ -149,6 +151,8 @@ model ColorAnalysis {
   avoid3_colors Json?
 
   createdAt     DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model WardrobeItem {

@@ -11,6 +11,9 @@ CREATE TYPE "public"."Gender" AS ENUM ('MALE', 'FEMALE');
 CREATE TYPE "public"."AgeGroup" AS ENUM ('AGE_13_17', 'AGE_18_25', 'AGE_26_35', 'AGE_36_45', 'AGE_46_55', 'AGE_55_PLUS');
 
 -- CreateEnum
+CREATE TYPE "public"."MemoryCategory" AS ENUM ('PROFILE', 'PREFERENCE', 'STYLE', 'COLOR', 'SIZE', 'OCCASION', 'BRAND', 'OTHER');
+
+-- CreateEnum
 CREATE TYPE "public"."PendingType" AS ENUM ('NONE', 'VIBE_CHECK_IMAGE', 'COLOR_ANALYSIS_IMAGE', 'ASK_USER_INFO');
 
 -- CreateTable
@@ -39,14 +42,33 @@ CREATE TABLE "public"."Message" (
     "buttonPayload" TEXT,
     "pending" "public"."PendingType" DEFAULT 'NONE',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "memoriesProcessed" BOOLEAN NOT NULL DEFAULT false,
+    "wardrobeProcessed" BOOLEAN NOT NULL DEFAULT false,
+    "hasImage" BOOLEAN NOT NULL DEFAULT false,
+    "imageArchived" BOOLEAN NOT NULL DEFAULT false,
 
     CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
+CREATE TABLE "public"."Memory" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "category" "public"."MemoryCategory" NOT NULL,
+    "key" TEXT NOT NULL,
+    "value" TEXT NOT NULL,
+    "confidence" DOUBLE PRECISION,
+    "sourceMessageIds" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Memory_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "public"."VibeCheck" (
     "id" TEXT NOT NULL,
-    "messageId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
     "fit_silhouette" DOUBLE PRECISION,
     "color_harmony" DOUBLE PRECISION,
     "styling_details" DOUBLE PRECISION,
@@ -62,7 +84,7 @@ CREATE TABLE "public"."VibeCheck" (
 -- CreateTable
 CREATE TABLE "public"."ColorAnalysis" (
     "id" TEXT NOT NULL,
-    "messageId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
     "skin_tone" TEXT,
     "eye_color" TEXT,
     "hair_color" TEXT,
@@ -139,10 +161,16 @@ CREATE INDEX "Message_role_createdAt_idx" ON "public"."Message"("role", "created
 CREATE INDEX "Message_buttonPayload_idx" ON "public"."Message"("buttonPayload");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "VibeCheck_messageId_key" ON "public"."VibeCheck"("messageId");
+CREATE INDEX "Memory_userId_updatedAt_idx" ON "public"."Memory"("userId", "updatedAt");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "ColorAnalysis_messageId_key" ON "public"."ColorAnalysis"("messageId");
+CREATE UNIQUE INDEX "Memory_userId_category_key_key" ON "public"."Memory"("userId", "category", "key");
+
+-- CreateIndex
+CREATE INDEX "VibeCheck_userId_createdAt_idx" ON "public"."VibeCheck"("userId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "ColorAnalysis_userId_createdAt_idx" ON "public"."ColorAnalysis"("userId", "createdAt");
 
 -- CreateIndex
 CREATE INDEX "WardrobeItem_userId_nameLower_category_idx" ON "public"."WardrobeItem"("userId", "nameLower", "category");
@@ -160,10 +188,13 @@ CREATE INDEX "ModelTrace_messageId_idx" ON "public"."ModelTrace"("messageId");
 ALTER TABLE "public"."Message" ADD CONSTRAINT "Message_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."VibeCheck" ADD CONSTRAINT "VibeCheck_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "public"."Message"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."Memory" ADD CONSTRAINT "Memory_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."ColorAnalysis" ADD CONSTRAINT "ColorAnalysis_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "public"."Message"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."VibeCheck" ADD CONSTRAINT "VibeCheck_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."ColorAnalysis" ADD CONSTRAINT "ColorAnalysis_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."WardrobeItem" ADD CONSTRAINT "WardrobeItem_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

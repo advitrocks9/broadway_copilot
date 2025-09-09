@@ -1,8 +1,8 @@
 import { promises as fsp } from 'fs';
 import path from 'path';
-import { getLogger } from './logger';
 
-const logger = getLogger('utils:prompts');
+import { createError } from './errors';
+import { logger } from './logger';
 
 let personaPrompt: string | null = null;
 
@@ -20,7 +20,7 @@ async function loadPersonaPrompt(): Promise<string> {
     return personaPrompt;
   } catch (err: any) {
     logger.error({ err: err.message }, 'Failed to load persona.txt');
-    throw new Error('persona.txt not found or unreadable');
+    throw createError.internalServerError('persona.txt not found or unreadable');
   }
 }
 
@@ -35,11 +35,9 @@ export async function loadPrompt(
   options: { injectPersona?: boolean } = {},
 ): Promise<string> {
   const promptPath = path.resolve(process.cwd(), 'prompts', filename);
-  logger.debug({ filename, promptPath, options }, 'Loading prompt template');
 
   try {
     const content = await fsp.readFile(promptPath, 'utf-8');
-    logger.debug({ filename, contentLength: content.length }, 'Prompt template loaded successfully');
 
     if (options.injectPersona) {
       const persona = await loadPersonaPrompt();
@@ -49,6 +47,6 @@ export async function loadPrompt(
     return content;
   } catch (err: any) {
     logger.error({ filename, promptPath, err: err.message }, 'Failed to load prompt template');
-    throw new Error(`Prompt file not found or unreadable: ${promptPath}`);
+    throw createError.internalServerError(`Prompt file not found or unreadable: ${promptPath}`);
   }
 }

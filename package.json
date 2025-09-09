@@ -5,16 +5,18 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "ts-node-dev --respawn src/api/index.ts",
+    "dev": "ts-node-dev --respawn src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/api/index.js",
-    "graph": "ts-node-dev --transpile-only scripts/visualizeGraph.ts"
+    "start": "node dist/index.js",
+    "graph": "ts-node-dev --transpile-only scripts/visualizeGraph.ts",
+    "prune": "ts-prune"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@google-cloud/storage": "^7.17.0",
+    "@google-cloud/tasks": "^6.2.0",
     "@langchain/core": "^0.3.72",
     "@langchain/groq": "^0.2.3",
     "@langchain/langgraph": "^0.4.8",
@@ -39,12 +41,5 @@
     "ts-node-dev": "^2.0.0",
     "ts-prune": "^0.10.3",
     "typescript": "^5.9.2"
-  },
-  "overrides": {
-    "chalk": "5.6.0",
-    "debug": "4.4.1",
-    "ansi-styles": "6.2.1",
-    "color-convert": "2.0.0",
-    "color-name": "2.0.0"
   }
 }

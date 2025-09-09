@@ -14,11 +14,17 @@ Based on the conversation history, classify the user's intent into one of the av
 1.  **Intent Routing**:
     *   Read the latest user message in the context of the conversation.
     *   Choose the single best `intent` from the list of services above.
+    *   For vibe_check: If the user requests a vibe check but it is not available according to the availability information, route to general instead and handle appropriately.
+    *   For color_analysis: If the user requests a color analysis but it is not available according to the availability information, route to general instead and handle appropriately.
 2.  **Check for Missing Information**:
     *   Some styling requests require knowing the user's `gender` or `age_group` to provide good recommendations.
     *   If the user is asking for a styling recommendation and you don't have their gender, set `missingProfileField` to `gender`.
     *   If you have their gender but not their age group, set `missingProfileField` to `age_group`.
     *   If no information is missing or the intent doesn't require it (like `general` or `vibe_check`), set `missingProfileField` to `null`.
+
+Availability information:
+- Can perform vibe check: {can_do_vibe_check}
+- Can perform color analysis: {can_do_color_analysis}
 
 ## Examples
 **User:** Hi there!

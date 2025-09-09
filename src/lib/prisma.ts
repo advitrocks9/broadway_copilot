@@ -1,12 +1,19 @@
 import { PrismaClient } from '@prisma/client';
-import { getLogger } from '../utils/logger';
 
-const logger = getLogger('lib:prisma');
+import { logger }  from '../utils/logger';
+
+/**
+ * Global Prisma client instance for database operations.
+ * Uses singleton pattern to prevent connection leaks in development.
+ */
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
+/**
+ * Prisma database client configured with error and warning event logging.
+ * Singleton pattern prevents multiple connections during hot reloading in development.
+ */
 export const prisma = globalForPrisma.prisma || new PrismaClient({
   log: [
-    { emit: 'event', level: 'query' },
     { emit: 'event', level: 'error' },
     { emit: 'event', level: 'warn' },
   ],
@@ -17,10 +24,6 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Log Prisma events
-(prisma as any).$on('query', (e: any) => {
-  logger.debug({ query: e.query, duration: e.duration }, 'Database query executed');
-});
-
 (prisma as any).$on('error', (e: any) => {
   logger.error({ target: e.target, message: e.message }, 'Database error');
 });
@@ -28,5 +31,3 @@ if (process.env.NODE_ENV !== 'production') {
 (prisma as any).$on('warn', (e: any) => {
   logger.warn({ message: e.message }, 'Database warning');
 });
-
-logger.info('Prisma client initialized');

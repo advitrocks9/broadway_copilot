@@ -1,92 +1,89 @@
 import 'dotenv/config';
 
-import { prisma } from '../../lib/prisma';
-import { sendText, sendMenu, sendImage } from '../../services/twilioService';
-import { getLogger } from '../../utils/logger';
-import { MessageRole } from '@prisma/client';
 import { MessageContent } from '@langchain/core/messages';
+import { MessageRole, PendingType } from '@prisma/client';
+
+import { prisma } from '../../lib/prisma';
 import { redis } from '../../lib/redis';
-import { scheduleMemoryExtractionForUser } from '../../services/memoryService';
+import { queueMemoryExtraction } from '../../lib/tasks';
+import { sendText, sendMenu, sendImage } from '../../lib/twilio';
+import { logger }  from '../../utils/logger';
+import { createError, normalizeError } from '../../utils/errors';
+import { Replies } from '../state';
 
 /**
- * Sends the reply via Twilio based on state.reply and state.mode.
- * Also records assistant turn and updates intent if present.
+ * Sends the reply via Twilio based on the assistant's generated replies.
+ * Records the assistant's message in the database and updates processing status.
+ * Schedules memory extraction after sending.
+ * @param state The current agent state containing reply and user info.
+ * @returns An empty object as no state updates are needed.
  */
-const logger = getLogger('node:send_reply');
+export async function sendReplyNode(state: any): Promise<Record<string, never>> {
+  const { input, user } = state;
+  const messageId = input?.MessageSid as string | undefined;
+  if (!messageId) {
+    throw createError.badRequest('MessageSid is required');
+  }
+  const messageKey = `message:${messageId}`;
+  const userId = user.id;
+  const waId = user.waId;
 
-
-export async function sendReplyNode(state: any): Promise<{}> {
-  const messageKey = `message:${state.input.MessageSid}`;
+  logger.debug({ waId }, 'Setting message status to sending in Redis');
   await redis.hSet(messageKey, { status: 'sending' });
 
-  const replies = state.assistantReply;
-  const userId = state.user.id;
-  const waId = state.user.waId;
-
-  logger.info({
-    messageId: state.input.MessageSid,
-    userId,
-    waId,
-    replyCount: replies.length
-  }, 'Sending replies to user');
-
-  logger.debug({
-    messageId: state.input.MessageSid,
-    replies: replies.map((r: any) => ({ type: r.reply_type, hasMedia: !!r.media_url }))
-  }, 'SendReply: reply details');
-
-  const formattedContent: MessageContent = [];
-  for (const r of replies) {
-    if (r.reply_type === 'text' || r.reply_type === 'quick_reply') {
-      formattedContent.push({ type: 'text', text: r.reply_text });
-    } else if (r.reply_type === 'image') {
-      if (r.reply_text) {
-        formattedContent.push({ type: 'text', text: r.reply_text });
-      }
-      formattedContent.push({ type: 'image_url', image_url: { url: r.media_url } });
+  const replies: Replies = state.assistantReply;
+  const formattedContent: MessageContent = replies.flatMap(r => {
+    const parts: MessageContent = [];
+    if (r.reply_text) {
+      parts.push({ type: 'text', text: r.reply_text });
     }
-  }
-  
-  await prisma.message.create({ 
+    if (r.reply_type === 'image') {
+      parts.push({ type: 'image_url', image_url: { url: r.media_url } });
+    }
+    return parts;
+  });
+
+  const pendingToPersist = (state.pending as PendingType | undefined) ?? PendingType.NONE;
+
+  await prisma.message.create({
     data: {
       userId,
       role: MessageRole.AI,
       content: formattedContent,
+      pending: pendingToPersist,
     }
   });
 
   let success = true;
   try {
-    for (const r of replies) {
+    for (const [index, r] of replies.entries()) {
       if (r.reply_type === 'text') {
         await sendText(waId, r.reply_text);
-        logger.debug({ messageId: state.input.MessageSid, waId }, 'SendReply: sent text message');
+        logger.debug({ waId, replyIndex: index + 1, textLength: r.reply_text.length }, 'Sent text message');
       } else if (r.reply_type === 'quick_reply') {
         await sendMenu(waId, r.reply_text, r.buttons);
-        logger.debug({ messageId: state.input.MessageSid, waId, buttonCount: r.buttons?.length }, 'SendReply: sent menu message');
+        logger.debug({ waId, replyIndex: index + 1, buttonCount: r.buttons?.length }, 'Sent menu message');
       } else if (r.reply_type === 'image') {
         await sendImage(waId, r.media_url, r.reply_text);
-        logger.debug({ messageId: state.input.MessageSid, waId, mediaUrl: r.media_url }, 'SendReply: sent image message');
+        logger.debug({ waId, replyIndex: index + 1, mediaUrl: r.media_url }, 'Sent image message');
       }
     }
-    logger.info({ messageId: state.input.MessageSid, userId, waId }, 'All replies sent successfully');
-  } catch (err) {
-    logger.error({
-      messageId: state.input.MessageSid,
-      userId,
-      waId,
-      err: (err as Error)?.message
-    }, 'Failed to send replies');
+    logger.info({ waId, replyCount: replies.length }, 'All replies sent successfully');
+  } catch (err: unknown) {
     success = false;
-  }
+    const normalized = normalizeError(err);
+    throw createError.internalServerError('Failed to send replies', { cause: normalized });
+  } finally {
+    logger.debug({ status: success ? 'delivered' : 'failed' }, 'Updating message status in Redis');
+    await redis.hSet(messageKey, { status: success ? 'delivered' : 'failed' });
 
-  await redis.hSet(messageKey, { status: success ? 'delivered' : 'failed' });
-  logger.debug({ messageId: state.input.MessageSid, status: success ? 'delivered' : 'failed' }, 'SendReply: updated message status');
-
-  try {
-    await scheduleMemoryExtractionForUser(userId, 5 * 60 * 1000);
-  } catch (err: any) {
-    logger.warn({ userId, err: err?.message }, 'Failed to schedule memory extraction');
+    try {
+      logger.debug({ waId }, 'Scheduling memory extraction for user');
+      await queueMemoryExtraction(userId, 5 * 60 * 1000);
+      logger.debug({ waId }, 'Scheduled memory extraction');
+    } catch (err: unknown) {
+      logger.warn({ waId, err: (err as Error).message, stack: (err as Error).stack }, 'Failed to schedule memory extraction');
+    }
   }
 
   return {};
