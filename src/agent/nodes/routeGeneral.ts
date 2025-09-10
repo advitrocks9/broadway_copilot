@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 
-import { getTextLLM } from '../../lib/llm';
+import { invokeTextLLMWithJsonOutput } from '../../lib/llm';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
 
@@ -16,8 +16,6 @@ const LLMOutputSchema = z.object({
     .enum(['greeting', 'menu', 'chat'])
     .describe("The user's specific intent, used to route to the correct general handler."),
 });
-
-type LLMOutput = z.infer<typeof LLMOutputSchema>;
 
 /**
  * Routes general messages (greeting/menu/chat) via regex shortcuts, else LLM.
@@ -52,10 +50,10 @@ export async function routeGeneralNode(state: any) {
       history: state.conversationHistoryTextOnly,
     });
 
-    const llm = getTextLLM();
-    const response = (await llm
-      .withStructuredOutput(LLMOutputSchema)
-      .invoke(formattedPrompt.toChatMessages())) as LLMOutput;
+    const response = await invokeTextLLMWithJsonOutput(
+      formattedPrompt.toChatMessages(),
+      LLMOutputSchema,
+    );
 
     logger.info(
       { userId, generalIntent: response.generalIntent },

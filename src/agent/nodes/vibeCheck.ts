@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 
 import { prisma } from '../../lib/prisma';
-import { getVisionLLM, getTextLLM } from '../../lib/llm';
+import { invokeVisionLLMWithJsonOutput, invokeTextLLMWithJsonOutput } from '../../lib/llm';
 import { queueWardrobeIndex } from '../../lib/tasks';
 import { numImagesInMessage } from '../../utils/conversation';
 import { loadPrompt } from '../../utils/prompts';
@@ -27,7 +27,9 @@ const LLMOutputSchema = z.object({
   message2_text: z.string().nullable().describe("An optional, short follow-up question to suggest a next step (e.g., 'Want some tips to elevate this look?')."),
 });
 
-type VibeCheckOutput = z.infer<typeof LLMOutputSchema>;
+const NoImageLLMOutputSchema = z.object({
+  reply_text: z.string().describe("The text to send to the user explaining they need to send an image."),
+});
 
 export async function vibeCheckNode(state: any) {
   const userId = state.user?.id;
@@ -36,17 +38,14 @@ export async function vibeCheckNode(state: any) {
 
   if (imageCount === 0) {
     const defaultPrompt = await loadPrompt('vibe_check_no_image.txt', { injectPersona: true });
-    const llm = getTextLLM();
-    const response = await llm.invoke(defaultPrompt);
-    const reply_text = response.content as string;
-    logger.debug({ userId, reply_text }, 'Invoking text LLM for no-image response');
-    const replies: Replies = [{ reply_type: 'text', reply_text: reply_text }];
+    const response = await invokeTextLLMWithJsonOutput(defaultPrompt, NoImageLLMOutputSchema);
+    logger.debug({ userId, reply_text: response.reply_text }, 'Invoking text LLM for no-image response');
+    const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
     return { ...state, assistantReply: replies };
   }
 
   const systemPrompt = await loadPrompt('vibe_check.txt', { injectPersona: true });
-  const llm = getVisionLLM();
-
+  
   const promptTemplate = ChatPromptTemplate.fromMessages([
     ["system", systemPrompt],
     new MessagesPlaceholder("history"),
@@ -55,7 +54,10 @@ export async function vibeCheckNode(state: any) {
   const history = state.conversationHistoryWithImages;
 
   const formattedPrompt = await promptTemplate.invoke({ history });
-  const result = (await (llm as any).withStructuredOutput(LLMOutputSchema).invoke(formattedPrompt.toChatMessages())) as VibeCheckOutput;
+  const result = await invokeVisionLLMWithJsonOutput(
+    formattedPrompt.toChatMessages(),
+    LLMOutputSchema,
+  );
 
   const latestMessage = state.conversationHistoryWithImages.at(-1);
   const latestMessageId = latestMessage.additional_kwargs.messageId;

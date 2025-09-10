@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 
 import { prisma } from '../../lib/prisma';
-import { getVisionLLM, getTextLLM } from '../../lib/llm';
+import { invokeVisionLLMWithJsonOutput, invokeTextLLMWithJsonOutput } from '../../lib/llm';
 import { numImagesInMessage } from '../../utils/conversation';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
@@ -35,7 +35,9 @@ const LLMOutputSchema = z.object({
   avoid3_colors: z.array(ColorObjectSchema).describe("An array of 3 colors the user might want to avoid."),
 });
 
-type ColorAnalysisOutput = z.infer<typeof LLMOutputSchema>;
+const NoImageLLMOutputSchema = z.object({
+  reply_text: z.string().describe("The text to send to the user explaining they need to send an image."),
+});
 
 /**
  * Handles the case where no image is provided, generating a default text response.
@@ -44,11 +46,9 @@ type ColorAnalysisOutput = z.infer<typeof LLMOutputSchema>;
  */
 async function handleNoImageCase(state: any) {
   const defaultPrompt = await loadPrompt('color_analysis_no_image.txt', { injectPersona: true });
-  const llm = getTextLLM();
-  const response = await llm.invoke(defaultPrompt);
-  const reply_text = response.content as string;
-  logger.debug({ userId: state.user?.id, reply_text }, 'Invoking text LLM for no-image response');
-  const replies: Replies = [{ reply_type: 'text', reply_text }];
+  const response = await invokeTextLLMWithJsonOutput(defaultPrompt, NoImageLLMOutputSchema);
+  logger.debug({ userId: state.user?.id, reply_text: response.reply_text }, 'Invoking text LLM for no-image response');
+  const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
   return { ...state, assistantReply: replies };
 }
 
@@ -68,7 +68,6 @@ export async function colorAnalysisNode(state: any) {
 
   try {
     const systemPrompt = await loadPrompt('color_analysis.txt', { injectPersona: true });
-    const llm = getVisionLLM();
 
     const promptTemplate = ChatPromptTemplate.fromMessages([
       ["system", systemPrompt],
@@ -78,7 +77,10 @@ export async function colorAnalysisNode(state: any) {
     const history = state.conversationHistoryWithImages;
 
     const formattedPrompt = await promptTemplate.invoke({ history });
-    const output = (await (llm as any).withStructuredOutput(LLMOutputSchema).invoke(formattedPrompt.toChatMessages())) as ColorAnalysisOutput;
+    const output = await invokeVisionLLMWithJsonOutput(
+      formattedPrompt.toChatMessages(),
+      LLMOutputSchema,
+    );
 
     await prisma.colorAnalysis.create({
       data: {

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 import { PendingType } from '@prisma/client';
 
-import { getTextLLM } from '../../lib/llm';
+import { invokeTextLLMWithJsonOutput } from '../../lib/llm';
 import { numImagesInMessage } from '../../utils/conversation';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
@@ -86,10 +86,10 @@ export async function routeIntent(state: typeof GraphAnnotation.State): Promise<
     const history = conversationHistoryTextOnly;
     const formattedPrompt = await promptTemplate.invoke({ history });
 
-    const llm = getTextLLM();
-    const response = (await (llm as any)
-      .withStructuredOutput(LLMOutputSchema)
-      .invoke(formattedPrompt.toChatMessages())) as RouteIntentOutput;
+    const response = await invokeTextLLMWithJsonOutput(
+      formattedPrompt.toChatMessages(),
+      LLMOutputSchema,
+    );
 
     logger.info({ userId, intent: response.intent, missingField: response.missingProfileField }, 'Intent routed via LLM analysis');
 

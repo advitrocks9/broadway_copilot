@@ -1,9 +1,8 @@
-import { v2 as cloudTasks } from "@google-cloud/tasks";
+import { CloudTasksClient } from "@google-cloud/tasks";
 import { createError } from "../utils/errors";
 import { logger } from "../utils/logger";
-import * as proto from "@google-cloud/tasks/build/protos/protos";
 
-const client = new cloudTasks.CloudTasksClient();
+const client = new CloudTasksClient();
 
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT ?? "";
 const LOCATION = process.env.CLOUD_TASKS_LOCATION ?? "us-central1";
@@ -29,7 +28,7 @@ export async function queueWardrobeIndex(messageId: string, delayMs: number = 0)
 
   const task = {
     httpRequest: {
-      httpMethod: proto.google.cloud.tasks.v2.HttpMethod.POST,
+      httpMethod: "POST" as const,
       url: WARDROBE_FUNCTION_URL,
       body: Buffer.from(payload).toString("base64"),
       headers: { "Content-Type": "application/json" },
@@ -47,8 +46,7 @@ export async function queueWardrobeIndex(messageId: string, delayMs: number = 0)
   };
 
   try {
-    const created = await client.createTask({ parent, task });
-    const response = created[0];
+    const [response] = await client.createTask({ parent, task });
     logger.info({ taskName: response.name }, "Queued wardrobe index task");
   } catch (err: any) {
     logger.error({ err: err.message }, "Failed to queue wardrobe index task");
@@ -71,7 +69,7 @@ export async function queueMemoryExtraction(userId: string, delayMs: number = 0)
 
   const task = {
     httpRequest: {
-      httpMethod: proto.google.cloud.tasks.v2.HttpMethod.POST,
+      httpMethod: "POST" as const,
       url: MEMORY_FUNCTION_URL,
       body: Buffer.from(payload).toString("base64"),
       headers: { "Content-Type": "application/json" },
@@ -89,8 +87,7 @@ export async function queueMemoryExtraction(userId: string, delayMs: number = 0)
   };
 
   try {
-    const created = await client.createTask({ parent, task });
-    const response = created[0];
+    const [response] = await client.createTask({ parent, task });
     logger.info({ taskName: response.name }, "Queued memory extraction task");
   } catch (err: any) {
     logger.error({ err: err.message }, "Failed to queue memory extraction task");

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 
-import { getTextLLM } from '../../lib/llm';
+import { invokeTextLLMWithJsonOutput } from '../../lib/llm';
 import { loadPrompt } from '../../utils/prompts';
 import { logger }  from '../../utils/logger';
 
@@ -14,8 +14,6 @@ import { StylingIntent, Replies } from '../state';
 const LLMOutputSchema = z.object({
   stylingIntent: z.enum(['occasion', 'vacation', 'pairing', 'suggest']).describe("The specific styling intent of the user's message, used to route to the appropriate styling handler."),
 });
-
-type LLMOutput = z.infer<typeof LLMOutputSchema>;
 
 /**
  * Routes styling flows from button payload or LLM classification.
@@ -58,10 +56,10 @@ export async function routeStyling(state: any) {
 
     const formattedPrompt = await promptTemplate.invoke({ history: state.conversationHistoryTextOnly });
 
-    const llm = getTextLLM();
-    const response = (await (llm as any)
-      .withStructuredOutput(LLMOutputSchema)
-      .invoke(formattedPrompt.toChatMessages())) as LLMOutput;
+    const response = await invokeTextLLMWithJsonOutput(
+      formattedPrompt.toChatMessages(),
+      LLMOutputSchema,
+    );
 
     logger.info({ userId, stylingIntent: response.stylingIntent }, 'Styling intent routed using LLM');
 

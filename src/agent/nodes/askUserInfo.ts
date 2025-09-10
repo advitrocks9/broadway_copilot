@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 import { PendingType } from '@prisma/client';
 
-import { getTextLLM } from '../../lib/llm';
+import { invokeTextLLMWithJsonOutput } from '../../lib/llm';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
 import { Replies } from '../state';
@@ -42,10 +42,10 @@ export async function askUserInfoNode(state: any) {
       history: state.conversationHistoryTextOnly || []
     });
 
-    const llm = getTextLLM();
-    const response = (await (llm as any)
-      .withStructuredOutput(LLMOutputSchema as any)
-      .invoke(formattedPrompt.toChatMessages())) as z.infer<typeof LLMOutputSchema>;
+    const response = await invokeTextLLMWithJsonOutput(
+      formattedPrompt.toChatMessages(),
+      LLMOutputSchema,
+    );
 
     const replies: Replies = [{ reply_type: 'text', reply_text: response.text }];
     logger.info({ userId, messageId, replyLength: response.text.length }, 'Successfully generated ask user info reply');

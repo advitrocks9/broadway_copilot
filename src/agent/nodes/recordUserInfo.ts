@@ -4,7 +4,7 @@ import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts
 import { Gender, AgeGroup, PendingType } from '@prisma/client';
 
 import { prisma } from '../../lib/prisma';
-import { getTextLLM } from '../../lib/llm';
+import { invokeTextLLMWithJsonOutput } from '../../lib/llm';
 import { loadPrompt } from '../../utils/prompts';
 
 /**
@@ -30,10 +30,10 @@ export async function recordUserInfoNode(state: any) {
 
   const formattedPrompt = await promptTemplate.invoke({ history: state.conversationHistoryTextOnly || [] });
 
-  const llm = getTextLLM();
-  const response = await llm
-    .withStructuredOutput(LLMOutputSchema)
-    .invoke(formattedPrompt.toChatMessages()) as z.infer<typeof LLMOutputSchema>;
+  const response = await invokeTextLLMWithJsonOutput(
+    formattedPrompt.toChatMessages(),
+    LLMOutputSchema,
+  );
 
   const user = await prisma.user.update({
     where: { id: state.user.id },
