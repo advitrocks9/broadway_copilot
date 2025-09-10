@@ -4,10 +4,10 @@ import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts
 
 import { invokeTextLLMWithJsonOutput } from '../../lib/llm';
 import { loadPrompt } from '../../utils/prompts';
-import { logger }  from '../../utils/logger';
+import { logger } from '../../utils/logger';
 
 import { StylingIntent, Replies } from '../state';
-
+import { GraphState } from '../state';
 /**
  * Routes the input to the appropriate styling handler based on the sub-router prompt.
  */
@@ -18,10 +18,10 @@ const LLMOutputSchema = z.object({
 /**
  * Routes styling flows from button payload or LLM classification.
  */
-export async function routeStyling(state: any) {
-  const userId = state.user?.id;
-  const messageId = state.input?.MessageSid;
-  const buttonPayload = state.input?.ButtonPayload;
+export async function routeStyling(state: GraphState): Promise<GraphState> {
+  const userId = state.user.id;
+  const messageId = state.input.MessageSid;
+  const buttonPayload = state.input.ButtonPayload;
 
   logger.info({ userId, messageId, buttonPayload }, 'Routing styling intent');
 
@@ -39,12 +39,12 @@ export async function routeStyling(state: any) {
         buttons: stylingButtons
       }];
       logger.debug({ userId }, 'Returning styling menu for flow continuation');
-      return { assistantReply: replies };
+      return { ...state, assistantReply: replies };
     }
 
     if (buttonPayload && ['occasion', 'vacation', 'pairing', 'suggest'].includes(buttonPayload)) {
       logger.debug({ userId }, 'Styling intent routed using button payload');
-      return { stylingIntent: buttonPayload as StylingIntent };
+      return { ...state, stylingIntent: buttonPayload as StylingIntent };
     }
 
     const systemPrompt = await loadPrompt('route_styling.txt');
@@ -63,12 +63,12 @@ export async function routeStyling(state: any) {
 
     logger.info({ userId, stylingIntent: response.stylingIntent }, 'Styling intent routed using LLM');
 
-    return response;
+    return { ...state, ...response };
   } catch (err: any) {
     if (err.statusCode) {
       throw err;
     }
-    logger.warn({ userId }, 'Defaulting to suggest styling intent due to error');
-    return { stylingIntent: 'suggest' };
+    logger.warn({ userId, err: err.message }, 'Failed to route styling intent, falling back to general');
+    return { ...state, stylingIntent: null };
   }
 }

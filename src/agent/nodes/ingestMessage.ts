@@ -1,12 +1,11 @@
 import { AIMessage, HumanMessage, type MessageContent } from '@langchain/core/messages';
-import { MessageRole, PendingType, type User } from '@prisma/client';
+import { MessageRole, PendingType } from '@prisma/client';
 
 import { prisma } from '../../lib/prisma';
-import { createError } from '../../utils/errors';
 import { downloadTwilioMedia } from '../../utils/media';
 import { extractTextContent } from '../../utils/text';
-import { getUser } from '../../utils/user';
 import { logger } from '../../utils/logger';
+import { GraphState } from '../state';
 
 /**
  * Ingests incoming Twilio messages, processes media attachments, manages conversation history,
@@ -15,8 +14,8 @@ import { logger } from '../../utils/logger';
  * Handles message merging for multi-part messages, media download and storage,
  * and conversation history preparation with both image and text-only versions.
  */
-export async function ingestMessageNode(state: any): Promise<any> {
-  const { input } = state;
+export async function ingestMessageNode(state: GraphState): Promise<GraphState> {
+  const { input, user } = state;
   const {
     Body: text,
     ButtonPayload: buttonPayload,
@@ -27,11 +26,6 @@ export async function ingestMessageNode(state: any): Promise<any> {
     MessageSid: messageId
   } = input;
 
-  if (!waId) {
-    throw createError.badRequest('WhatsApp ID is required');
-  }
-
-  const user: User = await getUser(waId);
 
   let content: MessageContent = [{ type: 'text', text }];
   let hasImageInCurrent = false;
@@ -127,10 +121,11 @@ export async function ingestMessageNode(state: any): Promise<any> {
   logger.debug({ waId, messageId }, 'Message ingested successfully');
 
   return {
+    ...state,
     conversationHistoryWithImages,
     conversationHistoryTextOnly,
     pending,
     user,
-    input: state.input
+    input,
   };
 }

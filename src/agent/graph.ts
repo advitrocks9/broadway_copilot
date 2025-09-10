@@ -1,8 +1,7 @@
 import 'dotenv/config';
 
-import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
-import { BaseMessage } from '@langchain/core/messages';
-import { User, PendingType } from '@prisma/client';
+import { END, START, StateGraph } from '@langchain/langgraph';
+import { PendingType } from '@prisma/client';
 
 import { askUserInfoNode } from './nodes/askUserInfo';
 import { colorAnalysisNode } from './nodes/colorAnalysis';
@@ -15,30 +14,13 @@ import { routeStyling } from './nodes/routeStyling';
 import { routeGeneralNode } from './nodes/routeGeneral';
 import { sendReplyNode } from './nodes/sendReply';
 import { vibeCheckNode } from './nodes/vibeCheck';
-import { IntentLabel, AvailableService, Replies, StylingIntent, GeneralIntent } from './state';
+import { AgentState, GraphState } from './state';
 import { HttpError, createError } from '../utils/errors';
 import { logger } from '../utils/logger';
-
-/**
- * Shared state annotation for all agent nodes defining the complete agent state.
- * Contains user information, conversation history, routing decisions, and response data.
- */
-export const GraphAnnotation = Annotation.Root({
-  user: Annotation<User | undefined>(),
-  input: Annotation<Record<string, unknown> | undefined>(),
-  conversationHistoryWithImages: Annotation<BaseMessage[] | undefined>(),
-  conversationHistoryTextOnly: Annotation<BaseMessage[] | undefined>(),
-  intent: Annotation<IntentLabel | undefined>(),
-  stylingIntent: Annotation<StylingIntent | undefined>(),
-  generalIntent: Annotation<GeneralIntent | undefined>(),
-  missingProfileField: Annotation<('gender' | 'age_group') | undefined>(),
-  availableServices: Annotation<AvailableService[] | undefined>(),
-  assistantReply: Annotation<Replies | undefined>(),
-  pending: Annotation<PendingType | undefined>(),
-});
+import { TwilioWebhookRequest } from '../lib/twilio/types';
+import { getUser } from '../utils/user';
 
 let compiledApp: ReturnType<typeof StateGraph.prototype.compile> | null = null;
-logger.info('Agent graph definition loaded');
 
 /**
  * Builds and compiles the agent's state graph defining all nodes and their transitions.
@@ -48,7 +30,7 @@ logger.info('Agent graph definition loaded');
  * @returns Compiled StateGraph instance ready for execution
  */
 export function buildAgentGraph() {
-  const graph = new StateGraph(GraphAnnotation)
+  const graph = new StateGraph(AgentState)
     .addNode('ingest_message', ingestMessageNode)
     .addNode('record_user_info', recordUserInfoNode)
     .addNode('route_intent', routeIntent)
@@ -63,7 +45,7 @@ export function buildAgentGraph() {
     .addEdge(START, 'ingest_message')
     .addConditionalEdges(
       'ingest_message',
-      (s: any) => {
+      (s: GraphState) => {
         if (s.pending === PendingType.ASK_USER_INFO) {
           return 'record_user_info';
         }
@@ -75,7 +57,7 @@ export function buildAgentGraph() {
       },
     )
     .addEdge('record_user_info', 'route_intent')
-    .addConditionalEdges('route_intent', (s: any) => {
+    .addConditionalEdges('route_intent', (s: GraphState) => {
       if (s.missingProfileField) {
         return 'ask_user_info';
       }
@@ -90,18 +72,19 @@ export function buildAgentGraph() {
     .addEdge('route_general', 'handle_general')
     .addConditionalEdges(
       'route_styling',
-      (s: any) => {
+      (s: GraphState) => {
         if (s.assistantReply) {
           return 'send_reply';
         }
         if (s.stylingIntent) {
           return 'handle_styling';
         }
-        return 'handle_general';
+        logger.warn({ userId: s.user.id }, 'Exiting styling flow unexpectedly, routing to general');
+        return 'route_general';
       },
       {
         handle_styling: 'handle_styling',
-        handle_general: 'handle_general',
+        route_general: 'route_general',
         send_reply: 'send_reply',
       },
     )
@@ -125,27 +108,23 @@ export function buildAgentGraph() {
  * @throws {HttpError} For business logic errors (preserved with original status)
  * @throws {HttpError} For unexpected errors (wrapped as 500 internal server error)
  */
-export async function runAgent(input: Record<string, unknown>, options?: { signal?: AbortSignal }): Promise<void> {
-  const userId = (input as any).From;
-  const messageId = (input as any).MessageSid;
-
-  if (!userId) {
-    throw createError.badRequest('User ID is required');
-  }
+export async function runAgent(input: TwilioWebhookRequest, options?: { signal?: AbortSignal }): Promise<void> {
+  const { From: waId, MessageSid: messageId } = input;
 
   try {
     if (!compiledApp) {
       logger.info('Compiling agent graph for the first time');
       compiledApp = buildAgentGraph();
     }
+    const user = await getUser(waId);
 
-    await compiledApp.invoke({ input: input }, { configurable: { thread_id: userId }, signal: options?.signal });
+    await compiledApp.invoke({ input, user }, { configurable: { thread_id: waId }, signal: options?.signal });
   } catch (err: any) {
     if (err.name === 'AbortError') {
       throw err;
     }
 
-    logger.error({ userId, messageId, err: err.message, stack: err.stack }, 'Agent run failed');
+    logger.error({ waId, messageId, err: err.message, stack: err.stack }, 'Agent run failed');
 
     if (err instanceof HttpError) {
       throw err;

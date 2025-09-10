@@ -7,6 +7,7 @@ import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
 import { fetchRelevantMemories } from '../tools';
 import { Replies } from '../state';
+import { GraphState } from '../state';
 
 const SimpleOutputSchema = z.object({
   reply_text: z.string().describe('The text response to the user.'),
@@ -26,10 +27,10 @@ const ChatOutputSchema = z.object({
  * Handles general conversation intents such as greeting, menu, or open chat.
  * @param state Agent state containing user, conversation history, and routing info.
  */
-export async function handleGeneralNode(state: any) {
+export async function handleGeneralNode(state: GraphState): Promise<GraphState> {
   const { user, conversationHistoryTextOnly, generalIntent, input } = state;
-  const userId = user?.id;
-  const messageId = input?.MessageSid;
+  const userId = user.id;
+  const messageId = input.MessageSid;
 
   try {
     if (generalIntent === 'greeting' || generalIntent === 'menu') {
@@ -55,7 +56,7 @@ export async function handleGeneralNode(state: any) {
       });
 
       logger.info({ userId, messageId }, `${generalIntent} handled`);
-      return { assistantReply: replies };
+      return { ...state, assistantReply: replies };
     }
 
     if (generalIntent === 'chat') {
@@ -75,7 +76,7 @@ export async function handleGeneralNode(state: any) {
       }
 
       logger.info({ userId, messageId }, 'Chat handled');
-      return { assistantReply: replies };
+      return { ...state, assistantReply: replies };
     }
 
     throw createError.internalServerError(`Unhandled general intent: ${generalIntent}`);
@@ -89,6 +90,6 @@ export async function handleGeneralNode(state: any) {
         reply_text: "I'm not sure how to help with that. Could you try asking in a different way?",
       },
     ];
-    return { assistantReply: replies };
+    return { ...state, assistantReply: replies };
   }
 }

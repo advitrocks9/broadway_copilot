@@ -3,9 +3,10 @@ import { z } from 'zod';
 import { invokeAgent, invokeTextLLMWithJsonOutput } from '../../lib/llm';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
+import { createError } from '../../utils/errors';
 import { searchWardrobe, fetchColorAnalysis } from '../tools';
 import { Replies } from '../state';
-
+import { GraphState } from '../state';
 /**
  * Structured output schema for final styling suggestion from LLM.
  * Defines the format for the generated fashion recommendation response.
@@ -28,14 +29,24 @@ const LLMOutputSchema = z.object({
  * @param state - Agent graph state containing user data, styling intent, and conversation history
  * @returns Updated state with assistant reply containing styling suggestions
  */
-export async function handleStylingNode(state: any) {
-  const userId = state.user?.id;
-  const { stylingIntent, conversationHistoryTextOnly } = state;
-  const lastMessage = conversationHistoryTextOnly?.at(-1);
+export async function handleStylingNode(state: GraphState): Promise<GraphState> {
+  const { user, stylingIntent, conversationHistoryTextOnly } = state;
+  const userId = user.id;
+  const lastMessage = conversationHistoryTextOnly.at(-1);
+
+  if (!stylingIntent) {
+    throw createError.internalServerError('handleStylingNode called without a styling intent.');
+  }
 
   try {
     if (lastMessage?.additional_kwargs?.buttonPayload) {
-      return handleDefaultStyling(state, stylingIntent);
+    const defaultPromptText = await loadPrompt('handle_styling_no_input.txt', { injectPersona: true });
+    const defaultPrompt = defaultPromptText.replace('{INTENT}', stylingIntent);
+    const response = await invokeTextLLMWithJsonOutput(defaultPrompt, LLMOutputSchema);
+    const reply_text = response.message1_text as string;
+    logger.debug({ userId, reply_text }, 'Returning with default LLM reply');
+    const replies: Replies = [{ reply_type: 'text', reply_text }];
+    return { ...state, assistantReply: replies };
     }
 
     const tools = [
@@ -64,24 +75,5 @@ export async function handleStylingNode(state: any) {
     const replies: Replies = [{ reply_type: 'text', reply_text: "I'm having trouble with that request. Let's try something else." }];
     return { ...state, assistantReply: replies };
   }
-}
-
-/**
- * Handles default styling response when input is from button payload only.
- * Generates a basic suggestion without additional tools.
- *
- * @param state - Current agent state
- * @param stylingIntent - The specific styling intent
- * @returns Updated state with default reply
- */
-async function handleDefaultStyling(state: any, stylingIntent: string) {
-  const userId = state.user?.id;
-  const defaultPromptText = await loadPrompt('handle_styling_no_input.txt', { injectPersona: true });
-  const defaultPrompt = defaultPromptText.replace('{INTENT}', stylingIntent);
-  const response = await invokeTextLLMWithJsonOutput(defaultPrompt, LLMOutputSchema);
-  const reply_text = response.message1_text as string;
-  logger.debug({ userId, reply_text }, 'Returning with default LLM reply');
-  const replies: Replies = [{ reply_type: 'text', reply_text }];
-  return { ...state, assistantReply: replies };
 }
 

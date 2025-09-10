@@ -8,8 +8,7 @@ import { createError } from '../utils/errors';
 import { TWILIO_WHATSAPP_FROM, TWILIO_QUICKREPLY2_SID, TWILIO_QUICKREPLY3_SID } from '../utils/constants';
 import { logger } from '../utils/logger';
 
-import { QuickReplyButton } from '../types/common';
-import { TwilioApiError, TwilioMessageOptions, StatusResolvers, TwilioStatusCallbackPayload } from '../types/twilio';
+import { QuickReplyButton, TwilioApiError, TwilioMessageOptions, StatusResolvers, TwilioStatusCallbackPayload } from './twilio/types';
 
 const sidToResolvers = new Map<string, StatusResolvers>();
 const sidToSeenStatuses = new Map<string, Set<string>>();

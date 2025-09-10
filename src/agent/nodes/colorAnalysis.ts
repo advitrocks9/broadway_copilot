@@ -10,6 +10,7 @@ import { logger } from '../../utils/logger';
 import { createError } from '../../utils/errors';
 
 import { Replies } from '../state';
+import { GraphState } from '../state';
 
 /**
  * Schema for a color object with name and hex code.
@@ -44,10 +45,10 @@ const NoImageLLMOutputSchema = z.object({
  * @param state - The current state of the agent.
  * @returns Updated state with assistant reply.
  */
-async function handleNoImageCase(state: any) {
+async function handleNoImageCase(state: GraphState) {
   const defaultPrompt = await loadPrompt('color_analysis_no_image.txt', { injectPersona: true });
   const response = await invokeTextLLMWithJsonOutput(defaultPrompt, NoImageLLMOutputSchema);
-  logger.debug({ userId: state.user?.id, reply_text: response.reply_text }, 'Invoking text LLM for no-image response');
+  logger.debug({ userId: state.user.id, reply_text: response.reply_text }, 'Invoking text LLM for no-image response');
   const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
   return { ...state, assistantReply: replies };
 }
@@ -56,9 +57,9 @@ async function handleNoImageCase(state: any) {
  * Performs color analysis from a portrait and returns a text reply; logs and persists results.
  * @param state The current agent state.
  */
-export async function colorAnalysisNode(state: any) {
-  const userId = state.user?.id;
-  const messageId = state.input?.MessageSid;
+export async function colorAnalysisNode(state: GraphState): Promise<GraphState> {
+  const userId = state.user.id;
+  const messageId = state.input.MessageSid;
 
   const imageCount = numImagesInMessage(state.conversationHistoryWithImages);
 
@@ -95,7 +96,7 @@ export async function colorAnalysisNode(state: any) {
       },
     });
 
-    await prisma.user.update({
+    const user = await prisma.user.update({
       where: { id: state.user.id },
       data: { lastColorAnalysisAt: new Date() },
     });
@@ -106,7 +107,7 @@ export async function colorAnalysisNode(state: any) {
     }
 
     logger.info({ userId, messageId, replies }, 'Color analysis completed successfully');
-    return { ...state, assistantReply: replies };
+    return { ...state, user, assistantReply: replies };
   } catch (err: any) {
     throw createError.internalServerError('Color analysis failed', { cause: err });
   }

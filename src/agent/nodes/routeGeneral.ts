@@ -7,6 +7,7 @@ import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
 
 import { GeneralIntent } from '../state';
+import { GraphState } from '../state';
 
 const GREETING_REGEX = /\b(hi|hello|hey|heya|yo|sup)\b/i;
 const MENU_REGEX = /\b(help|menu|options?|what can you do\??)\b/i;
@@ -20,10 +21,10 @@ const LLMOutputSchema = z.object({
 /**
  * Routes general messages (greeting/menu/chat) via regex shortcuts, else LLM.
  */
-export async function routeGeneralNode(state: any) {
-  const userId = state.user?.id;
-  const messageId = state.input?.MessageSid;
-  const lastMessage = state.conversationHistoryTextOnly.at(-1)?.content ?? '';
+export async function routeGeneralNode(state: GraphState): Promise<GraphState> {
+  const userId = state.user.id;
+  const messageId = state.input.MessageSid;
+  const lastMessage = state.conversationHistoryTextOnly.at(-1)?.content?.toString() ?? '';
 
   logger.info({ userId, messageId, lastMessage }, 'Routing general intent');
 
@@ -31,11 +32,11 @@ export async function routeGeneralNode(state: any) {
     // Regex routing for common cases
     if (GREETING_REGEX.test(lastMessage)) {
       logger.debug({ userId }, 'General intent routed to "greeting" by regex');
-      return { generalIntent: 'greeting' as GeneralIntent };
+      return { ...state, generalIntent: 'greeting' as GeneralIntent };
     }
     if (MENU_REGEX.test(lastMessage)) {
       logger.debug({ userId }, 'General intent routed to "menu" by regex');
-      return { generalIntent: 'menu' as GeneralIntent };
+      return { ...state, generalIntent: 'menu' as GeneralIntent };
     }
 
     // LLM routing for other cases
@@ -59,13 +60,13 @@ export async function routeGeneralNode(state: any) {
       { userId, generalIntent: response.generalIntent },
       'General intent routed using LLM'
     );
-
-    return response;
+    const { generalIntent } = response;
+    return { ...state, generalIntent };
   } catch (err: any) {
     logger.error({ userId, messageId, err: err.message, stack: err.stack }, 'Error routing general intent');
     if (err.statusCode) {
       throw err;
     }
-    return { generalIntent: 'chat' as GeneralIntent };
+    return { ...state, generalIntent: 'chat' as GeneralIntent };
   }
 }

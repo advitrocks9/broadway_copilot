@@ -9,8 +9,8 @@ import { rateLimiter } from './middleware/rateLimiter';
 import { runAgent } from './agent/graph';
 import { connectRedis, redis } from './lib/redis';
 import { processStatusCallback } from './lib/twilio';
+import { TwilioWebhookRequest } from './lib/twilio/types';
 import { MESSAGE_TTL_SECONDS, USER_STATE_TTL_SECONDS } from './utils/constants';
-import { createError } from './utils/errors';
 import { logger } from './utils/logger';
 import { staticUploadsMount } from './utils/paths';
 
@@ -38,13 +38,9 @@ const userControllers: Map<string, { controller: AbortController; messageId: str
  */
 app.post('/twilio/', authenticateRequest, rateLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userId = req.body.From;
-    const messageId = req.body.MessageSid;
+    const webhookPayload = req.body as TwilioWebhookRequest;
+    const { From: userId, MessageSid: messageId } = webhookPayload;
     logger.info({ userId, messageId }, 'Received incoming message');
-
-    if (!userId || !messageId) {
-      throw createError.badRequest('Missing required fields: userId or messageId');
-    }
 
     const mk = getMessageKey(messageId);
 
@@ -75,13 +71,13 @@ app.post('/twilio/', authenticateRequest, rateLimiter, async (req: Request, res:
 
     if (currentStatus === 'sending') {
       const uqk = getUserQueueKey(userId);
-      await redis.rPush(uqk, JSON.stringify({ messageId, input: req.body }));
+      await redis.rPush(uqk, JSON.stringify({ messageId, input: webhookPayload }));
       await redis.expire(uqk, USER_STATE_TTL_SECONDS);
       logger.debug({ messageId, userId }, 'Queued message due to active sending');
       return res.status(200).end();
     } else {
       await redis.set(uak, messageId, { EX: USER_STATE_TTL_SECONDS });
-      processMessage(userId, messageId, req.body);
+      processMessage(userId, messageId, webhookPayload);
       return res.status(200).end();
     }
   } catch (err: any) {
@@ -120,7 +116,7 @@ app.use(errorHandler);
  * @param messageId - The Twilio message SID
  * @param input - The raw Twilio webhook payload
  */
-async function processMessage(userId: string, messageId: string, input: Record<string, any>): Promise<void> {
+async function processMessage(userId: string, messageId: string, input: TwilioWebhookRequest): Promise<void> {
   const controller = new AbortController();
   userControllers.set(userId, { controller, messageId });
   const mk = getMessageKey(messageId);

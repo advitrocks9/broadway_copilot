@@ -6,6 +6,7 @@ import { Gender, AgeGroup, PendingType } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { invokeTextLLMWithJsonOutput } from '../../lib/llm';
 import { loadPrompt } from '../../utils/prompts';
+import { GraphState } from '../state';
 
 /**
  * Structured output schema for confirming user profile fields.
@@ -19,7 +20,7 @@ const LLMOutputSchema = z.object({
  * Extracts and persists confirmed user profile fields inferred from recent conversation.
  * Resets pending state to NONE when complete.
  */
-export async function recordUserInfoNode(state: any) {
+export async function recordUserInfoNode(state: GraphState): Promise<GraphState> {
 
   const systemPrompt = await loadPrompt('record_user_info.txt');
 
@@ -28,7 +29,7 @@ export async function recordUserInfoNode(state: any) {
     new MessagesPlaceholder("history"),
   ]);
 
-  const formattedPrompt = await promptTemplate.invoke({ history: state.conversationHistoryTextOnly || [] });
+  const formattedPrompt = await promptTemplate.invoke({ history: state.conversationHistoryTextOnly });
 
   const response = await invokeTextLLMWithJsonOutput(
     formattedPrompt.toChatMessages(),
@@ -40,5 +41,5 @@ export async function recordUserInfoNode(state: any) {
     data: { confirmedGender: response.confirmed_gender, confirmedAgeGroup: response.confirmed_age_group }
   });
 
-  return { user, pending: PendingType.NONE };
+  return { ...state, user, pending: PendingType.NONE };
 }

@@ -7,9 +7,11 @@ import { invokeVisionLLMWithJsonOutput, invokeTextLLMWithJsonOutput } from '../.
 import { queueWardrobeIndex } from '../../lib/tasks';
 import { numImagesInMessage } from '../../utils/conversation';
 import { loadPrompt } from '../../utils/prompts';
-import { logger }  from '../../utils/logger';
+import { logger } from '../../utils/logger';
 
 import { Replies } from '../state';
+import { GraphState } from '../state';
+import { createError } from '../../utils/errors';
 
 /**
  * Rates outfit from an image and returns a concise text summary; logs and persists results.
@@ -31,8 +33,8 @@ const NoImageLLMOutputSchema = z.object({
   reply_text: z.string().describe("The text to send to the user explaining they need to send an image."),
 });
 
-export async function vibeCheckNode(state: any) {
-  const userId = state.user?.id;
+export async function vibeCheckNode(state: GraphState): Promise<GraphState> {
+  const userId = state.user.id;
 
   const imageCount = numImagesInMessage(state.conversationHistoryWithImages);
 
@@ -60,7 +62,10 @@ export async function vibeCheckNode(state: any) {
   );
 
   const latestMessage = state.conversationHistoryWithImages.at(-1);
-  const latestMessageId = latestMessage.additional_kwargs.messageId;
+  if (!latestMessage || !latestMessage.additional_kwargs.messageId) {
+    throw createError.internalServerError('Could not find latest message ID for vibe check');
+  }
+  const latestMessageId = latestMessage.additional_kwargs.messageId as string;
 
   // Dynamically map categories based on headings
   const categoryMap: { [key: string]: string } = {
@@ -92,7 +97,7 @@ export async function vibeCheckNode(state: any) {
     },
   });
 
-  await prisma.user.update({
+  const user = await prisma.user.update({
     where: { id: userId },
     data: { lastVibeCheckAt: new Date() },
   });
@@ -110,6 +115,6 @@ export async function vibeCheckNode(state: any) {
   }
 
   logger.debug({ userId, vibeScore: result.vibe_score, replies }, 'Vibe check completed successfully');
-  return { ...state, assistantReply: replies };
+  return { ...state, user, assistantReply: replies };
 }
 

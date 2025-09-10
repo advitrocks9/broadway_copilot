@@ -7,9 +7,10 @@ import { prisma } from '../../lib/prisma';
 import { redis } from '../../lib/redis';
 import { queueMemoryExtraction } from '../../lib/tasks';
 import { sendText, sendMenu, sendImage } from '../../lib/twilio';
-import { logger }  from '../../utils/logger';
+import { logger } from '../../utils/logger';
 import { createError, normalizeError } from '../../utils/errors';
 import { Replies } from '../state';
+import { GraphState } from '../state';
 
 /**
  * Sends the reply via Twilio based on the assistant's generated replies.
@@ -18,12 +19,9 @@ import { Replies } from '../state';
  * @param state The current agent state containing reply and user info.
  * @returns An empty object as no state updates are needed.
  */
-export async function sendReplyNode(state: any): Promise<Record<string, never>> {
+export async function sendReplyNode(state: GraphState): Promise<GraphState> {
   const { input, user } = state;
-  const messageId = input?.MessageSid as string | undefined;
-  if (!messageId) {
-    throw createError.badRequest('MessageSid is required');
-  }
+  const messageId = input.MessageSid;
   const messageKey = `message:${messageId}`;
   const userId = user.id;
   const waId = user.waId;
@@ -31,7 +29,7 @@ export async function sendReplyNode(state: any): Promise<Record<string, never>> 
   logger.debug({ waId }, 'Setting message status to sending in Redis');
   await redis.hSet(messageKey, { status: 'sending' });
 
-  const replies: Replies = state.assistantReply;
+  const replies: Replies = state.assistantReply ?? [];
   const formattedContent: MessageContent = replies.flatMap(r => {
     const parts: MessageContent = [];
     if (r.reply_text) {
@@ -86,5 +84,5 @@ export async function sendReplyNode(state: any): Promise<Record<string, never>> 
     }
   }
 
-  return {};
+  return { ...state };
 }
