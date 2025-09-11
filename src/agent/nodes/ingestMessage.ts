@@ -7,6 +7,7 @@ import { getConversation } from '../../utils/conversation';
 import { extractTextContent } from '../../utils/text';
 import { logger } from '../../utils/logger';
 import { GraphState } from '../state';
+import { queueImageUpload } from '../../lib/tasks';
 
 /**
  * Ingests incoming Twilio messages, processes media attachments, manages conversation history,
@@ -57,11 +58,12 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
 
   const pending = latestAssistantMessage?.pending ?? PendingType.NONE;
 
+  let savedMessage;
   if (lastMessage && lastMessage.role === MessageRole.USER) {
     const existingContent = lastMessage.content as MessageContent[];
     const mergedContent = [...existingContent, ...content];
 
-    await prisma.message.update({
+    savedMessage = await prisma.message.update({
       where: { id: lastMessage.id },
       data: {
         content: mergedContent,
@@ -78,7 +80,7 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
       }
     });
   } else {
-    await prisma.message.create({
+    savedMessage = await prisma.message.create({
       data: {
         conversationId: conversation.id,
         role: MessageRole.USER,
@@ -95,6 +97,10 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
         }),
       }
     });
+  }
+
+  if (media) {
+    await queueImageUpload(user.id, savedMessage.id);
   }
 
   const messages = await prisma.message.findMany({

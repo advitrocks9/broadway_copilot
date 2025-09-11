@@ -11,6 +11,7 @@ import { createError } from '../../utils/errors';
 
 import { Replies } from '../state';
 import { GraphState } from '../state';
+import { PendingType } from '@prisma/client';
 
 /**
  * Schema for a color object with name and hex code.
@@ -40,18 +41,6 @@ const NoImageLLMOutputSchema = z.object({
   reply_text: z.string().describe("The text to send to the user explaining they need to send an image."),
 });
 
-/**
- * Handles the case where no image is provided, generating a default text response.
- * @param state - The current state of the agent.
- * @returns Updated state with assistant reply.
- */
-async function handleNoImageCase(state: GraphState) {
-  const defaultPrompt = await loadPrompt('color_analysis_no_image.txt', { injectPersona: true });
-  const response = await invokeTextLLMWithJsonOutput(defaultPrompt, NoImageLLMOutputSchema);
-  logger.debug({ userId: state.user.id, reply_text: response.reply_text }, 'Invoking text LLM for no-image response');
-  const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
-  return { ...state, assistantReply: replies };
-}
 
 /**
  * Performs color analysis from a portrait and returns a text reply; logs and persists results.
@@ -64,7 +53,11 @@ export async function colorAnalysisNode(state: GraphState): Promise<GraphState> 
   const imageCount = numImagesInMessage(state.conversationHistoryWithImages);
 
   if (imageCount === 0) {
-    return handleNoImageCase(state);
+    const defaultPrompt = await loadPrompt('color_analysis_no_image.txt', { injectPersona: true });
+    const response = await invokeTextLLMWithJsonOutput(defaultPrompt, NoImageLLMOutputSchema);
+    logger.debug({ userId: state.user.id, reply_text: response.reply_text }, 'Invoking text LLM for no-image response');
+    const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
+   return { ...state, assistantReply: replies, pending: PendingType.COLOR_ANALYSIS_IMAGE };
   }
 
   try {

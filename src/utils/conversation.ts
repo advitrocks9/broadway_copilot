@@ -1,6 +1,7 @@
 import { Conversation, ConversationStatus } from '@prisma/client';
 
 import { prisma } from '../lib/prisma';
+import { queueMemoryExtraction } from '../lib/tasks';
 import { logger } from './logger';
 
 const CONVERSATION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
@@ -30,6 +31,11 @@ export async function getConversation(userId: string): Promise<Conversation> {
         where: { id: lastOpenConversation.id },
         data: { status: ConversationStatus.CLOSED },
       });
+      await queueMemoryExtraction(userId, lastOpenConversation.id);
+      logger.info(
+        { userId, conversationId: lastOpenConversation.id },
+        'Queued memory extraction for closed conversation.'
+      );
     } else {
       return lastOpenConversation;
     }

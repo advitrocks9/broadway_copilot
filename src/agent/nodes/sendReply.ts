@@ -5,7 +5,6 @@ import { MessageRole, PendingType } from '@prisma/client';
 
 import { prisma } from '../../lib/prisma';
 import { redis } from '../../lib/redis';
-import { queueMemoryExtraction } from '../../lib/tasks';
 import { sendText, sendMenu, sendImage } from '../../lib/twilio';
 import { logger } from '../../utils/logger';
 import { createError, normalizeError } from '../../utils/errors';
@@ -24,7 +23,6 @@ export async function sendReplyNode(state: GraphState): Promise<GraphState> {
   const { input, user } = state;
   const messageId = input.MessageSid;
   const messageKey = `message:${messageId}`;
-  const userId = user.id;
   const whatsappId = user.whatsappId;
 
   const conversation = await prisma.conversation.findFirst({
@@ -84,14 +82,6 @@ export async function sendReplyNode(state: GraphState): Promise<GraphState> {
   } finally {
     logger.debug({ status: success ? 'delivered' : 'failed' }, 'Updating message status in Redis');
     await redis.hSet(messageKey, { status: success ? 'delivered' : 'failed' });
-
-    try {
-      logger.debug({ whatsappId }, 'Scheduling memory extraction for user');
-      await queueMemoryExtraction(userId, 5 * 60 * 1000);
-      logger.debug({ whatsappId }, 'Scheduled memory extraction');
-    } catch (err: unknown) {
-      logger.warn({ whatsappId, err: (err as Error).message, stack: (err as Error).stack }, 'Failed to schedule memory extraction');
-    }
   }
 
   return { ...state };

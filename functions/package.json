@@ -1,0 +1,29 @@
+{
+  "name": "broadway-copilot-functions",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Google Cloud Functions for Broadway Copilot",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "npm run build && functions-framework --source=dist --target=imageUpload --port=8080",
+    "build": "tsc",
+    "test:imageUpload": "npm run build && functions-framework --source=dist --target=imageUpload --port=8080",
+    "test:storeMemories": "npm run build && functions-framework --source=dist --target=storeMemories --port=8081",
+    "test:indexWardrobe": "npm run build && functions-framework --source=dist --target=indexWardrobe --port=8082"
+  },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^4.0.0",
+    "prisma": "^6.16.0",
+    "dotenv": "^17.2.2",
+    "@google-cloud/storage": "^7.17.1",
+    "@prisma/client": "^6.16.0",
+    "node-fetch": "^3.3.2",
+    "openai": "^5.20.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node-fetch": "^2.6.13",
+    "@types/node": "^24.3.1",
+    "typescript": "^5.9.2"
+  }
+}

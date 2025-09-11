@@ -12,6 +12,7 @@ import { logger } from '../../utils/logger';
 import { Replies } from '../state';
 import { GraphState } from '../state';
 import { createError } from '../../utils/errors';
+import { PendingType } from '@prisma/client';
 
 /**
  * Rates outfit from an image and returns a concise text summary; logs and persists results.
@@ -43,7 +44,7 @@ export async function vibeCheckNode(state: GraphState): Promise<GraphState> {
     const response = await invokeTextLLMWithJsonOutput(defaultPrompt, NoImageLLMOutputSchema);
     logger.debug({ userId, reply_text: response.reply_text }, 'Invoking text LLM for no-image response');
     const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
-    return { ...state, assistantReply: replies };
+    return { ...state, assistantReply: replies, pending: PendingType.VIBE_CHECK_IMAGE };
   }
 
   const systemPrompt = await loadPrompt('vibe_check.txt', { injectPersona: true });
@@ -102,7 +103,7 @@ export async function vibeCheckNode(state: GraphState): Promise<GraphState> {
     data: { lastVibeCheckAt: new Date() },
   });
 
-  await queueWardrobeIndex(latestMessageId);
+  await queueWardrobeIndex(userId, latestMessageId);
   logger.debug({ userId }, 'Scheduled wardrobe indexing for message');
   
 
