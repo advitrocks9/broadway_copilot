@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 import { CloudTasksClient } from "@google-cloud/tasks";
 import { TaskType } from "@prisma/client";
 import { createError } from "../utils/errors";
@@ -6,11 +8,13 @@ import { prisma } from "./prisma";
 
 const client = new CloudTasksClient();
 
-const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT;
+const PROJECT_ID =  process.env.PROJECT_ID || "broadway-chatbot";
+const CLOUD_FUNCTION_REGION = process.env.CLOUD_FUNCTION_REGION || "asia-south2";
+const CLOUD_TASKS_REGION = process.env.CLOUD_TASKS_REGION || "asia-south1";
 
-const WARDROBE_FUNCTION_URL = process.env.WARDROBE_INDEX_FUNCTION_URL;
-const MEMORY_FUNCTION_URL = process.env.MEMORY_EXTRACTION_FUNCTION_URL;
-const IMAGE_UPLOAD_FUNCTION_URL = process.env.IMAGE_UPLOAD_FUNCTION_URL;
+const WARDROBE_FUNCTION_URL = `https://${CLOUD_FUNCTION_REGION}-${PROJECT_ID}.cloudfunctions.net/indexWardrobe`;
+const MEMORY_FUNCTION_URL = `https://${CLOUD_FUNCTION_REGION}-${PROJECT_ID}.cloudfunctions.net/storeMemories`;
+const IMAGE_UPLOAD_FUNCTION_URL = `https://${CLOUD_FUNCTION_REGION}-${PROJECT_ID}.cloudfunctions.net/imageUpload`;
 
 const SERVICE_ACCOUNT_EMAIL = process.env.CLOUD_TASKS_SERVICE_ACCOUNT;
 
@@ -23,7 +27,7 @@ export async function queueWardrobeIndex(userId: string, messageId: string): Pro
     throw createError.internalServerError("Missing required environment variables for Cloud Tasks");
   }
 
-  const parent = client.queuePath(PROJECT_ID, "asia-south1", "wardrobe-index");
+  const parent = client.queuePath(PROJECT_ID, CLOUD_TASKS_REGION, "wardrobe-index");
 
   const task = {
     httpRequest: {
@@ -67,7 +71,7 @@ export async function queueMemoryExtraction(userId: string, conversationId: stri
     throw createError.internalServerError("Missing required environment variables for Cloud Tasks");
   }
 
-  const parent = client.queuePath(PROJECT_ID, "asia-south1", "memory-extraction");
+  const parent = client.queuePath(PROJECT_ID, CLOUD_TASKS_REGION, "memory-extraction");
 
   const task = {
     httpRequest: {
@@ -112,7 +116,7 @@ export async function queueImageUpload(userId: string, messageId: string): Promi
     throw createError.internalServerError("Missing required environment variables for Cloud Tasks");
   }
 
-  const parent = client.queuePath(PROJECT_ID, "asia-south1", "image-upload");
+  const parent = client.queuePath(PROJECT_ID, CLOUD_TASKS_REGION, "image-upload");
 
   const task = {
     httpRequest: {

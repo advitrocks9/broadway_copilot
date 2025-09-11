@@ -66,17 +66,18 @@ The core of the application is a state machine built with LangGraph. This agent 
 
 **Key Nodes:**
 
--   `ingest_message`: The entry point for the graph. It processes the raw webhook payload, extracts the message content and user information, and saves it to the database.
--   `record_user_info`: If the user is responding to a question from the agent (e.g., providing their gender), this node records the information in the database.
--   `route_intent`: A critical routing node. It analyzes the user's message to determine their intent (e.g., asking for a "vibe check," styling advice, or just chatting).
--   `ask_user_info`: If the agent needs more information to fulfill a request (e.g., the user's gender), this node generates a question to ask the user.
--   `route_general`: A sub-router that handles general conversational intents like greetings, questions, or menu requests.
--   `route_styling`: A sub-router for all fashion-related queries. It directs the flow based on whether the user wants to pair an item, get vacation packing advice, or get help for a specific occasion.
--   `handle_general`: Processes general, non-fashion-related messages.
--   `handle_styling`: The main handler for all styling-related intents. It uses the OpenAI API to generate personalized fashion advice.
--   `vibe_check`: Handles outfit photo analysis. It takes an image, sends it to the OpenAI Vision API, and returns a detailed critique.
--   `color_analysis`: Performs a seasonal color analysis based on a user's photo.
--   `send_reply`: The final node in the graph. It takes the generated response from one of the handler nodes and sends it to the user via Twilio.
+-   `ingestMessage`: The entry point for the graph. It processes the raw webhook payload, extracts the message content and user information, and saves it to the database.
+-   `recordUserInfo`: If the user is responding to a question from the agent (e.g., providing their gender), this node records the information in the database.
+-   `inferProfile`: Analyzes conversation history to passively infer and update user profile details like style preferences, gender, or age, enhancing personalization over time.
+-   `routeIntent`: A critical routing node. It analyzes the user's message to determine their intent (e.g., asking for a "vibe check," styling advice, or just chatting).
+-   `askUserInfo`: If the agent needs more information to fulfill a request (e.g., the user's gender), this node generates a question to ask the user.
+-   `routeGeneral`: A sub-router that handles general conversational intents like greetings, questions, or menu requests.
+-   `routeStyling`: A sub-router for all fashion-related queries. It directs the flow based on whether the user wants to pair an item, get vacation packing advice, or get help for a specific occasion.
+-   `handleGeneral`: Processes general, non-fashion-related messages.
+-   `handleStyling`: The main handler for all styling-related intents. It uses the OpenAI API to generate personalized fashion advice.
+-   `vibeCheck`: Handles outfit photo analysis. It takes an image, sends it to the OpenAI Vision API, and returns a detailed critique.
+-   `colorAnalysis`: Performs a seasonal color analysis based on a user's photo.
+-   `sendReply`: The final node in the graph. It takes the generated response from one of the handler nodes and sends it to the user via Twilio.
 
 ## Getting Started
 

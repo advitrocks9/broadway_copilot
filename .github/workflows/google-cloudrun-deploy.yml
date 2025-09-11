@@ -50,10 +50,16 @@ jobs:
           env_vars: |-
             NODE_ENV=production
             TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+            TWILIO_VALIDATE_WEBHOOK=true
+            TWILIO_WAIT_FOR_STATUS=true
+            TWILIO_HTTP_TIMEOUT_MS=10000
+            TWILIO_SENT_TIMEOUT_MS=15000
+            TWILIO_DELIVERED_TIMEOUT_MS=60000
             LANGSMITH_TRACING=true
             LANGSMITH_ENDPOINT=https://api.smith.langchain.com
-            LOG_LEVEL=info
-            GOOGLE_CLOUD_PROJECT=${{ env.PROJECT_ID }}
+            PROJECT_ID=${{ env.PROJECT_ID }}
+            CLOUD_FUNCTION_REGION=${{ env.REGION }}
+            CLOUD_TASKS_REGION=asia-south1
           secrets: |-
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest
@@ -66,10 +72,10 @@ jobs:
             GROQ_API_KEY=GROQ_API_KEY:latest
             CLOUD_TASKS_SERVICE_ACCOUNT=CLOUD_TASKS_SERVICE_ACCOUNT:latest
           flags: |-
-            --vpc-connector=projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions
+            --network=default
+            --subnet=run-asia-south2
             --vpc-egress=private-ranges-only
             --add-cloudsql-instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:broadway-chatbot-database
-
 
       - name: 'Show output'
         run: |
