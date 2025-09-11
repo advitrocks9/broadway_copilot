@@ -64,7 +64,7 @@ jobs:
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest
             TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest
-            DATABASE_URL=DATABASE_URL:latest
+            DATABASE_URL=PRIVATE_DATABASE_URL:latest
             REDIS_URL=REDIS_URL:latest
             SERVER_URL=SERVER_URL:latest
             LANGSMITH_API_KEY=LANGSMITH_API_KEY:latest
@@ -72,10 +72,10 @@ jobs:
             GROQ_API_KEY=GROQ_API_KEY:latest
             CLOUD_TASKS_SERVICE_ACCOUNT=CLOUD_TASKS_SERVICE_ACCOUNT:latest
           flags: |-
-            --network=default
-            --subnet=run-asia-south2
+            --network=chatbot-vpc
+            --subnet=chatbot-subnet
             --vpc-egress=private-ranges-only
-            --add-cloudsql-instances=${{ env.PROJECT_ID }}:${{ env.REGION }}:broadway-chatbot-database
+            --service-account=github-actions-deploy@broadway-chatbot.iam.gserviceaccount.com
 
       - name: 'Show output'
         run: |

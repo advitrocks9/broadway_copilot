@@ -40,10 +40,9 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
           region: ${{ env.REGION }}
           source_dir: ./functions
-          vpc_connector: projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions
           secrets: |-
             GCS_BUCKET_NAME=projects/${{ env.PROJECT_ID }}/secrets/GCS_BUCKET_NAME/versions/latest
-            DATABASE_URL=projects/${{ env.PROJECT_ID }}/secrets/DATABASE_URL/versions/latest
+            DATABASE_URL=projects/${{ env.PROJECT_ID }}/secrets/PUBLIC_DATABASE_URL/versions/latest
 
       - name: Deploy storeMemories
         uses: google-github-actions/deploy-cloud-functions@v4
@@ -54,9 +53,8 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
           region: ${{ env.REGION }}
           source_dir: ./functions
-          vpc_connector: projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions
           secrets: |-
-            DATABASE_URL=projects/${{ env.PROJECT_ID }}/secrets/DATABASE_URL/versions/latest
+            DATABASE_URL=projects/${{ env.PROJECT_ID }}/secrets/PUBLIC_DATABASE_URL/versions/latest
             OPENAI_API_KEY=projects/${{ env.PROJECT_ID }}/secrets/OPENAI_API_KEY/versions/latest
 
       - name: Deploy indexWardrobe
@@ -68,7 +66,6 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
           region: ${{ env.REGION }}
           source_dir: ./functions
-          vpc_connector: projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions
           secrets: |-
-            DATABASE_URL=projects/${{ env.PROJECT_ID }}/secrets/DATABASE_URL/versions/latest
+            DATABASE_URL=projects/${{ env.PROJECT_ID }}/secrets/PUBLIC_DATABASE_URL/versions/latest
             OPENAI_API_KEY=projects/${{ env.PROJECT_ID }}/secrets/OPENAI_API_KEY/versions/latest
