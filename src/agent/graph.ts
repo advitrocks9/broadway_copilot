@@ -109,22 +109,22 @@ export function buildAgentGraph() {
  * @throws {HttpError} For unexpected errors (wrapped as 500 internal server error)
  */
 export async function runAgent(input: TwilioWebhookRequest, options?: { signal?: AbortSignal }): Promise<void> {
-  const { From: waId, MessageSid: messageId } = input;
+  const { From: whatsappId, MessageSid: messageId } = input;
 
   try {
     if (!compiledApp) {
       logger.info('Compiling agent graph for the first time');
       compiledApp = buildAgentGraph();
     }
-    const user = await getUser(waId);
+    const user = await getUser(whatsappId);
 
-    await compiledApp.invoke({ input, user }, { configurable: { thread_id: waId }, signal: options?.signal });
+    await compiledApp.invoke({ input, user }, { configurable: { thread_id: whatsappId }, signal: options?.signal });
   } catch (err: any) {
     if (err.name === 'AbortError') {
       throw err;
     }
 
-    logger.error({ waId, messageId, err: err.message, stack: err.stack }, 'Agent run failed');
+    logger.error({ whatsappId, messageId, err: err.message, stack: err.stack }, 'Agent run failed');
 
     if (err instanceof HttpError) {
       throw err;

@@ -7,19 +7,19 @@ import { createError } from './errors';
  * Gets or creates a user record for the given WhatsApp ID.
  * Uses upsert to ensure user exists without duplicating records.
  *
- * @param waId - WhatsApp user identifier (e.g., "whatsapp:+1234567890")
+ * @param whatsappId - WhatsApp user identifier (e.g., "whatsapp:+1234567890")
  * @returns User record from database
  * @throws {HttpError} When WhatsApp ID is missing or database operation fails
  */
-export async function getUser(waId: string): Promise<User> {
-  if (!waId) {
+export async function getUser(whatsappId: string): Promise<User> {
+  if (!whatsappId) {
     throw createError.badRequest('WhatsApp ID is required');
   }
 
   try {
     const user = await prisma.user.upsert({
-      where: { waId },
-      create: { waId },
+      where: { whatsappId },
+      create: { whatsappId },
       update: {},
     });
 

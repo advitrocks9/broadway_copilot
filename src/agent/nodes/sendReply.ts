@@ -11,6 +11,7 @@ import { logger } from '../../utils/logger';
 import { createError, normalizeError } from '../../utils/errors';
 import { Replies } from '../state';
 import { GraphState } from '../state';
+import { ConversationStatus } from '@prisma/client';
 
 /**
  * Sends the reply via Twilio based on the assistant's generated replies.
@@ -24,9 +25,18 @@ export async function sendReplyNode(state: GraphState): Promise<GraphState> {
   const messageId = input.MessageSid;
   const messageKey = `message:${messageId}`;
   const userId = user.id;
-  const waId = user.waId;
+  const whatsappId = user.whatsappId;
 
-  logger.debug({ waId }, 'Setting message status to sending in Redis');
+  const conversation = await prisma.conversation.findFirst({
+    where: { userId: user.id, status: ConversationStatus.OPEN },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!conversation) {
+    throw createError.internalServerError('No open conversation found for user');
+  }
+
+  logger.debug({ whatsappId }, 'Setting message status to sending in Redis');
   await redis.hSet(messageKey, { status: 'sending' });
 
   const replies: Replies = state.assistantReply ?? [];
@@ -45,7 +55,7 @@ export async function sendReplyNode(state: GraphState): Promise<GraphState> {
 
   await prisma.message.create({
     data: {
-      userId,
+      conversationId: conversation.id,
       role: MessageRole.AI,
       content: formattedContent,
       pending: pendingToPersist,
@@ -56,17 +66,17 @@ export async function sendReplyNode(state: GraphState): Promise<GraphState> {
   try {
     for (const [index, r] of replies.entries()) {
       if (r.reply_type === 'text') {
-        await sendText(waId, r.reply_text);
-        logger.debug({ waId, replyIndex: index + 1, textLength: r.reply_text.length }, 'Sent text message');
+        await sendText(whatsappId, r.reply_text);
+        logger.debug({ whatsappId, replyIndex: index + 1, textLength: r.reply_text.length }, 'Sent text message');
       } else if (r.reply_type === 'quick_reply') {
-        await sendMenu(waId, r.reply_text, r.buttons);
-        logger.debug({ waId, replyIndex: index + 1, buttonCount: r.buttons?.length }, 'Sent menu message');
+        await sendMenu(whatsappId, r.reply_text, r.buttons);
+        logger.debug({ whatsappId, replyIndex: index + 1, buttonCount: r.buttons?.length }, 'Sent menu message');
       } else if (r.reply_type === 'image') {
-        await sendImage(waId, r.media_url, r.reply_text);
-        logger.debug({ waId, replyIndex: index + 1, mediaUrl: r.media_url }, 'Sent image message');
+        await sendImage(whatsappId, r.media_url, r.reply_text);
+        logger.debug({ whatsappId, replyIndex: index + 1, mediaUrl: r.media_url }, 'Sent image message');
       }
     }
-    logger.info({ waId, replyCount: replies.length }, 'All replies sent successfully');
+    logger.info({ whatsappId, replyCount: replies.length }, 'All replies sent successfully');
   } catch (err: unknown) {
     success = false;
     const normalized = normalizeError(err);
@@ -76,11 +86,11 @@ export async function sendReplyNode(state: GraphState): Promise<GraphState> {
     await redis.hSet(messageKey, { status: success ? 'delivered' : 'failed' });
 
     try {
-      logger.debug({ waId }, 'Scheduling memory extraction for user');
+      logger.debug({ whatsappId }, 'Scheduling memory extraction for user');
       await queueMemoryExtraction(userId, 5 * 60 * 1000);
-      logger.debug({ waId }, 'Scheduled memory extraction');
+      logger.debug({ whatsappId }, 'Scheduled memory extraction');
     } catch (err: unknown) {
-      logger.warn({ waId, err: (err as Error).message, stack: (err as Error).stack }, 'Failed to schedule memory extraction');
+      logger.warn({ whatsappId, err: (err as Error).message, stack: (err as Error).stack }, 'Failed to schedule memory extraction');
     }
   }
 

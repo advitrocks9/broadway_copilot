@@ -30,35 +30,53 @@ enum AgeGroup {
   AGE_55_PLUS
 }
 
-enum MemoryCategory {
-  PROFILE
-  PREFERENCE
-  STYLE
-  COLOR
-  SIZE
-  OCCASION
-  BRAND
-  OTHER
-}
-
 enum PendingType {
   NONE
   VIBE_CHECK_IMAGE
   COLOR_ANALYSIS_IMAGE
   ASK_USER_INFO
+  FEEDBACK
 }
+
+enum TaskType {
+  SEND_FEEDBACK_REQUEST
+  SCHEDULE_WARDROBE_INDEX
+  PROCESS_MEMORIES
+}
+
+enum TaskStatus {
+  QUEUED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum GraphRunStatus {
+  RUNNING
+  SUCCESSFUL
+  ERROR
+  ABORTED
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+}
+
+
+// --- CORE ---
 
 model User {
   id          String   @id @default(cuid())
-  waId        String   @unique
+  whatsappId  String   @unique
   createdAt   DateTime @default(now())
 
-  wardrobe    WardrobeItem[]
-  messages    Message[]
-  traces      ModelTrace[]
-  memories    Memory[]
-  vibeChecks  VibeCheck[]
+  conversations Conversation[]
+  wardrobe      WardrobeItem[]
+  memories      Memory[]
+  vibeChecks    VibeCheck[]
   colorAnalyses ColorAnalysis[]
+  tasks         Task[]
 
   inferredGender    Gender?
   inferredAgeGroup  AgeGroup?
@@ -72,49 +90,118 @@ model User {
   @@index([createdAt])
 }
 
+model Conversation {
+  id        String    @id @default(cuid())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  status    ConversationStatus @default(OPEN)
+
+  messages  Message[]
+  graphRuns GraphRun[]
+  feedback  Feedback?
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
 model Message {
   id               String       @id @default(cuid())
-  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId           String
+  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId   String
 
   role             MessageRole
   content          Json[]       @default([])
   additionalKwargs Json? 
+  createdAt        DateTime     @default(now())
 
   intent           String?
   buttonPayload    String?
   pending          PendingType? @default(NONE)
-  createdAt        DateTime     @default(now())
 
-  memoriesProcessed Boolean      @default(false)
-  wardrobeProcessed Boolean      @default(false)
-  hasImage          Boolean      @default(false)
-  imageArchived     Boolean      @default(false)
+  media             Media[]
+  memoriesProcessed Boolean @default(false)
+  wardrobeProcessed Boolean @default(false)
 
-  feedback         Feedback?
-  traces           ModelTrace[]
 
-  @@index([userId, createdAt])
+  @@index([conversationId, createdAt])
   @@index([role, createdAt])
   @@index([buttonPayload])
 }
 
+
+// --- MEDIA ---
+
+model Media {
+  id          String   @id @default(cuid())
+  message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId   String
+  
+  twilioUrl   String
+  serverUrl   String
+  gcsUri      String?
+  
+  mimeType    String
+  isUploaded  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([messageId])
+}
+
+// --- AGENT & LOGGING ---
+
+model GraphRun {
+  id             String       @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  
+  initialState   Json
+  finalState     Json
+  status         GraphRunStatus @default(RUNNING)
+  errorTrace     String?
+  
+  createdAt      DateTime     @default(now())
+
+  traces         LLMTrace[]
+
+  @@index([conversationId, createdAt])
+}
+
+model LLMTrace {
+  id          String   @id @default(cuid())
+  graphRun    GraphRun @relation(fields: [graphRunId], references: [id], onDelete: Cascade)
+  graphRunId  String
+
+  model           String?
+  rawRequest      Json
+  rawResponse     Json
+  
+  promptTokens     Int?
+  completionTokens Int?
+  costUsd          Decimal? @db.Decimal(10, 6)
+  
+  createdAt       DateTime @default(now())
+
+  @@index([graphRunId])
+}
+
+// --- USER PROFILE & ANALYSIS ---
+
 model Memory {
-  id               String         @id @default(cuid())
-  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId           String
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  memory    String
 
-  category         MemoryCategory
-  key              String
-  value            String
-  confidence       Float?
-  sourceMessageIds String[]       @default([])
+  embedding       Unsupported("vector")?
+  embeddingModel  String?
+  embeddingDim    Int?
+  embeddingAt     DateTime?
+  
+  createdAt DateTime @default(now())
 
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-
-  @@unique([userId, category, key])
-  @@index([userId, updatedAt])
+  @@index([userId, createdAt])
 }
 
 model VibeCheck {
@@ -178,36 +265,35 @@ model WardrobeItem {
   @@index([userId, nameLower, category])
 }
 
+// --- FEEDBACK ---
+
 model Feedback {
-  id          String   @id @default(cuid())
-  message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  messageId   String   @unique
+  id             String       @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String       @unique
 
-  helpful     Boolean?
-  comment     String?
-
-  createdAt   DateTime @default(now())
+  rating         Int?
+  comment        String?
+  createdAt      DateTime     @default(now())
 }
 
-model ModelTrace {
-  id              String   @id @default(cuid())
+// --- BACKGROUND PROCESSING ---
 
-  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  userId          String?
+model Task {
+  id        String     @id @default(cuid())
+  taskId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  
+  type      TaskType
+  status    TaskStatus @default(QUEUED)
+  payload   Json?
+  
+  runAt     DateTime
+  
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 
-  message         Message?  @relation(fields: [messageId], references: [id], onDelete: SetNull)
-  messageId       String?
-
-  model           String?
-  rawRequest      Json
-  rawResponse     Json
-
-  promptTokens     Int?
-  completionTokens Int?
-  costUsd          Decimal? @db.Decimal(10, 6)
-
-  createdAt       DateTime @default(now())
-
-  @@index([userId, createdAt])
-  @@index([messageId])
+  @@index([userId, runAt])
+  @@index([status, runAt])
 }

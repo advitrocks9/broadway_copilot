@@ -6,7 +6,6 @@ import { OpenAIEmbeddings } from '@langchain/openai';
 import { prisma } from '../lib/prisma';
 import { createError } from '../utils/errors';
 import { logger } from '../utils/logger';
-import { cosineSimilarity } from '../utils/text';
 
 
 /**
@@ -112,18 +111,6 @@ export function fetchColorAnalysis(userId: string): DynamicStructuredTool {
 }
 
 /**
- * Type definition for memory items stored in the database.
- */
-type MemoryItem = {
-  id: string;
-  category: string;
-  key: string;
-  value: string;
-  confidence: number | null;
-  updatedAt: Date;
-};
-
-/**
  * Dynamic tool for retrieving user memories using semantic similarity search.
  * Ranks memories by relevance to the query using vector embeddings and cosine similarity.
  */
@@ -143,28 +130,21 @@ export function fetchRelevantMemories(userId: string): DynamicStructuredTool {
       }
 
       try {
-        const memories: MemoryItem[] = await prisma.memory.findMany({
-          where: { userId },
-          select: { id: true, category: true, key: true, value: true, confidence: true, updatedAt: true },
-        });
-        if (memories.length === 0) {
-          return "No memories found for the user.";
-        }
         const model = new OpenAIEmbeddings({ model: 'text-embedding-3-small' });
-        const texts = memories.map(m => `${m.category}: ${m.key} = ${m.value}`);
-        const [embeddings, queryEmb] = await Promise.all([
-          model.embedDocuments(texts),
-          model.embedQuery(query),
-        ]);
-        const similarities = embeddings.map((emb, i) => ({
-          index: i,
-          sim: cosineSimilarity(emb, queryEmb),
-        })).sort((a, b) => b.sim - a.sim);
-        const top = similarities.slice(0, 5).map(s => memories[s.index]);
-        if (top.length === 0) {
+        const embeddedQuery = await model.embedQuery(query);
+        const vector = JSON.stringify(embeddedQuery);
+        
+        const memories: { id: string, memory: string }[] = await prisma.$queryRaw`
+          SELECT id, memory FROM "Memory"
+          WHERE "embedding" IS NOT NULL AND "userId" = ${userId}
+          ORDER BY "embedding" <=> ${vector}::vector
+          LIMIT 5
+        `;
+
+        if (memories.length === 0) {
           return "No relevant memories found for this query.";
         }
-        return top;
+        return memories;
       } catch (err: unknown) {
         logger.error({ userId, query, err: (err as Error)?.message }, 'Failed to fetch relevant memories');
         if ((err as any).statusCode) {

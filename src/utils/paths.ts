@@ -42,15 +42,15 @@ function uploadsDir(): string {
 /**
  * Gets the upload directory path for a specific WhatsApp user.
  *
- * @param waId - WhatsApp user ID (e.g., "whatsapp:+1234567890")
+ * @param whatsappId - WhatsApp user ID (e.g., "whatsapp:+1234567890")
  * @returns Absolute path to the user's upload directory
  * @throws {HttpError} When WhatsApp ID is missing
  */
-export function userUploadDir(waId: string): string {
-  if (!waId) {
+export function userUploadDir(whatsappId: string): string {
+  if (!whatsappId) {
     throw createError.badRequest('WhatsApp ID is required');
   }
-  return path.join(uploadsDir(), waId);
+  return path.join(uploadsDir(), whatsappId);
 }
 
 /**

@@ -16,13 +16,13 @@ const twilioAuth = {
 /**
  * Downloads media from Twilio and saves it locally
  * @param url - Twilio media URL
- * @param waId - WhatsApp ID for user directory
+ * @param whatsappId - WhatsApp ID for user directory
  * @param mimeType - MIME type (e.g., 'image/jpeg')
  * @returns Public URL to the downloaded file
  */
 export async function downloadTwilioMedia(
   url: string,
-  waId: string,
+  whatsappId: string,
   mimeType: string
 ): Promise<string> {
   if (!twilioAuth.sid || !twilioAuth.token) {
@@ -45,15 +45,15 @@ export async function downloadTwilioMedia(
     throw createError.internalServerError(`Failed to download media: ${response.status}`);
   }
 
-  const uploadDir = userUploadDir(waId);
+  const uploadDir = userUploadDir(whatsappId);
   await ensureDir(uploadDir);
   const filePath = path.join(uploadDir, filename);
   const buffer = Buffer.from(await response.arrayBuffer());
   await fs.writeFile(filePath, buffer);
 
   const baseUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
-  const publicUrl = `${baseUrl}/uploads/${waId}/${filename}`;
-  logger.debug({ waId, filename, filePath, mimeType, size: buffer.length }, 'Twilio media downloaded and saved');
+  const publicUrl = `${baseUrl}/uploads/${whatsappId}/${filename}`;
+  logger.debug({ whatsappId, filename, filePath, mimeType, size: buffer.length }, 'Twilio media downloaded and saved');
 
   return publicUrl;
 }

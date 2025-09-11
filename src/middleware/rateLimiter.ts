@@ -16,15 +16,15 @@ import { createError } from '../utils/errors';
  */
 export const rateLimiter = async (req: Request, _res: Response, next: NextFunction) => {
 
-  const waId = req.body.From;
+  const whatsappId = req.body.From;
   const messageId = req.body.MessageSid;
 
-  if (!waId) {
+  if (!whatsappId) {
     logger.warn({ messageId, ip: req.ip }, 'Rate limiter: missing WhatsApp ID');
     throw createError.badRequest('Missing WhatsApp ID');
   }
 
-  const key = `user:${waId}`;
+  const key = `user:${whatsappId}`;
 
   try {
     if (await redis.exists(key) === 0) {
@@ -34,7 +34,7 @@ export const rateLimiter = async (req: Request, _res: Response, next: NextFuncti
         lastMessageAt: Date.now(),
       });
       await redis.expire(key, USER_STATE_TTL_SECONDS);
-      logger.debug({ waId }, 'Rate limiter: initialized new user token bucket');
+      logger.debug({ whatsappId }, 'Rate limiter: initialized new user token bucket');
     }
 
     const updatedAtStr = await redis.hGet(key, 'updatedAt');
@@ -45,10 +45,9 @@ export const rateLimiter = async (req: Request, _res: Response, next: NextFuncti
     let tokenRemaining = parseInt(await redis.hGet(key, 'tokens') ?? '0', 10) + refills;
     tokenRemaining = Math.min(tokenRemaining, USER_REQUEST_LIMIT);
 
-    logger.debug({ waId, tokensRemaining: tokenRemaining, refills }, 'Rate limiter: token check');
 
     if (tokenRemaining <= 0) {
-      logger.warn({ waId, messageId }, 'Rate limit exceeded');
+      logger.warn({ whatsappId, messageId }, 'Rate limit exceeded');
       throw createError.serviceUnavailable('Rate limit exceeded');
     } else {
       await redis.hSet(key, {
@@ -57,12 +56,12 @@ export const rateLimiter = async (req: Request, _res: Response, next: NextFuncti
         lastMessageAt: Date.now(),
       });
       await redis.expire(key, USER_STATE_TTL_SECONDS);
-      logger.debug({ waId, tokensRemaining: tokenRemaining - 1 }, 'Rate limiter: token consumed');
+      logger.debug({ whatsappId, tokensRemaining: tokenRemaining - 1 }, 'Rate limiter: token consumed');
     }
 
     next();
   } catch (err: any) {
-    logger.error({ waId, messageId, err: err?.message }, 'Rate limiter error');
+    logger.error({ whatsappId, messageId, err: err?.message }, 'Rate limiter error');
     if (err.statusCode) {
       throw err; // Re-throw HTTP errors as-is
     }

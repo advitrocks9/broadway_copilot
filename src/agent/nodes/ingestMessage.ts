@@ -3,6 +3,7 @@ import { MessageRole, PendingType } from '@prisma/client';
 
 import { prisma } from '../../lib/prisma';
 import { downloadTwilioMedia } from '../../utils/media';
+import { getConversation } from '../../utils/conversation';
 import { extractTextContent } from '../../utils/text';
 import { logger } from '../../utils/logger';
 import { GraphState } from '../state';
@@ -22,31 +23,33 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
     NumMedia: numMedia,
     MediaUrl0: mediaUrl0,
     MediaContentType0: mediaContentType0,
-    From: waId,
+    From: whatsappId,
     MessageSid: messageId
   } = input;
 
 
+  let media: { serverUrl: string; twilioUrl: string; mimeType: string } | undefined;
   let content: MessageContent = [{ type: 'text', text }];
-  let hasImageInCurrent = false;
   if (numMedia === '1' && mediaUrl0 && mediaContentType0?.startsWith('image/')) {
     try {
-      const imagePath = await downloadTwilioMedia(mediaUrl0, waId, mediaContentType0);
-      content.push({ type: 'image_url', image_url: { url: imagePath } });
-      hasImageInCurrent = true;
+      const serverUrl = await downloadTwilioMedia(mediaUrl0, whatsappId, mediaContentType0);
+      content.push({ type: 'image_url', image_url: { url: serverUrl } });
+      media = { serverUrl, twilioUrl: mediaUrl0, mimeType: mediaContentType0 };
     } catch (error) {
-      logger.warn({ error, waId, mediaUrl0 }, 'Failed to download image');
+      logger.warn({ error, whatsappId, mediaUrl0 }, 'Failed to download image');
     }
   }
 
+  const conversation = await getConversation(user.id);
+
   const [lastMessage, latestAssistantMessage] = await Promise.all([
     prisma.message.findFirst({
-      where: { userId: user.id },
+      where: { conversationId: conversation.id },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, role: true, content: true, pending: true, hasImage: true }
+      select: { id: true, role: true, content: true, pending: true }
     }),
     prisma.message.findFirst({
-      where: { userId: user.id, role: MessageRole.AI },
+      where: { conversation: { userId: user.id }, role: MessageRole.AI },
       orderBy: { createdAt: 'desc' },
       select: { pending: true }
     })
@@ -63,28 +66,43 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
       data: {
         content: mergedContent,
         ...(buttonPayload != null && { buttonPayload }),
-        hasImage: lastMessage.hasImage || hasImageInCurrent
+        ...(media && {
+          media: {
+            create: {
+              twilioUrl: media.twilioUrl,
+              serverUrl: media.serverUrl,
+              mimeType: media.mimeType,
+            },
+          },
+        }),
       }
     });
   } else {
     await prisma.message.create({
       data: {
-        userId: user.id,
+        conversationId: conversation.id,
         role: MessageRole.USER,
         content,
         ...(buttonPayload != null && { buttonPayload }),
-        hasImage: hasImageInCurrent
+        ...(media && {
+          media: {
+            create: {
+              twilioUrl: media.twilioUrl,
+              serverUrl: media.serverUrl,
+              mimeType: media.mimeType,
+            },
+          },
+        }),
       }
     });
   }
 
   const messages = await prisma.message.findMany({
     where: {
-      userId: user.id,
-      createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) },
+      conversationId: conversation.id,
     },
     orderBy: { createdAt: 'desc' },
-    take: 5,
+    take: 10,
     select: {
       id: true,
       role: true,
@@ -118,7 +136,7 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
     }
   });
 
-  logger.debug({ waId, messageId }, 'Message ingested successfully');
+  logger.debug({ whatsappId, messageId }, 'Message ingested successfully');
 
   return {
     ...state,
