@@ -27,6 +27,19 @@ let compiledApp: ReturnType<typeof StateGraph.prototype.compile> | null = null;
  * The graph orchestrates the conversation flow from message ingestion through routing
  * and handling to final response generation.
  *
+ * This function should be called once at application startup.
+ */
+export function initializeAgent() {
+  logger.info('Compiling agent graph...');
+  compiledApp = buildAgentGraph();
+  logger.info('Agent graph compiled successfully');
+}
+
+/**
+ * Builds and compiles the agent's state graph defining all nodes and their transitions.
+ * The graph orchestrates the conversation flow from message ingestion through routing
+ * and handling to final response generation.
+ *
  * @returns Compiled StateGraph instance ready for execution
  */
 export function buildAgentGraph() {
@@ -111,11 +124,11 @@ export function buildAgentGraph() {
 export async function runAgent(input: TwilioWebhookRequest, options?: { signal?: AbortSignal }): Promise<void> {
   const { From: whatsappId, MessageSid: messageId } = input;
 
+  if (!compiledApp) {
+    throw new Error('Agent graph not initialized. Call initializeAgent() at startup.');
+  }
+
   try {
-    if (!compiledApp) {
-      logger.info('Compiling agent graph for the first time');
-      compiledApp = buildAgentGraph();
-    }
     const user = await getUser(whatsappId);
 
     await compiledApp.invoke({ input, user }, { configurable: { thread_id: whatsappId }, signal: options?.signal });

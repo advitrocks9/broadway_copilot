@@ -6,7 +6,7 @@ import express, { NextFunction, Request, Response } from 'express';
 import { authenticateRequest } from './middleware/auth';
 import { errorHandler } from './middleware/errors';
 import { rateLimiter } from './middleware/rateLimiter';
-import { runAgent } from './agent/graph';
+import { initializeAgent, runAgent } from './agent/graph';
 import { connectRedis, redis } from './lib/redis';
 import { processStatusCallback } from './lib/twilio';
 import { TwilioWebhookRequest } from './lib/twilio/types';
@@ -166,6 +166,7 @@ async function processMessage(userId: string, messageId: string, input: TwilioWe
 void (async function bootstrap() {
   try {
     await connectRedis();
+    initializeAgent();
     const PORT = Number(process.env.PORT || 8080);
     app.listen(PORT, '0.0.0.0', () => {
       logger.info({ port: PORT }, 'Broadway WhatsApp Bot server started');

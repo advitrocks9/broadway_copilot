@@ -13,17 +13,16 @@
   },
   "dependencies": {
     "@google-cloud/functions-framework": "^4.0.0",
-    "prisma": "^6.16.0",
-    "dotenv": "^17.2.2",
     "@google-cloud/storage": "^7.17.1",
     "@prisma/client": "^6.16.0",
+    "dotenv": "^17.2.2",
     "node-fetch": "^3.3.2",
     "openai": "^5.20.1"
   },
   "devDependencies": {
-    "@types/express": "^5.0.3",
-    "@types/node-fetch": "^2.6.13",
     "@types/node": "^24.3.1",
+    "@types/node-fetch": "^2.6.13",
+    "prisma": "^6.16.0",
     "typescript": "^5.9.2"
   }
 }

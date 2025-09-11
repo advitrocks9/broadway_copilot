@@ -24,8 +24,8 @@ RUN npm ci --only=production
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prompts ./prompts
 COPY --from=build /app/prisma ./prisma
-
-RUN npx prisma generate
+COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 EXPOSE 8080
 
