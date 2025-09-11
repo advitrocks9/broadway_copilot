@@ -19,19 +19,20 @@ jobs:
       id-token: 'write'
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332'
+        uses: 'actions/checkout@v4'
 
       - id: 'auth'
         name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@f112390a2df9932162083945e46d439060d66ec2'
+        uses: 'google-github-actions/auth@v2'
         with:
           workload_identity_provider: '${{ env.WORKLOAD_IDENTITY_PROVIDER }}'
+          service_account: '${{ env.SERVICE_ACCOUNT }}'
 
       - name: 'Docker Auth'
-        uses: 'docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567'
+        uses: 'docker/login-action@v3'
         with:
           username: 'oauth2accesstoken'
-          password: '${{ steps.auth.outputs.auth_token }}'
+          password: '${{ steps.auth.outputs.access_token }}'
           registry: '${{ env.REGION }}-docker.pkg.dev'
 
       - name: 'Build and Push Container'
@@ -42,19 +43,35 @@ jobs:
 
       - id: deploy
         name: 'Deploy to Cloud Run'
-        uses: 'google-github-actions/deploy-cloudrun@33553064113a37d688aa6937bacbdc481580be17'
+        uses: 'google-github-actions/deploy-cloudrun@v2'
         with:
           project_id: '${{ env.PROJECT_ID }}'
           service: '${{ env.SERVICE }}'
           region: '${{ env.REGION }}'
           image: '${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/broadway-chatbot/${{ env.SERVICE }}:${{ github.sha }}'
+          env_vars: |-
+            PORT=8080
+            TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+            LANGSMITH_TRACING=true
+            LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+            LOG_LEVEL=info
+            GOOGLE_CLOUD_PROJECT=${{ env.PROJECT_ID }}
           secrets: |-
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest
             TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest
             DATABASE_URL=DATABASE_URL:latest
-          secrets_update_strategy: 'merge'
-      
+            REDIS_URL=REDIS_URL:latest
+            TWILIO_STATUS_CALLBACK_URL=TWILIO_STATUS_CALLBACK_URL:latest
+            TWILIO_CARD_SID=TWILIO_CARD_SID:latest
+            TWILIO_MENU_SID=TWILIO_MENU_SID:latest
+            LANGSMITH_API_KEY=LANGSMITH_API_KEY:latest
+            LANGSMITH_PROJECT=LANGSMITH_PROJECT:latest
+            GROQ_API_KEY=GROQ_API_KEY:latest
+            CLOUD_TASKS_SERVICE_ACCOUNT=CLOUD_TASKS_SERVICE_ACCOUNT:latest
+          vpc_connector: 'projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions'
+          cloudsql_instances: 'broadway-chatbot:asia-south2:broadway-chatbot-database'
+
       - name: 'Show output'
         run: |
           echo ${{ steps.deploy.outputs.url }}

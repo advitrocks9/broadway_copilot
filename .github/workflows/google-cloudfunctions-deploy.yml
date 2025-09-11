@@ -1,0 +1,89 @@
+name: 'Deploy Cloud Functions'
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: 'broadway-chatbot'
+  REGION: 'asia-south2'
+  WORKLOAD_IDENTITY_PROVIDER: 'projects/480746037141/locations/global/workloadIdentityPools/github-actions-cloud-run/providers/github'
+  SERVICE_ACCOUNT: 'github-actions-deploy@broadway-chatbot.iam.gserviceaccount.com'
+
+jobs:
+  deploy-functions:
+    runs-on: 'ubuntu-latest'
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    defaults:
+      run:
+        working-directory: ./functions
+
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@v4'
+
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: '${{ env.WORKLOAD_IDENTITY_PROVIDER }}'
+          service_account: '${{ env.SERVICE_ACCOUNT }}'
+
+      - name: 'Setup Node.js'
+        uses: 'actions/setup-node@v4'
+        with:
+          node-version: '18'
+
+      - name: 'Install Dependencies and Build'
+        run: |
+          npm install
+          npm run build
+
+      - name: 'Deploy imageUpload Function'
+        uses: 'google-github-actions/deploy-cloud-functions@v2'
+        with:
+          name: 'imageUpload'
+          entry_point: 'imageUpload'
+          runtime: 'nodejs18'
+          project_id: '${{ env.PROJECT_ID }}'
+          region: '${{ env.REGION }}'
+          source_dir: './functions/dist'
+          vpc_connector: 'projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions'
+          cloudsql_instances: 'broadway-chatbot:asia-south2:broadway-chatbot-database'
+          secrets: |-
+            GCS_BUCKET_NAME=GCS_BUCKET_NAME:latest
+            DATABASE_URL=DATABASE_URL:latest
+
+      - name: 'Deploy storeMemories Function'
+        uses: 'google-github-actions/deploy-cloud-functions@v2'
+        with:
+          name: 'storeMemories'
+          entry_point: 'storeMemories'
+          runtime: 'nodejs18'
+          project_id: '${{ env.PROJECT_ID }}'
+          region: '${{ env.REGION }}'
+          source_dir: './functions/dist'
+          vpc_connector: 'projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions'
+          cloudsql_instances: 'broadway-chatbot:asia-south2:broadway-chatbot-database'
+          secrets: |-
+            DATABASE_URL=DATABASE_URL:latest
+            OPENAI_API_KEY=OPENAI_API_KEY:latest
+
+      - name: 'Deploy indexWardrobe Function'
+        uses: 'google-github-actions/deploy-cloud-functions@v2'
+        with:
+          name: 'indexWardrobe'
+          entry_point: 'indexWardrobe'
+          runtime: 'nodejs18'
+          project_id: '${{ env.PROJECT_ID }}'
+          region: '${{ env.REGION }}'
+          source_dir: './functions/dist'
+          vpc_connector: 'projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions'
+          cloudsql_instances: 'broadway-chatbot:asia-south2:broadway-chatbot-database'
+          secrets: |-
+            DATABASE_URL=DATABASE_URL:latest
+            OPENAI_API_KEY=OPENAI_API_KEY:latest
