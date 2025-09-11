@@ -31,3 +31,18 @@ if (process.env.NODE_ENV !== 'production') {
 (prisma as any).$on('warn', (e: any) => {
   logger.warn({ message: e.message }, 'Database warning');
 });
+
+/**
+ * Connects to the database and logs the outcome.
+ * Should be called at application startup to proactively initialize the connection pool.
+ * @throws {Error} If the connection fails.
+ */
+export async function connectPrisma() {
+  try {
+    await prisma.$connect();
+    logger.info('Successfully connected to the database');
+  } catch (err: any) {
+    logger.error({ err: err.message, stack: err.stack }, 'Failed to connect to the database');
+    throw err;
+  }
+}

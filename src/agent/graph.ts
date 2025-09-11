@@ -20,7 +20,7 @@ import { logger } from '../utils/logger';
 import { TwilioWebhookRequest } from '../lib/twilio/types';
 import { getUser } from '../utils/user';
 
-let compiledApp: ReturnType<typeof StateGraph.prototype.compile> | null = null;
+let compiledAppPromise: Promise<ReturnType<typeof StateGraph.prototype.compile>> | null = null;
 
 /**
  * Builds and compiles the agent's state graph defining all nodes and their transitions.
@@ -30,9 +30,16 @@ let compiledApp: ReturnType<typeof StateGraph.prototype.compile> | null = null;
  * This function should be called once at application startup.
  */
 export function initializeAgent() {
-  logger.info('Compiling agent graph...');
-  compiledApp = buildAgentGraph();
-  logger.info('Agent graph compiled successfully');
+  logger.info('Starting agent graph compilation...');
+  compiledAppPromise = Promise.resolve().then(() => {
+    const app = buildAgentGraph();
+    logger.info('Agent graph compiled successfully');
+    return app;
+  });
+  compiledAppPromise.catch((err) => {
+    logger.error({ err: err.message, stack: err.stack }, 'Agent graph compilation failed');
+    process.exit(1);
+  });
 }
 
 /**
@@ -124,12 +131,13 @@ export function buildAgentGraph() {
 export async function runAgent(input: TwilioWebhookRequest, options?: { signal?: AbortSignal }): Promise<void> {
   const { From: whatsappId, MessageSid: messageId } = input;
 
-  if (!compiledApp) {
+  if (!compiledAppPromise) {
     throw new Error('Agent graph not initialized. Call initializeAgent() at startup.');
   }
 
   try {
     const user = await getUser(whatsappId);
+    const compiledApp = await compiledAppPromise;
 
     await compiledApp.invoke({ input, user }, { configurable: { thread_id: whatsappId }, signal: options?.signal });
   } catch (err: any) {

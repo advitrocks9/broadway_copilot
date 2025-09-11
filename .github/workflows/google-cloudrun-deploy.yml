@@ -52,10 +52,10 @@ jobs:
             TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
             TWILIO_VALIDATE_WEBHOOK=true
             TWILIO_WAIT_FOR_STATUS=true
-            TWILIO_HTTP_TIMEOUT_MS=10000
-            TWILIO_SENT_TIMEOUT_MS=15000
-            TWILIO_DELIVERED_TIMEOUT_MS=60000
-            LANGSMITH_TRACING=true
+            TWILIO_HTTP_TIMEOUT_MS=5000
+            TWILIO_SENT_TIMEOUT_MS=5000
+            TWILIO_DELIVERED_TIMEOUT_MS=15000
+            LANGSMITH_TRACING=false
             LANGSMITH_ENDPOINT=https://api.smith.langchain.com
             PROJECT_ID=${{ env.PROJECT_ID }}
             CLOUD_FUNCTION_REGION=${{ env.REGION }}
@@ -71,7 +71,8 @@ jobs:
             LANGSMITH_PROJECT=LANGSMITH_PROJECT:latest
             GROQ_API_KEY=GROQ_API_KEY:latest
             CLOUD_TASKS_SERVICE_ACCOUNT=CLOUD_TASKS_SERVICE_ACCOUNT:latest
-          flags: |-
+          flags: >-
+            --execution-environment=gen2
             --network=chatbot-vpc
             --subnet=chatbot-subnet
             --vpc-egress=private-ranges-only
@@ -79,7 +80,7 @@ jobs:
             --cpu=2
             --memory=4Gi
             --min-instances=1
-            --allow-unauthenticated
+            --no-invoker-iam-check
             --concurrency=8
 
       - name: 'Show output'

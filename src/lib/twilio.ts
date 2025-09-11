@@ -141,11 +141,11 @@ export async function sendImage(to: string, imageUrl: string, caption?: string):
  * @param sid - Message SID.
  */
 async function awaitStatuses(sid: string): Promise<void> {
-  const configuredToWait = process.env.TWILIO_WAIT_FOR_STATUS !== 'false';
+  const configuredToWait = process.env.TWILIO_WAIT_FOR_STATUS === 'true';
   if (!configuredToWait) return;
   logger.debug({ sid }, 'Waiting for message status updates');
-  const sentTimeoutMs = Number(process.env.TWILIO_SENT_TIMEOUT_MS || 15000);
-  const deliveredTimeoutMs = Number(process.env.TWILIO_DELIVERED_TIMEOUT_MS || 60000);
+  const sentTimeoutMs = Number(process.env.TWILIO_SENT_TIMEOUT_MS || 5000);
+  const deliveredTimeoutMs = Number(process.env.TWILIO_DELIVERED_TIMEOUT_MS || 15000);
 
   let resolveSent!: () => void;
   let resolveDelivered!: () => void;

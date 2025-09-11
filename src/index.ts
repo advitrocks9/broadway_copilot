@@ -8,6 +8,7 @@ import { errorHandler } from './middleware/errors';
 import { rateLimiter } from './middleware/rateLimiter';
 import { initializeAgent, runAgent } from './agent/graph';
 import { connectRedis, redis } from './lib/redis';
+import { connectPrisma } from './lib/prisma';
 import { processStatusCallback } from './lib/twilio';
 import { TwilioWebhookRequest } from './lib/twilio/types';
 import { MESSAGE_TTL_SECONDS, USER_STATE_TTL_SECONDS } from './utils/constants';
@@ -166,6 +167,7 @@ async function processMessage(userId: string, messageId: string, input: TwilioWe
 void (async function bootstrap() {
   try {
     await connectRedis();
+    await connectPrisma();
     initializeAgent();
     const PORT = Number(process.env.PORT || 8080);
     app.listen(PORT, '0.0.0.0', () => {

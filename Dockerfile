@@ -5,11 +5,12 @@ WORKDIR /app
 
 COPY package*.json .
 
-RUN npm install
+RUN npm ci
+
+COPY prisma ./prisma
+RUN npx prisma generate
 
 COPY . .
-
-RUN npx prisma generate
 RUN npm run build
 
 #Production stage
@@ -24,8 +25,7 @@ RUN npm ci --only=production
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prompts ./prompts
 COPY --from=build /app/prisma ./prisma
-COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=build /app/node_modules/@prisma/client ./node_modules/@prisma/client
+COPY --from=build /app/node_modules/.prisma/client ./node_modules/.prisma/client
 
 EXPOSE 8080
 
