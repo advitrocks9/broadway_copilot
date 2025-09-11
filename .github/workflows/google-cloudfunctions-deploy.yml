@@ -1,8 +1,7 @@
 name: 'Deploy Cloud Functions'
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 env:
@@ -13,74 +12,61 @@ env:
 
 jobs:
   deploy-functions:
-    runs-on: 'ubuntu-latest'
+    runs-on: ubuntu-latest
     permissions:
-      contents: 'read'
-      id-token: 'write'
-
-    defaults:
-      run:
-        working-directory: ./functions
+      contents: read
+      id-token: write
 
     steps:
-      - name: 'Checkout'
-        uses: 'actions/checkout@v4'
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - id: 'auth'
-        name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v2'
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: '${{ env.WORKLOAD_IDENTITY_PROVIDER }}'
-          service_account: '${{ env.SERVICE_ACCOUNT }}'
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
 
-      - name: 'Setup Node.js'
-        uses: 'actions/setup-node@v4'
+      - name: Deploy imageUpload
+        uses: google-github-actions/deploy-cloud-functions@v4
         with:
-          node-version: '20'
-
-      - name: 'Install Dependencies and Build'
-        run: |
-          npm install
-          npm run build
-
-      - name: 'Deploy imageUpload Function'
-        uses: 'google-github-actions/deploy-cloud-functions@v2'
-        with:
-          name: 'imageUpload'
-          entry_point: 'imageUpload'
-          runtime: 'nodejs20'
-          project_id: '${{ env.PROJECT_ID }}'
-          region: '${{ env.REGION }}'
-          source_dir: './functions/dist'
-          vpc_connector: 'projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions'
-          secret_environment_variables: |-
+          name: imageUpload
+          entry_point: imageUpload
+          runtime: nodejs20
+          project_id: ${{ env.PROJECT_ID }}
+          region: ${{ env.REGION }}
+          source_dir: ./functions
+          vpc_connector: projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions
+          secrets: |-
             GCS_BUCKET_NAME=projects/${{ env.PROJECT_ID }}/secrets/GCS_BUCKET_NAME/versions/latest
             DATABASE_URL=projects/${{ env.PROJECT_ID }}/secrets/DATABASE_URL/versions/latest
 
-      - name: 'Deploy storeMemories Function'
-        uses: 'google-github-actions/deploy-cloud-functions@v2'
+      - name: Deploy storeMemories
+        uses: google-github-actions/deploy-cloud-functions@v4
         with:
-          name: 'storeMemories'
-          entry_point: 'storeMemories'
-          runtime: 'nodejs20'
-          project_id: '${{ env.PROJECT_ID }}'
-          region: '${{ env.REGION }}'
-          source_dir: './functions/dist'
-          vpc_connector: 'projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions'
-          secret_environment_variables: |-
+          name: storeMemories
+          entry_point: storeMemories
+          runtime: nodejs20
+          project_id: ${{ env.PROJECT_ID }}
+          region: ${{ env.REGION }}
+          source_dir: ./functions
+          vpc_connector: projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions
+          secrets: |-
             DATABASE_URL=projects/${{ env.PROJECT_ID }}/secrets/DATABASE_URL/versions/latest
             OPENAI_API_KEY=projects/${{ env.PROJECT_ID }}/secrets/OPENAI_API_KEY/versions/latest
 
-      - name: 'Deploy indexWardrobe Function'
-        uses: 'google-github-actions/deploy-cloud-functions@v2'
+      - name: Deploy indexWardrobe
+        uses: google-github-actions/deploy-cloud-functions@v4
         with:
-          name: 'indexWardrobe'
-          entry_point: 'indexWardrobe'
-          runtime: 'nodejs20'
-          project_id: '${{ env.PROJECT_ID }}'
-          region: '${{ env.REGION }}'
-          source_dir: './functions/dist'
-          vpc_connector: 'projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions'
-          secret_environment_variables: |-
+          name: indexWardrobe
+          entry_point: indexWardrobe
+          runtime: nodejs20
+          project_id: ${{ env.PROJECT_ID }}
+          region: ${{ env.REGION }}
+          source_dir: ./functions
+          vpc_connector: projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions
+          secrets: |-
             DATABASE_URL=projects/${{ env.PROJECT_ID }}/secrets/DATABASE_URL/versions/latest
             OPENAI_API_KEY=projects/${{ env.PROJECT_ID }}/secrets/OPENAI_API_KEY/versions/latest
