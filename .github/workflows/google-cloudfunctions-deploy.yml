@@ -53,7 +53,7 @@ jobs:
           region: '${{ env.REGION }}'
           source_dir: './functions/dist'
           vpc_connector: 'projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions'
-          secrets: |-
+          secret_environment_variables: |-
             GCS_BUCKET_NAME=GCS_BUCKET_NAME:latest
             DATABASE_URL=DATABASE_URL:latest
 
@@ -67,7 +67,7 @@ jobs:
           region: '${{ env.REGION }}'
           source_dir: './functions/dist'
           vpc_connector: 'projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions'
-          secrets: |-
+          secret_environment_variables: |-
             DATABASE_URL=DATABASE_URL:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
 
@@ -81,6 +81,6 @@ jobs:
           region: '${{ env.REGION }}'
           source_dir: './functions/dist'
           vpc_connector: 'projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions'
-          secrets: |-
+          secret_environment_variables: |-
             DATABASE_URL=DATABASE_URL:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
