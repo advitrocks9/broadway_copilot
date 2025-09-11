@@ -191,9 +191,9 @@ async function awaitStatuses(sid: string): Promise<void> {
  * @param options - Message options to modify.
  */
 function addStatusCallback(options: TwilioMessageOptions): void {
-  const statusCallbackUrl = process.env.TWILIO_STATUS_CALLBACK_URL;
-  if (statusCallbackUrl) {
-    options.statusCallback = statusCallbackUrl;
+  const serverUrl = process.env.SERVER_URL;
+  if (serverUrl) {
+    options.statusCallback = `${serverUrl}/twilio/callback/`;
   }
 }
 

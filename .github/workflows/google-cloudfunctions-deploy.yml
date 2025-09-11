@@ -36,7 +36,7 @@ jobs:
       - name: 'Setup Node.js'
         uses: 'actions/setup-node@v4'
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: 'Install Dependencies and Build'
         run: |
@@ -48,7 +48,7 @@ jobs:
         with:
           name: 'imageUpload'
           entry_point: 'imageUpload'
-          runtime: 'nodejs18'
+          runtime: 'nodejs20'
           project_id: '${{ env.PROJECT_ID }}'
           region: '${{ env.REGION }}'
           source_dir: './functions/dist'
@@ -63,7 +63,7 @@ jobs:
         with:
           name: 'storeMemories'
           entry_point: 'storeMemories'
-          runtime: 'nodejs18'
+          runtime: 'nodejs20'
           project_id: '${{ env.PROJECT_ID }}'
           region: '${{ env.REGION }}'
           source_dir: './functions/dist'
@@ -78,7 +78,7 @@ jobs:
         with:
           name: 'indexWardrobe'
           entry_point: 'indexWardrobe'
-          runtime: 'nodejs18'
+          runtime: 'nodejs20'
           project_id: '${{ env.PROJECT_ID }}'
           region: '${{ env.REGION }}'
           source_dir: './functions/dist'
