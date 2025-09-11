@@ -76,6 +76,11 @@ jobs:
             --subnet=chatbot-subnet
             --vpc-egress=private-ranges-only
             --service-account=github-actions-deploy@broadway-chatbot.iam.gserviceaccount.com
+            --cpu=2
+            --memory=4Gi
+            --min-instances=1
+            --allow-unauthenticated
+            --concurrency=8
 
       - name: 'Show output'
         run: |
