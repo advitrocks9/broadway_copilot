@@ -28,11 +28,10 @@ let visionLLM: ChatOpenAI | null = null;
  */
 export function getTextLLM(): ChatGroq {
   if (!textLLM) {
-    logger.info('Initializing Text LLM (llama-3.1-70b-versatile)');
+    logger.info('Initializing Text LLM (gpt-oss-120b)');
     textLLM = new ChatGroq({
       apiKey: process.env.GROQ_API_KEY,
-      model: 'llama-3.1-70b-versatile',
-      temperature: 0.2,
+      model: 'openai/gpt-oss-120b',
     });
   }
   return textLLM;
