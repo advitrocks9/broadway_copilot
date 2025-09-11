@@ -1,5 +1,5 @@
 #Build stage
-FROM node:22-slim AS build
+FROM node:22 AS build
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY . .
 RUN npm run build
 
 #Production stage
-FROM node:22-slim AS production
+FROM node:22 AS production
 
 WORKDIR /app
 
@@ -29,4 +29,4 @@ COPY --from=build /app/node_modules/.prisma/client ./node_modules/.prisma/client
 
 EXPOSE 8080
 
-CMD ["npm", "start"]
+CMD ["node", "dist/index.js"]

@@ -55,6 +55,8 @@ jobs:
             TWILIO_HTTP_TIMEOUT_MS=5000
             TWILIO_SENT_TIMEOUT_MS=5000
             TWILIO_DELIVERED_TIMEOUT_MS=15000
+            LANGSMITH_TRACING=true
+            LANGSMITH_ENDPOINT=https://api.smith.langchain.com
             PROJECT_ID=${{ env.PROJECT_ID }}
             CLOUD_FUNCTION_REGION=${{ env.REGION }}
             CLOUD_TASKS_REGION=asia-south1
@@ -67,6 +69,9 @@ jobs:
             SERVER_URL=SERVER_URL:latest
             GROQ_API_KEY=GROQ_API_KEY:latest
             CLOUD_TASKS_SERVICE_ACCOUNT=CLOUD_TASKS_SERVICE_ACCOUNT:latest
+            LANGSMITH_API_KEY=LANGSMITH_API_KEY:latest
+            LANGSMITH_PROJECT=LANGSMITH_PROJECT:latest
+            
           flags: >-
             --execution-environment=gen2
             --network=chatbot-vpc
