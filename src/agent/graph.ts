@@ -1,95 +1,96 @@
 import 'dotenv/config';
-import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
-import { IntentLabel, RunInput, RunOutput, RequiredProfileField, Reply } from './state';
-import { routeIntent } from './nodes/routeIntent';
+
+import { END, START, StateGraph } from '@langchain/langgraph';
+import { PendingType } from '@prisma/client';
+
 import { askUserInfoNode } from './nodes/askUserInfo';
-import { handleOccasionNode } from './nodes/handleOccasion';
-import { handleVacationNode } from './nodes/handleVacation';
-import { handlePairingNode } from './nodes/handlePairing';
-import { vibeCheckNode } from './nodes/vibeCheck';
 import { colorAnalysisNode } from './nodes/colorAnalysis';
-import { checkImageNode } from './nodes/checkImage';
 import { handleGeneralNode } from './nodes/handleGeneral';
-import { wardrobeIndexNode } from './nodes/wardrobeIndex';
+import { handleStylingNode } from './nodes/handleStyling';
 import { ingestMessageNode } from './nodes/ingestMessage';
-import { inferProfileNode } from './nodes/inferProfile';
-import { handleSuggestNode } from './nodes/handleSuggest';
+import { recordUserInfoNode } from './nodes/recordUserInfo';
+import { routeIntent } from './nodes/routeIntent';
+import { routeStyling } from './nodes/routeStyling';
+import { routeGeneralNode } from './nodes/routeGeneral';
 import { sendReplyNode } from './nodes/sendReply';
-import { hydrateContextNode } from './nodes/hydrateContext';
-import { getLogger } from '../utils/logger';
+import { vibeCheckNode } from './nodes/vibeCheck';
+import { AgentState, GraphState } from './state';
+import { HttpError, createError } from '../utils/errors';
+import { logger } from '../utils/logger';
+import { TwilioWebhookRequest } from '../lib/twilio/types';
+import { getUser } from '../utils/user';
+
+let compiledApp: ReturnType<typeof StateGraph.prototype.compile> | null = null;
 
 /**
- * Constructs and runs the LangGraph-based conversational agent.
- */
-const GraphAnnotation = Annotation.Root({
-  input: Annotation<RunInput>(),
-  intent: Annotation<IntentLabel | undefined>(),
-  reply: Annotation<Reply | string | undefined>(),
-  replies: Annotation<Array<Reply | string> | undefined>(),
-  missingProfileFields: Annotation<Array<RequiredProfileField> | undefined>(),
-  next: Annotation<string | undefined>(),
-  messages: Annotation<unknown[] | undefined>(),
-  wardrobe: Annotation<unknown | undefined>(),
-  latestColorAnalysis: Annotation<unknown | undefined>(),
-  
-});
-
-let compiledApp: any | null = null;
-const logger = getLogger('agent:graph');
-
-/**
- * Builds and compiles the agent's state graph.
+ * Builds and compiles the agent's state graph defining all nodes and their transitions.
+ * The graph orchestrates the conversation flow from message ingestion through routing
+ * and handling to final response generation.
+ *
+ * @returns Compiled StateGraph instance ready for execution
  */
 export function buildAgentGraph() {
-  const graph = new StateGraph(GraphAnnotation)
+  const graph = new StateGraph(AgentState)
     .addNode('ingest_message', ingestMessageNode)
-    .addNode('hydrate_context', hydrateContextNode)
-    .addNode('infer_profile', inferProfileNode)
+    .addNode('record_user_info', recordUserInfoNode)
     .addNode('route_intent', routeIntent)
+    .addNode('route_general', routeGeneralNode)
     .addNode('ask_user_info', askUserInfoNode)
-    .addNode('handle_occasion', handleOccasionNode)
-    .addNode('handle_vacation', handleVacationNode)
-    .addNode('handle_pairing', handlePairingNode)
-    .addNode('check_image', checkImageNode)
+    .addNode('handle_styling', handleStylingNode)
     .addNode('vibe_check', vibeCheckNode)
     .addNode('color_analysis', colorAnalysisNode)
-    .addNode('wardrobe_index', wardrobeIndexNode)
-    .addNode('handle_suggest', handleSuggestNode)
-    
     .addNode('handle_general', handleGeneralNode)
     .addNode('send_reply', sendReplyNode)
+    .addNode('route_styling', routeStyling)
     .addEdge(START, 'ingest_message')
-    .addEdge('ingest_message', 'hydrate_context')
-    .addEdge('hydrate_context', 'infer_profile')
-    .addEdge('infer_profile', 'route_intent')
-    .addConditionalEdges('route_intent', (s: any) => s.next || 'handle_general', {
-      handle_general: 'handle_general',
-      handle_occasion: 'handle_occasion',
-      handle_vacation: 'handle_vacation',
-      handle_pairing: 'handle_pairing',
-      handle_suggest: 'handle_suggest',
-      check_image: 'check_image',
-      ask_user_info: 'ask_user_info',
-      color_analysis: 'color_analysis',
-      vibe_check: 'vibe_check',
-    })
     .addConditionalEdges(
-      'check_image',
-      (s: any) => s.next || 'send_reply',
+      'ingest_message',
+      (s: GraphState) => {
+        if (s.pending === PendingType.ASK_USER_INFO) {
+          return 'record_user_info';
+        }
+        return 'route_intent';
+      },
       {
-        send_reply: 'send_reply',
-        vibe_check: 'vibe_check',
-        color_analysis: 'color_analysis',
+        record_user_info: 'record_user_info',
+        route_intent: 'route_intent',
+      },
+    )
+    .addEdge('record_user_info', 'route_intent')
+    .addConditionalEdges('route_intent', (s: GraphState) => {
+      if (s.missingProfileField) {
+        return 'ask_user_info';
       }
+      return s.intent || 'general';
+    }, {
+      ask_user_info: 'ask_user_info',
+      general: 'route_general',
+      vibe_check: 'vibe_check',
+      color_analysis: 'color_analysis',
+      styling: 'route_styling',
+    })
+    .addEdge('route_general', 'handle_general')
+    .addConditionalEdges(
+      'route_styling',
+      (s: GraphState) => {
+        if (s.assistantReply) {
+          return 'send_reply';
+        }
+        if (s.stylingIntent) {
+          return 'handle_styling';
+        }
+        logger.warn({ userId: s.user.id }, 'Exiting styling flow unexpectedly, routing to general');
+        return 'route_general';
+      },
+      {
+        handle_styling: 'handle_styling',
+        route_general: 'route_general',
+        send_reply: 'send_reply',
+      },
     )
     .addEdge('vibe_check', 'send_reply')
-    .addEdge('vibe_check', 'wardrobe_index')
-    .addEdge('wardrobe_index', END)
     .addEdge('ask_user_info', 'send_reply')
-    .addEdge('handle_occasion', 'send_reply')
-    .addEdge('handle_vacation', 'send_reply')
-    .addEdge('handle_pairing', 'send_reply')
-    .addEdge('handle_suggest', 'send_reply')
+    .addEdge('handle_styling', 'send_reply')
     .addEdge('color_analysis', 'send_reply')
     .addEdge('handle_general', 'send_reply')
     .addEdge('send_reply', END);
@@ -98,25 +99,37 @@ export function buildAgentGraph() {
 }
 
 /**
- * Runs the agent graph with the given input.
+ * Executes the agent graph for a single message with proper error handling and abort support.
+ * Compiles the graph on first run and reuses it for subsequent executions.
+ *
+ * @param input - Raw Twilio webhook payload containing message data
+ * @param options - Optional configuration including abort signal
+ * @throws {AbortError} When the operation is aborted via signal
+ * @throws {HttpError} For business logic errors (preserved with original status)
+ * @throws {HttpError} For unexpected errors (wrapped as 500 internal server error)
  */
-export async function runAgent(input: any): Promise<RunOutput & { intent?: IntentLabel }> {
-  if (!compiledApp) {
-    logger.info('Compiling agent graph');
-    compiledApp = buildAgentGraph();
+export async function runAgent(input: TwilioWebhookRequest, options?: { signal?: AbortSignal }): Promise<void> {
+  const { From: whatsappId, MessageSid: messageId } = input;
+
+  try {
+    if (!compiledApp) {
+      logger.info('Compiling agent graph for the first time');
+      compiledApp = buildAgentGraph();
+    }
+    const user = await getUser(whatsappId);
+
+    await compiledApp.invoke({ input, user }, { configurable: { thread_id: whatsappId }, signal: options?.signal });
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      throw err;
+    }
+
+    logger.error({ whatsappId, messageId, err: err.message, stack: err.stack }, 'Agent run failed');
+
+    if (err instanceof HttpError) {
+      throw err;
+    }
+
+    throw createError.internalServerError('Agent execution failed', { cause: err });
   }
-  logger.info({ userId: input?.userId, waId: input?.From }, 'Invoking agent run');
-  const result = await compiledApp.invoke({ input }, {
-    configurable: { thread_id: (input?.userId || input?.From || 'unknown') },
-  });
-  if (!result) return { replyText: 'I had a problem there. Please try again.' };
-  type FinalState = { reply?: string | Reply; replies?: Array<string | Reply>; mode?: 'text' | 'menu' | 'card'; intent?: IntentLabel };
-  const state = result as FinalState;
-  const arrayReplies = Array.isArray(state.replies) ? state.replies : (state.reply ? [state.reply] : []);
-  const first = arrayReplies[0];
-  const finalReply = typeof first === 'string' ? first : (first?.reply_text ?? '');
-  const mode = (typeof first === 'string' ? 'text' : first?.reply_type) as 'text' | 'menu' | 'card' | undefined;
-  const intent = state.intent as IntentLabel | undefined;
-  logger.info({ intent, mode, replyPreview: finalReply.slice(0, 80) }, 'Agent run complete');
-  return { replyText: finalReply, mode, intent };
-} 
+}

@@ -1,67 +1,121 @@
-import { RunInput } from '../state';
-import prisma from '../../db/client';
-import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
-import { VibeCheckResponse, VibeCheckResponseSchema } from '../../types/contracts';
-import { getVisionLLM } from '../../services/openaiService';
-import { ensureVisionFileId, persistUpload } from '../../utils/media';
-import { getLogger } from '../../utils/logger';
+
+import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
+
+import { prisma } from '../../lib/prisma';
+import { invokeVisionLLMWithJsonOutput, invokeTextLLMWithJsonOutput } from '../../lib/llm';
+import { queueWardrobeIndex } from '../../lib/tasks';
+import { numImagesInMessage } from '../../utils/conversation';
+import { loadPrompt } from '../../utils/prompts';
+import { logger } from '../../utils/logger';
+
+import { Replies } from '../state';
+import { GraphState } from '../state';
+import { createError } from '../../utils/errors';
+import { PendingType } from '@prisma/client';
 
 /**
  * Rates outfit from an image and returns a concise text summary; logs and persists results.
  */
-const logger = getLogger('node:vibe_check');
-export async function vibeCheckNode(state: { input: RunInput; intent?: string; messages?: unknown[]; latestColorAnalysis?: unknown }): Promise<{ replies: Array<{ reply_type: 'text'; reply_text: string }> }>{
-  const { input, intent } = state;
-  const imagePath = input.imagePath as string;
-  const ensuredFileId = await ensureVisionFileId(imagePath, input.fileId);
-  const upload = await persistUpload(input.userId, imagePath, ensuredFileId);
-  const schema = VibeCheckResponseSchema as unknown as z.ZodType<VibeCheckResponse>;
-  const prompt = await loadPrompt('vibe_check.txt');
-  type VisionPart = { type: 'input_text'; text: string } | { type: 'input_image'; file_id: string; detail?: 'auto' | 'low' | 'high' };
-  type VisionContent = string | VisionPart[];
-  const content: Array<{ role: 'system' | 'user'; content: VisionContent }> = [
-    { role: 'system', content: prompt },
-    { role: 'system', content: `UserGender: ${input.gender ?? 'unknown'} (reflect in fit notes when applicable).` },
-    { role: 'system', content: `Intent: ${intent || 'vibe_check'}` },
-    { role: 'system', content: `LatestColorAnalysis: ${JSON.stringify(state.latestColorAnalysis || null)}` },
-    { role: 'user', content: [ { type: 'input_image', file_id: ensuredFileId as string, detail: 'high' } ] },
-  ];
-  logger.info({ hasImage: true }, 'VibeCheck: input');
-  const result = await getVisionLLM().withStructuredOutput(schema as any).invoke(content as any) as VibeCheckResponse;
-  logger.info(result, 'VibeCheck: output');
-  const categories = Array.isArray(result.categories) ? result.categories : [];
-  const byHeading: Record<string, number | undefined> = Object.fromEntries(
-    categories.map((c: any) => [c.heading, typeof c.score === 'number' ? c.score : undefined])
+const VibeCategorySchema = z.object({
+  heading: z.string().describe("The name of the scoring category (e.g., 'Fit & Silhouette', 'Color Harmony')."),
+  score: z.number().min(0).max(10).describe("The score for this category, from 0 to 10."),
+});
+
+const LLMOutputSchema = z.object({
+  vibe_score: z.number().min(0).max(10).nullable().describe("The overall vibe score from 0 to 10. Null if the image is unsuitable."),
+  vibe_reply: z.string().describe("A short, witty, and punchy reply about the outfit's vibe (under 8 words)."),
+  categories: z.array(VibeCategorySchema).length(4).describe("An array of exactly 4 scoring categories, each with a heading and a score."),
+  message1_text: z.string().describe("The main reply message that is compliment-forward and provides a brief rationale for the score."),
+  message2_text: z.string().nullable().describe("An optional, short follow-up question to suggest a next step (e.g., 'Want some tips to elevate this look?')."),
+});
+
+const NoImageLLMOutputSchema = z.object({
+  reply_text: z.string().describe("The text to send to the user explaining they need to send an image."),
+});
+
+export async function vibeCheckNode(state: GraphState): Promise<GraphState> {
+  const userId = state.user.id;
+
+  const imageCount = numImagesInMessage(state.conversationHistoryWithImages);
+
+  if (imageCount === 0) {
+    const defaultPrompt = await loadPrompt('vibe_check_no_image.txt', { injectPersona: true });
+    const response = await invokeTextLLMWithJsonOutput(defaultPrompt, NoImageLLMOutputSchema);
+    logger.debug({ userId, reply_text: response.reply_text }, 'Invoking text LLM for no-image response');
+    const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
+    return { ...state, assistantReply: replies, pending: PendingType.VIBE_CHECK_IMAGE };
+  }
+
+  const systemPrompt = await loadPrompt('vibe_check.txt', { injectPersona: true });
+  
+  const promptTemplate = ChatPromptTemplate.fromMessages([
+    ["system", systemPrompt],
+    new MessagesPlaceholder("history"),
+  ]);
+
+  const history = state.conversationHistoryWithImages;
+
+  const formattedPrompt = await promptTemplate.invoke({ history });
+  const result = await invokeVisionLLMWithJsonOutput(
+    formattedPrompt.toChatMessages(),
+    LLMOutputSchema,
   );
+
+  const latestMessage = state.conversationHistoryWithImages.at(-1);
+  if (!latestMessage || !latestMessage.additional_kwargs.messageId) {
+    throw createError.internalServerError('Could not find latest message ID for vibe check');
+  }
+  const latestMessageId = latestMessage.additional_kwargs.messageId as string;
+
+  // Dynamically map categories based on headings
+  const categoryMap: { [key: string]: string } = {
+    'Fit & Silhouette': 'fit_silhouette',
+    'Color Harmony': 'color_harmony',
+    'Styling Details': 'styling_details',
+    'Accessories & Texture': 'accessories_texture',
+  };
+
+  const vibeCheckData: any = {
+    context_confidence: result.vibe_score,
+    overall_score: result.vibe_score,
+    comment: result.vibe_reply,
+  };
+
+  result.categories.forEach(cat => {
+    const key = categoryMap[cat.heading];
+    if (key) {
+      vibeCheckData[key] = cat.score;
+    } else {
+      logger.warn({ userId, unknownHeading: cat.heading }, 'Unknown category heading in vibe check');
+    }
+  });
+
   await prisma.vibeCheck.create({
     data: {
-      uploadId: upload.id,
-      fit_silhouette: byHeading['Fit & Silhouette'] ?? null,
-      color_harmony: byHeading['Color Harmony'] ?? null,
-      styling_details: byHeading['Styling Details'] ?? null,
-      accessories_texture: null,
-      context_confidence: byHeading['Context & Confidence'] ?? null,
-      overall_score: typeof result.vibe_score === 'number' ? result.vibe_score : null,
-      comment: result.reply_text || result.vibe_reply,
-      rawJson: result as unknown as z.infer<typeof schema>,
+      userId,
+      ...vibeCheckData,
     },
   });
-  await prisma.user.update({
-    where: { id: input.userId },
+
+  const user = await prisma.user.update({
+    where: { id: userId },
     data: { lastVibeCheckAt: new Date() },
   });
-  const scoreLines: string[] = [
-    'Vibe Check',
-    ...categories.map((c) => `- ${c.heading}: ${typeof c.score === 'number' ? c.score : 'N/A'}`),
-    `- Overall: ${typeof result.vibe_score === 'number' ? result.vibe_score : 'N/A'}`,
-    '',
+
+  await queueWardrobeIndex(userId, latestMessageId);
+  logger.debug({ userId }, 'Scheduled wardrobe indexing for message');
+  
+
+  const replies: Replies = [
+    { reply_type: 'text', reply_text: result.message1_text },
   ];
-  const combinedText = [scoreLines.join('\n'), result.reply_text].filter(Boolean).join('\n\n');
-  const replies: Array<{ reply_type: 'text'; reply_text: string }> = [
-    { reply_type: 'text', reply_text: combinedText },
-  ];
-  if (result.followup_text) replies.push({ reply_type: 'text', reply_text: result.followup_text });
-  return { replies };
+
+  if (result.message2_text) {
+    replies.push({ reply_type: 'text', reply_text: result.message2_text });
+  }
+
+  logger.debug({ userId, vibeScore: result.vibe_score, replies }, 'Vibe check completed successfully');
+  return { ...state, user, assistantReply: replies };
 }
 

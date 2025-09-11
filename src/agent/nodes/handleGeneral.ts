@@ -1,43 +1,95 @@
-import { RunInput } from '../state';
-import { loadPrompt } from '../../utils/prompts';
 import { z } from 'zod';
-import { getNanoLLM } from '../../services/openaiService';
-import { queryActivityTimestamps } from '../tools';
-import { getLogger } from '../../utils/logger';
+
+import { invokeAgent, invokeTextLLMWithJsonOutput } from '../../lib/llm';
+import { createError } from '../../utils/errors';
+import { WELCOME_IMAGE_URL } from '../../utils/constants';
+import { loadPrompt } from '../../utils/prompts';
+import { logger } from '../../utils/logger';
+import { fetchRelevantMemories } from '../tools';
+import { Replies } from '../state';
+import { GraphState } from '../state';
+
+const SimpleOutputSchema = z.object({
+  reply_text: z.string().describe('The text response to the user.'),
+});
+
+const ChatOutputSchema = z.object({
+  message1_text: z.string().describe('The primary text response to the user.'),
+  message2_text: z
+    .string()
+    .nullable()
+    .describe(
+      'An optional second message to provide more details or continue the conversation.'
+    ),
+});
 
 /**
- * Handles general chat; may return text, menu, or card per prompt schema.
+ * Handles general conversation intents such as greeting, menu, or open chat.
+ * @param state Agent state containing user, conversation history, and routing info.
  */
-const logger = getLogger('node:handle_general');
+export async function handleGeneralNode(state: GraphState): Promise<GraphState> {
+  const { user, conversationHistoryTextOnly, generalIntent, input } = state;
+  const userId = user.id;
+  const messageId = input.MessageSid;
 
-export async function handleGeneralNode(state: { input: RunInput; intent?: string; messages?: unknown[]; wardrobe?: unknown; latestColorAnalysis?: unknown }): Promise<{ replies: Array<{ reply_type: 'text' | 'menu' | 'card'; reply_text: string }> }>{
-  const { input } = state;
-  const intent: string | undefined = state.intent;
-  const systemPrompt = await loadPrompt('handle_general.txt');
-  const activity = await queryActivityTimestamps(input.userId);
-  const prompt: Array<{ role: 'system' | 'user'; content: string }> = [
-    { role: 'system', content: systemPrompt },
-    { role: 'system', content: `UserGender: ${input.gender ?? 'unknown'} (if known, tailor guidance and examples accordingly).` },
-    { role: 'system', content: `Current user ID: ${input.userId}` },
-    { role: 'system', content: `Intent: ${intent || 'general'}` },
-    { role: 'system', content: `ConversationContext: ${JSON.stringify(state.messages || [])}` },
-    { role: 'system', content: `WardrobeContext: ${JSON.stringify(state.wardrobe || {})}` },
-    { role: 'system', content: `LatestColorAnalysis: ${JSON.stringify(state.latestColorAnalysis || null)}` },
-    { role: 'system', content: `LastColorAnalysisAtISO: ${activity.lastColorAnalysisAt ? activity.lastColorAnalysisAt.toISOString() : 'none'}` },
-    { role: 'system', content: `LastColorAnalysisHoursAgo: ${activity.colorAnalysisHoursAgo ?? 'unknown'}` },
-    { role: 'system', content: `LastVibeCheckAtISO: ${activity.lastVibeCheckAt ? activity.lastVibeCheckAt.toISOString() : 'none'}` },
-    { role: 'system', content: `LastVibeCheckHoursAgo: ${activity.vibeCheckHoursAgo ?? 'unknown'}` },
-    { role: 'user', content: input.text || 'Help with style.' },
-  ];
-  const Schema = z.object({ reply_type: z.enum(['text','menu','card']), reply_text: z.string(), followup_text: z.string().nullable() });
-  logger.info({ userText: input.text || '' }, 'HandleGeneral: input');
-  const resp = await getNanoLLM().withStructuredOutput(Schema as any).invoke(prompt as any) as { reply_type: 'text'|'menu'|'card'; reply_text: string; followup_text: string | null };
-  logger.info(resp, 'HandleGeneral: output');
-  const replies: Array<{ reply_type: 'text' | 'menu' | 'card'; reply_text: string }> = [
-    { reply_type: resp.reply_type, reply_text: resp.reply_text },
-  ];
-  if (resp.followup_text) {
-    replies.push({ reply_type: 'text', reply_text: resp.followup_text });
+  try {
+    if (generalIntent === 'greeting' || generalIntent === 'menu') {
+      const systemPrompt = await loadPrompt(`handle_${generalIntent}.txt`, {
+        injectPersona: true,
+      });
+      const response = await invokeTextLLMWithJsonOutput(systemPrompt, SimpleOutputSchema);
+
+      const availableActions = [
+        { text: 'Vibe check', id: 'vibe_check' },
+        { text: 'Color analysis', id: 'color_analysis' },
+        { text: 'Styling', id: 'styling' },
+      ];
+
+      const replies: Replies = [];
+      if (generalIntent === 'greeting') {
+        replies.push({ reply_type: 'image', media_url: WELCOME_IMAGE_URL });
+      }
+      replies.push({
+        reply_type: 'quick_reply',
+        reply_text: response.reply_text,
+        buttons: availableActions,
+      });
+
+      logger.info({ userId, messageId }, `${generalIntent} handled`);
+      return { ...state, assistantReply: replies };
+    }
+
+    if (generalIntent === 'chat') {
+      const tools = [fetchRelevantMemories(userId)];
+      const systemPrompt = await loadPrompt('handle_chat.txt', { injectPersona: true });
+
+      const finalResponse = await invokeAgent(
+        tools,
+        systemPrompt,
+        conversationHistoryTextOnly,
+        ChatOutputSchema,
+      );
+
+      const replies: Replies = [{ reply_type: 'text', reply_text: finalResponse.message1_text }];
+      if (finalResponse.message2_text) {
+        replies.push({ reply_type: 'text', reply_text: finalResponse.message2_text });
+      }
+
+      logger.info({ userId, messageId }, 'Chat handled');
+      return { ...state, assistantReply: replies };
+    }
+
+    throw createError.internalServerError(`Unhandled general intent: ${generalIntent}`);
+  } catch (err: any) {
+    logger.error({ userId, messageId, err: err.message, stack: err.stack }, 'Error in handleGeneralNode');
+    if (err.statusCode) throw err;
+
+    const replies: Replies = [
+      {
+        reply_type: 'text',
+        reply_text: "I'm not sure how to help with that. Could you try asking in a different way?",
+      },
+    ];
+    return { ...state, assistantReply: replies };
   }
-  return { replies };
 }

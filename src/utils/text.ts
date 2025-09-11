@@ -1,11 +1,46 @@
 /**
  * Text utilities for normalization and comparison.
  */
-export function normalizeWhitespace(input: string): string {
-  return input.replace(/\s+/g, ' ').trim();
-}
 
-export function toNameLower(input: string): string {
-  return normalizeWhitespace(input).toLowerCase();
+import type { MessageContent } from '@langchain/core/messages';
+
+/**
+ * Extracts text content from message content array, replacing images with [IMAGE] placeholders.
+ * Handles both structured message content arrays and plain text strings.
+ *
+ * @param content - Message content from LangChain (array of parts or plain string)
+ * @returns Extracted text with image placeholders for multimodal content
+ */
+export function extractTextContent(content: MessageContent): string {
+  if (Array.isArray(content)) {
+    return content
+      .map((part: any) => {
+        if (part.type === 'image_url') {
+          return '[IMAGE]';
+        } else if (part.type === 'text') {
+          return part.text;
+        }
+        return '';
+      })
+      .join(' ');
+  }
+  return content as string;
+  
+}/**
+ * Calculates cosine similarity between two vectors.
+ * Used for ranking memory relevance based on semantic similarity.
+ *
+ * @param a - First vector
+ * @param b - Second vector
+ * @returns Cosine similarity score between 0 and 1
+ */
+export function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+  }
+  const normA = Math.sqrt(a.reduce((sum, v) => sum + v * v, 0));
+  const normB = Math.sqrt(b.reduce((sum, v) => sum + v * v, 0));
+  return normA && normB ? dot / (normA * normB) : 0;
 }
 

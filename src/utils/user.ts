@@ -1,17 +1,34 @@
-import prisma from '../db/client';
-import { getLogger } from './logger';
+import { User } from '@prisma/client';
+
+import { prisma } from '../lib/prisma';
+import { createError } from './errors';
 
 /**
- * User helpers for fetching or creating users by WhatsApp ID.
+ * Gets or creates a user record for the given WhatsApp ID.
+ * Uses upsert to ensure user exists without duplicating records.
+ *
+ * @param whatsappId - WhatsApp user identifier (e.g., "whatsapp:+1234567890")
+ * @returns User record from database
+ * @throws {HttpError} When WhatsApp ID is missing or database operation fails
  */
-const logger = getLogger('utils:user');
+export async function getUser(whatsappId: string): Promise<User> {
+  if (!whatsappId) {
+    throw createError.badRequest('WhatsApp ID is required');
+  }
 
-export async function getOrCreateUserByWaId(waId: string) {
-  const user = await prisma.user.upsert({
-    where: { waId },
-    create: { waId },
-    update: {},
-  });
-  logger.info({ userId: user.id, waId }, 'Ensured user by waId');
-  return user;
+  try {
+    const user = await prisma.user.upsert({
+      where: { whatsappId },
+      create: { whatsappId },
+      update: {},
+    });
+
+    return user;
+
+  } catch (err: any) {
+    if (err.statusCode) {
+      throw err;
+    }
+    throw createError.internalServerError('Failed to get or create user');
+  }
 }

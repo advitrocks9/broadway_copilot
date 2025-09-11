@@ -1,0 +1,76 @@
+name: 'Build and Deploy to Cloud Run'
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+env:
+  PROJECT_ID: 'broadway-chatbot'
+  REGION: 'asia-south2'
+  SERVICE: 'broadway-chatbot'
+  WORKLOAD_IDENTITY_PROVIDER: 'projects/480746037141/locations/global/workloadIdentityPools/github-actions-cloud-run/providers/github'
+  SERVICE_ACCOUNT: 'github-actions-deploy@broadway-chatbot.iam.gserviceaccount.com'
+
+jobs:
+  deploy:
+    runs-on: 'ubuntu-latest'
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@v4'
+
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: '${{ env.WORKLOAD_IDENTITY_PROVIDER }}'
+          service_account: '${{ env.SERVICE_ACCOUNT }}'
+
+      - name: 'Docker Auth'
+        uses: 'docker/login-action@v3'
+        with:
+          username: 'oauth2accesstoken'
+          password: '${{ steps.auth.outputs.access_token }}'
+          registry: '${{ env.REGION }}-docker.pkg.dev'
+
+      - name: 'Build and Push Container'
+        run: |
+          DOCKER_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/broadway-chatbot/${{ env.SERVICE }}:${{ github.sha }}"
+          docker build --tag "${DOCKER_TAG}" .
+          docker push "${DOCKER_TAG}"
+
+      - id: deploy
+        name: 'Deploy to Cloud Run'
+        uses: 'google-github-actions/deploy-cloudrun@v2'
+        with:
+          project_id: '${{ env.PROJECT_ID }}'
+          service: '${{ env.SERVICE }}'
+          region: '${{ env.REGION }}'
+          image: '${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/broadway-chatbot/${{ env.SERVICE }}:${{ github.sha }}'
+          env_vars: |-
+            NODE_ENV=production
+            PORT=8080
+            TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+            LANGSMITH_TRACING=true
+            LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+            LOG_LEVEL=info
+            GOOGLE_CLOUD_PROJECT=${{ env.PROJECT_ID }}
+          secrets: |-
+            OPENAI_API_KEY=OPENAI_API_KEY:latest
+            TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest
+            TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest
+            DATABASE_URL=DATABASE_URL:latest
+            REDIS_URL=REDIS_URL:latest
+            SERVER_URL=SERVER_URL:latest
+            LANGSMITH_API_KEY=LANGSMITH_API_KEY:latest
+            LANGSMITH_PROJECT=LANGSMITH_PROJECT:latest
+            GROQ_API_KEY=GROQ_API_KEY:latest
+            CLOUD_TASKS_SERVICE_ACCOUNT=CLOUD_TASKS_SERVICE_ACCOUNT:latest
+          vpc_connector: 'projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/cloud-run-functions'
+          cloudsql_instances: 'broadway-chatbot:asia-south2:broadway-chatbot-database'
+
+      - name: 'Show output'
+        run: |
+          echo ${{ steps.deploy.outputs.url }}

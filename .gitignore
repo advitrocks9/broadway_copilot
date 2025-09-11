@@ -49,6 +49,7 @@ tmp/
 temp/
 
 # Editors/OS
+.cursor/
 .vscode/
 .idea/
 *.swp
