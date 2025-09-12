@@ -1,8 +1,7 @@
 import { z } from 'zod';
 
-import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
-
-import { invokeTextLLMWithJsonOutput } from '../../lib/llm';
+import { getTextLLM } from '../../lib/ai';
+import { SystemMessage } from '../../lib/ai/core/messages';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
 
@@ -47,18 +46,12 @@ export async function routeStyling(state: GraphState): Promise<GraphState> {
       return { ...state, stylingIntent: buttonPayload as StylingIntent };
     }
 
-    const systemPrompt = await loadPrompt('route_styling.txt');
+    const systemPromptText = await loadPrompt('route_styling.txt');
+    const systemPrompt = new SystemMessage(systemPromptText);
 
-    const promptTemplate = ChatPromptTemplate.fromMessages([
-      ["system", systemPrompt],
-      new MessagesPlaceholder("history"),
-    ]);
-
-    const formattedPrompt = await promptTemplate.invoke({ history: state.conversationHistoryTextOnly });
-
-    const response = await invokeTextLLMWithJsonOutput(
-      formattedPrompt.toChatMessages(),
-      LLMOutputSchema,
+    const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
+      systemPrompt,
+      state.conversationHistoryTextOnly,
     );
 
     logger.info({ userId, stylingIntent: response.stylingIntent }, 'Styling intent routed using LLM');

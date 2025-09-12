@@ -2,7 +2,7 @@
  * Text utilities for normalization and comparison.
  */
 
-import type { MessageContent } from '@langchain/core/messages';
+import type { MessageContent, MessageContentPart } from '../lib/ai';
 
 /**
  * Extracts text content from message content array, replacing images with [IMAGE] placeholders.
@@ -11,10 +11,10 @@ import type { MessageContent } from '@langchain/core/messages';
  * @param content - Message content from LangChain (array of parts or plain string)
  * @returns Extracted text with image placeholders for multimodal content
  */
-export function extractTextContent(content: MessageContent): string {
+export function extractTextContent(content: MessageContent | string): string {
   if (Array.isArray(content)) {
     return content
-      .map((part: any) => {
+      .map((part: MessageContentPart) => {
         if (part.type === 'image_url') {
           return '[IMAGE]';
         } else if (part.type === 'text') {

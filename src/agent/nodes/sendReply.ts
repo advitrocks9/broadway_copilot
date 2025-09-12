@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-import { MessageContent } from '@langchain/core/messages';
+import { MessageContent, MessageContentPart } from '../../lib/ai';
 import { MessageRole, PendingType } from '@prisma/client';
 
 import { prisma } from '../../lib/prisma';
@@ -39,7 +39,7 @@ export async function sendReplyNode(state: GraphState): Promise<GraphState> {
 
   const replies: Replies = state.assistantReply ?? [];
   const formattedContent: MessageContent = replies.flatMap(r => {
-    const parts: MessageContent = [];
+    const parts: MessageContentPart[] = [];
     if (r.reply_text) {
       parts.push({ type: 'text', text: r.reply_text });
     }

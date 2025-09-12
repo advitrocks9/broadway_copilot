@@ -5,7 +5,7 @@ WORKDIR /app
 
 COPY package*.json .
 
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 COPY prisma ./prisma
 RUN npx prisma generate
@@ -20,7 +20,7 @@ WORKDIR /app
 
 COPY package*.json .
 
-RUN npm ci --only=production
+RUN npm ci --legacy-peer-deps --only=production
 
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prompts ./prompts

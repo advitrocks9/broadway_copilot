@@ -16,7 +16,7 @@
     "lib": ["ES2022"],
     "types": ["node"]
   },
-  "exclude": ["node_modules", "dist", "scripts", "functions"],
+  "exclude": ["node_modules", "dist", "scripts", "functions", "**/*.test.ts"],
   "ts-node": {
     "transpileOnly": true
   }

@@ -1,7 +1,6 @@
-import { BaseMessage } from '@langchain/core/messages';
 import { User, PendingType } from '@prisma/client';
-import { Annotation } from '@langchain/langgraph';
 
+import { BaseMessage } from '../lib/ai';
 import { TwilioWebhookRequest } from '../lib/twilio/types';
 import { QuickReplyButton } from '../lib/twilio/types';
 
@@ -13,40 +12,40 @@ import { QuickReplyButton } from '../lib/twilio/types';
  * Defines the complete state for the agent's graph.
  * Includes all data required for processing a user request, from input to final reply.
  */
-export const AgentState = Annotation.Root({
+export interface GraphState {
   /** Raw Twilio webhook request that initiated the interaction */
-  input: Annotation<TwilioWebhookRequest>(),
-  
+  input: TwilioWebhookRequest;
+
   /** User profile information from the database */
-  user: Annotation<User>(),
-  
+  user: User;
+
   /** Full conversation history including images, for multimodal models */
-  conversationHistoryWithImages: Annotation<BaseMessage[]>(),
-  
+  conversationHistoryWithImages: BaseMessage[];
+
   /** Text-only conversation history for faster, text-based models */
-  conversationHistoryTextOnly: Annotation<BaseMessage[]>(),
-  
+  conversationHistoryTextOnly: BaseMessage[];
+
   /** The user's primary intent (e.g., 'styling', 'general') */
-  intent: Annotation<IntentLabel | null>(),
-  
+  intent: IntentLabel | null;
+
   /** Specific sub-intent for styling requests */
-  stylingIntent: Annotation<StylingIntent | null>(),
-  
+  stylingIntent: StylingIntent | null;
+
   /** Specific sub-intent for general conversation */
-  generalIntent: Annotation<GeneralIntent | null>(),
-  
+  generalIntent: GeneralIntent | null;
+
   /** Field to be requested from the user if their profile is incomplete */
-  missingProfileField: Annotation<MissingProfileField | null>(),
-  
+  missingProfileField: MissingProfileField | null;
+
   /** List of services available to the user based on cooldowns */
-  availableServices: Annotation<AvailableService[]>(),
-  
+  availableServices: AvailableService[];
+
   /** The generated reply to be sent to the user */
-  assistantReply: Annotation<Replies | null>(),
-  
+  assistantReply: Replies | null;
+
   /** The pending action type, if the agent is waiting for user input */
-  pending: Annotation<PendingType | null>(),
-});
+  pending: PendingType | null;
+}
 
 // ============================================================================
 // STATE TYPES
@@ -113,9 +112,3 @@ export type Replies = Reply[];
  * Used to determine if the user needs to provide more information to fulfill the request.
  */
 export type MissingProfileField = 'gender' | 'age_group';
-
-
-/**
- * Type helper for the agent's state, derived from the AgentState annotation.
- */
-export type GraphState = typeof AgentState.State;

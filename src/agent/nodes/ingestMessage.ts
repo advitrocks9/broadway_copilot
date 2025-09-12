@@ -1,4 +1,4 @@
-import { AIMessage, HumanMessage, type MessageContent } from '@langchain/core/messages';
+import { AssistantMessage, UserMessage, MessageContent } from '../../lib/ai';
 import { MessageRole, PendingType } from '@prisma/client';
 
 import { prisma } from '../../lib/prisma';
@@ -60,7 +60,7 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
 
   let savedMessage;
   if (lastMessage && lastMessage.role === MessageRole.USER) {
-    const existingContent = lastMessage.content as MessageContent[];
+    const existingContent = lastMessage.content as MessageContent;
     const mergedContent = [...existingContent, ...content];
 
     savedMessage = await prisma.message.update({
@@ -99,7 +99,7 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
     });
   }
 
-  if (media) {
+  if (media && process.env.NODE_ENV === 'production') {
     await queueImageUpload(user.id, savedMessage.id);
   }
 
@@ -120,25 +120,28 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
 
   const conversationHistoryWithImages = messages.reverse().map((msg) => {
     if (msg.role === MessageRole.USER) {
-      return new HumanMessage({
-        content: msg.content as MessageContent,
-        additional_kwargs: { createdAt: msg.createdAt, buttonPayload: msg.buttonPayload, messageId: msg.id }
-      });
+      const message = new UserMessage(msg.content as MessageContent);
+      message.meta = { createdAt: msg.createdAt, buttonPayload: msg.buttonPayload, messageId: msg.id };
+      return message;
     } else {
-      return new AIMessage({
-        content: msg.content as MessageContent,
-        additional_kwargs: { createdAt: msg.createdAt, messageId: msg.id }
-      });
+      const message = new AssistantMessage('');
+      message.content = msg.content as MessageContent;
+      message.meta = { createdAt: msg.createdAt, messageId: msg.id };
+      return message;
     }
   });
 
   const conversationHistoryTextOnly = conversationHistoryWithImages.map((msg) => {
     const textContent = extractTextContent(msg.content as MessageContent);
 
-    if (msg instanceof HumanMessage) {
-      return new HumanMessage({ content: textContent, additional_kwargs: msg.additional_kwargs });
+    if (msg instanceof UserMessage) {
+      const message = new UserMessage(textContent);
+      message.meta = msg.meta;
+      return message;
     } else {
-      return new AIMessage({ content: textContent, additional_kwargs: msg.additional_kwargs });
+      const message = new AssistantMessage(textContent);
+      message.meta = msg.meta;
+      return message;
     }
   });
 

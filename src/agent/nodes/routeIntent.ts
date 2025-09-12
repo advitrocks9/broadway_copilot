@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
-import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 import { PendingType } from '@prisma/client';
 
-import { invokeTextLLMWithJsonOutput } from '../../lib/llm';
+import { getTextLLM } from '../../lib/ai';
+import { SystemMessage } from '../../lib/ai/core/messages';
 import { numImagesInMessage } from '../../utils/conversation';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
@@ -72,22 +72,16 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
 
   // Priority 3: Use LLM for intelligent intent classification
   try {
-    const systemPrompt = await loadPrompt('route_intent.txt');
-    const formattedSystemPrompt = systemPrompt
+    const systemPromptText = await loadPrompt('route_intent.txt');
+    const formattedSystemPrompt = systemPromptText
       .replace('{can_do_vibe_check}', canDoVibeCheck.toString())
       .replace('{can_do_color_analysis}', canDoColorAnalysis.toString());
 
-    const promptTemplate = ChatPromptTemplate.fromMessages([
-      ['system', formattedSystemPrompt],
-      new MessagesPlaceholder('history'),
-    ]);
+    const systemPrompt = new SystemMessage(formattedSystemPrompt);
 
-    const history = conversationHistoryTextOnly;
-    const formattedPrompt = await promptTemplate.invoke({ history });
-
-    const response = await invokeTextLLMWithJsonOutput(
-      formattedPrompt.toChatMessages(),
-      LLMOutputSchema,
+    const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
+      systemPrompt,
+      conversationHistoryTextOnly,
     );
 
     let { intent, missingProfileField } = response;

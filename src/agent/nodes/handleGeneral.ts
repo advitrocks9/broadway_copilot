@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
-import { invokeAgent, invokeTextLLMWithJsonOutput } from '../../lib/llm';
+import { agentExecutor } from '../../lib/ai/agents/executor';
+import { getTextLLM } from '../../lib/ai';
+import { SystemMessage } from '../../lib/ai/core/messages';
 import { createError } from '../../utils/errors';
 import { WELCOME_IMAGE_URL } from '../../utils/constants';
 import { loadPrompt } from '../../utils/prompts';
@@ -13,14 +15,9 @@ const SimpleOutputSchema = z.object({
   reply_text: z.string().describe('The text response to the user.'),
 });
 
-const ChatOutputSchema = z.object({
-  message1_text: z.string().describe('The primary text response to the user.'),
-  message2_text: z
-    .string()
-    .nullable()
-    .describe(
-      'An optional second message to provide more details or continue the conversation.'
-    ),
+const LLMOutputSchema = z.object({
+  message1_text: z.string().describe('The first text message response to the user.'),
+  message2_text: z.string().describe('The second text message response to the user.').nullable(),
 });
 
 /**
@@ -34,10 +31,14 @@ export async function handleGeneralNode(state: GraphState): Promise<GraphState> 
 
   try {
     if (generalIntent === 'greeting' || generalIntent === 'menu') {
-      const systemPrompt = await loadPrompt(`handle_${generalIntent}.txt`, {
+      const systemPromptText = await loadPrompt(`handle_${generalIntent}.txt`, {
         injectPersona: true,
       });
-      const response = await invokeTextLLMWithJsonOutput(systemPrompt, SimpleOutputSchema);
+      const systemPrompt = new SystemMessage(systemPromptText);
+      const response = await getTextLLM().withStructuredOutput(SimpleOutputSchema).run(
+        systemPrompt,
+        conversationHistoryTextOnly,
+      );
 
       const availableActions = [
         { text: 'Vibe check', id: 'vibe_check' },
@@ -61,13 +62,14 @@ export async function handleGeneralNode(state: GraphState): Promise<GraphState> 
 
     if (generalIntent === 'chat') {
       const tools = [fetchRelevantMemories(userId)];
-      const systemPrompt = await loadPrompt('handle_chat.txt', { injectPersona: true });
+      const systemPromptText = await loadPrompt('handle_chat.txt', { injectPersona: true });
+      const systemPrompt = new SystemMessage(systemPromptText);
 
-      const finalResponse = await invokeAgent(
-        tools,
+      const finalResponse = await agentExecutor(
+        getTextLLM(),
         systemPrompt,
         conversationHistoryTextOnly,
-        ChatOutputSchema,
+        { tools, outputSchema: LLMOutputSchema },
       );
 
       const replies: Replies = [{ reply_type: 'text', reply_text: finalResponse.message1_text }];

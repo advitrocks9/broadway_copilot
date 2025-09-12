@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-import { DynamicStructuredTool } from '@langchain/core/tools';
-import { OpenAIEmbeddings } from '@langchain/openai';
+import { Tool } from '../lib/ai';
+import { OpenAIEmbeddings } from '../lib/ai';
 
 import { prisma } from '../lib/prisma';
 import { createError } from '../utils/errors';
@@ -12,13 +12,13 @@ import { logger } from '../utils/logger';
  * Dynamic tool for searching user wardrobe using vector similarity.
  * Combines results from multiple queries to find relevant clothing items.
  */
-export function searchWardrobe(userId: string): DynamicStructuredTool {
+export function searchWardrobe(userId: string): Tool {
     
   const searchWardrobeSchema = z.object({
     query: z.array(z.string()).describe("A list of natural language queries to search for clothing items. Each query should describe an item of clothing."),
   });
 
-  return new DynamicStructuredTool({
+  return new Tool({
     name: 'searchWardrobe',
     description: "Searches the user's digital wardrobe for clothing items based on a list of descriptive queries. Useful for finding specific items (e.g., 'red summer dress') or items for an outfit (e.g., ['white t-shirt', 'blue jeans']). Returns a list of matching items with their details.",
     schema: searchWardrobeSchema,
@@ -75,10 +75,10 @@ export function searchWardrobe(userId: string): DynamicStructuredTool {
  * Dynamic tool for retrieving user's latest color analysis results.
  * Provides color palette information, undertone analysis, and color recommendations.
  */
-export function fetchColorAnalysis(userId: string): DynamicStructuredTool {
+export function fetchColorAnalysis(userId: string): Tool {
   const fetchColorAnalysisSchema = z.object({});
 
-  return new DynamicStructuredTool({
+  return new Tool({
     name: 'fetchColorAnalysis',
     description: "Retrieves the user's most recent color analysis results. This includes their recommended color palette, skin undertone, and specific colors that flatter them or that they should avoid. Use this to give personalized style advice based on colors.",
     schema: fetchColorAnalysisSchema,
@@ -114,12 +114,12 @@ export function fetchColorAnalysis(userId: string): DynamicStructuredTool {
  * Dynamic tool for retrieving user memories using semantic similarity search.
  * Ranks memories by relevance to the query using vector embeddings and cosine similarity.
  */
-export function fetchRelevantMemories(userId: string): DynamicStructuredTool {
+export function fetchRelevantMemories(userId: string): Tool {
   const fetchRelevantMemoriesSchema = z.object({
     query: z.string().describe('A natural language query describing the information you want to find about the user. For example: "user\'s favorite color" or "upcoming vacation destination".'),
   });
 
-  return new DynamicStructuredTool({
+  return new Tool({
     name: 'fetchRelevantMemories',
     description: "Searches the user's personal profile and past conversations for relevant information. Use this to recall user preferences, style, or any other personal details they have shared.",
     schema: fetchRelevantMemoriesSchema,

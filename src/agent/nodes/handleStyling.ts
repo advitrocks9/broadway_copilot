@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
-import { invokeAgent, invokeTextLLMWithJsonOutput } from '../../lib/llm';
+import { agentExecutor } from '../../lib/ai/agents/executor';
+import { getTextLLM } from '../../lib/ai';
+import { SystemMessage } from '../../lib/ai/core/messages';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
 import { createError } from '../../utils/errors';
@@ -39,10 +41,14 @@ export async function handleStylingNode(state: GraphState): Promise<GraphState> 
   }
 
   try {
-    if (lastMessage?.additional_kwargs?.buttonPayload) {
+    if (lastMessage?.meta?.buttonPayload) {
     const defaultPromptText = await loadPrompt('handle_styling_no_input.txt', { injectPersona: true });
-    const defaultPrompt = defaultPromptText.replace('{INTENT}', stylingIntent);
-    const response = await invokeTextLLMWithJsonOutput(defaultPrompt, LLMOutputSchema);
+    const systemPromptText = defaultPromptText.replace('{INTENT}', stylingIntent);
+    const systemPrompt = new SystemMessage(systemPromptText);
+    const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
+      systemPrompt,
+      state.conversationHistoryTextOnly,
+    );
     const reply_text = response.message1_text as string;
     logger.debug({ userId, reply_text }, 'Returning with default LLM reply');
     const replies: Replies = [{ reply_type: 'text', reply_text }];
@@ -54,14 +60,17 @@ export async function handleStylingNode(state: GraphState): Promise<GraphState> 
       fetchColorAnalysis(userId),
     ];
 
-    const systemPrompt = await loadPrompt(`handle_${stylingIntent}.txt`, { injectPersona: true });
+    const systemPromptText = await loadPrompt(`handle_${stylingIntent}.txt`, { injectPersona: true });
+    const systemPrompt = new SystemMessage(systemPromptText);
 
-    const finalResponse = await invokeAgent(
-      tools,
+    const finalResponse = await agentExecutor(
+      getTextLLM(),
       systemPrompt,
       conversationHistoryTextOnly,
-      LLMOutputSchema,
+      { tools, outputSchema: LLMOutputSchema },
     );
+
+
 
     const replies: Replies = [{ reply_type: 'text', reply_text: finalResponse.message1_text }];
     if (finalResponse.message2_text) {

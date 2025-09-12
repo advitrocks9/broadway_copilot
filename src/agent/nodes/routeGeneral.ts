@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
-import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
-
-import { invokeTextLLMWithJsonOutput } from '../../lib/llm';
+import { getTextLLM } from '../../lib/ai';
+import { SystemMessage } from '../../lib/ai/core/messages';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
+import { extractTextContent } from '../../utils/text';
 
 import { GeneralIntent } from '../state';
 import { GraphState } from '../state';
@@ -24,7 +24,8 @@ const LLMOutputSchema = z.object({
 export async function routeGeneralNode(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
   const messageId = state.input.MessageSid;
-  const lastMessage = state.conversationHistoryTextOnly.at(-1)?.content?.toString() ?? '';
+  const lastMessageContent = state.conversationHistoryTextOnly.at(-1)?.content;
+  const lastMessage = lastMessageContent ? extractTextContent(lastMessageContent) : '';
 
   logger.info({ userId, messageId, lastMessage }, 'Routing general intent');
 
@@ -40,20 +41,12 @@ export async function routeGeneralNode(state: GraphState): Promise<GraphState> {
     }
 
     // LLM routing for other cases
-    const systemPrompt = await loadPrompt('route_general.txt');
+    const systemPromptText = await loadPrompt('route_general.txt');
+    const systemPrompt = new SystemMessage(systemPromptText);
 
-    const promptTemplate = ChatPromptTemplate.fromMessages([
-      ['system', systemPrompt],
-      new MessagesPlaceholder('history'),
-    ]);
-
-    const formattedPrompt = await promptTemplate.invoke({
-      history: state.conversationHistoryTextOnly,
-    });
-
-    const response = await invokeTextLLMWithJsonOutput(
-      formattedPrompt.toChatMessages(),
-      LLMOutputSchema,
+    const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
+      systemPrompt,
+      state.conversationHistoryTextOnly,
     );
 
     logger.info(

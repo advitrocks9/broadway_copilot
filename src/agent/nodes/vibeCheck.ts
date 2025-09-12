@@ -1,9 +1,8 @@
 import { z } from 'zod';
 
-import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
-
 import { prisma } from '../../lib/prisma';
-import { invokeVisionLLMWithJsonOutput, invokeTextLLMWithJsonOutput } from '../../lib/llm';
+import { getVisionLLM, getTextLLM } from '../../lib/ai';
+import { SystemMessage } from '../../lib/ai/core/messages';
 import { queueWardrobeIndex } from '../../lib/tasks';
 import { numImagesInMessage } from '../../utils/conversation';
 import { loadPrompt } from '../../utils/prompts';
@@ -40,33 +39,30 @@ export async function vibeCheckNode(state: GraphState): Promise<GraphState> {
   const imageCount = numImagesInMessage(state.conversationHistoryWithImages);
 
   if (imageCount === 0) {
-    const defaultPrompt = await loadPrompt('vibe_check_no_image.txt', { injectPersona: true });
-    const response = await invokeTextLLMWithJsonOutput(defaultPrompt, NoImageLLMOutputSchema);
+    const systemPromptText = await loadPrompt('vibe_check_no_image.txt', { injectPersona: true });
+    const systemPrompt = new SystemMessage(systemPromptText);
+    const response = await getTextLLM().withStructuredOutput(NoImageLLMOutputSchema).run(
+      systemPrompt,
+      state.conversationHistoryTextOnly,
+    );
     logger.debug({ userId, reply_text: response.reply_text }, 'Invoking text LLM for no-image response');
     const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
     return { ...state, assistantReply: replies, pending: PendingType.VIBE_CHECK_IMAGE };
   }
 
-  const systemPrompt = await loadPrompt('vibe_check.txt', { injectPersona: true });
-  
-  const promptTemplate = ChatPromptTemplate.fromMessages([
-    ["system", systemPrompt],
-    new MessagesPlaceholder("history"),
-  ]);
+  const systemPromptText = await loadPrompt('vibe_check.txt', { injectPersona: true });
+  const systemPrompt = new SystemMessage(systemPromptText);
 
-  const history = state.conversationHistoryWithImages;
-
-  const formattedPrompt = await promptTemplate.invoke({ history });
-  const result = await invokeVisionLLMWithJsonOutput(
-    formattedPrompt.toChatMessages(),
-    LLMOutputSchema,
+  const result = await getVisionLLM().withStructuredOutput(LLMOutputSchema).run(
+    systemPrompt,
+    state.conversationHistoryWithImages,
   );
 
   const latestMessage = state.conversationHistoryWithImages.at(-1);
-  if (!latestMessage || !latestMessage.additional_kwargs.messageId) {
+  if (!latestMessage || !latestMessage.meta?.messageId) {
     throw createError.internalServerError('Could not find latest message ID for vibe check');
   }
-  const latestMessageId = latestMessage.additional_kwargs.messageId as string;
+  const latestMessageId = latestMessage.meta.messageId as string;
 
   // Dynamically map categories based on headings
   const categoryMap: { [key: string]: string } = {
@@ -103,8 +99,10 @@ export async function vibeCheckNode(state: GraphState): Promise<GraphState> {
     data: { lastVibeCheckAt: new Date() },
   });
 
+  if (process.env.NODE_ENV === 'production') {
   await queueWardrobeIndex(userId, latestMessageId);
-  logger.debug({ userId }, 'Scheduled wardrobe indexing for message');
+    logger.debug({ userId }, 'Scheduled wardrobe indexing for message');
+  }
   
 
   const replies: Replies = [
@@ -116,6 +114,6 @@ export async function vibeCheckNode(state: GraphState): Promise<GraphState> {
   }
 
   logger.debug({ userId, vibeScore: result.vibe_score, replies }, 'Vibe check completed successfully');
-  return { ...state, user, assistantReply: replies };
+  return { ...state, user, assistantReply: replies, pending: PendingType.NONE };
 }
 

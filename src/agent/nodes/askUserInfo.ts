@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
-import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 import { PendingType } from '@prisma/client';
 
-import { invokeTextLLMWithJsonOutput } from '../../lib/llm';
+import { SystemMessage } from '../../lib/ai/core/messages';
+import { getTextLLM } from '../../lib/ai';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
 import { Replies } from '../state';
@@ -28,24 +28,16 @@ export async function askUserInfoNode(state: GraphState): Promise<GraphState> {
   logger.info({ userId, messageId, missingField: state.missingProfileField }, 'Asking user for missing profile information');
 
   try {
-    const systemPrompt = await loadPrompt('ask_user_info.txt', { injectPersona: true });
-
-    const promptTemplate = ChatPromptTemplate.fromMessages([
-      ["system", systemPrompt],
-      new MessagesPlaceholder("history"),
-    ]);
+    const systemPromptText = await loadPrompt('ask_user_info.txt', { injectPersona: true });
 
     const missingField = state.missingProfileField || 'required information';
     logger.debug({ userId, messageId, missingField }, 'Creating prompt for missing field request');
 
-    const partialPrompt = await promptTemplate.partial({ missingField });
-    const formattedPrompt = await partialPrompt.invoke({
-      history: state.conversationHistoryTextOnly
-    });
+    const systemPrompt = new SystemMessage(systemPromptText.replace('{missingField}', missingField));
 
-    const response = await invokeTextLLMWithJsonOutput(
-      formattedPrompt.toChatMessages(),
-      LLMOutputSchema,
+    const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
+      systemPrompt,
+      state.conversationHistoryTextOnly,
     );
 
     const replies: Replies = [{ reply_type: 'text', reply_text: response.text }];

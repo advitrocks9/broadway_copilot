@@ -1,8 +1,8 @@
 import 'dotenv/config';
 
-import { END, START, StateGraph } from '@langchain/langgraph';
 import { PendingType } from '@prisma/client';
 
+import { END, START, StateGraph } from '../lib/graph';
 import { askUserInfoNode } from './nodes/askUserInfo';
 import { colorAnalysisNode } from './nodes/colorAnalysis';
 import { handleGeneralNode } from './nodes/handleGeneral';
@@ -14,7 +14,7 @@ import { routeStyling } from './nodes/routeStyling';
 import { routeGeneralNode } from './nodes/routeGeneral';
 import { sendReplyNode } from './nodes/sendReply';
 import { vibeCheckNode } from './nodes/vibeCheck';
-import { AgentState, GraphState } from './state';
+import { GraphState } from './state';
 import { HttpError, createError } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { TwilioWebhookRequest } from '../lib/twilio/types';
@@ -50,7 +50,7 @@ export function initializeAgent() {
  * @returns Compiled StateGraph instance ready for execution
  */
 export function buildAgentGraph() {
-  const graph = new StateGraph(AgentState)
+  const graph = new StateGraph<GraphState>(null)
     .addNode('ingest_message', ingestMessageNode)
     .addNode('record_user_info', recordUserInfoNode)
     .addNode('route_intent', routeIntent)
@@ -139,13 +139,13 @@ export async function runAgent(input: TwilioWebhookRequest, options?: { signal?:
     const user = await getUser(whatsappId);
     const compiledApp = await compiledAppPromise;
 
-    await compiledApp.invoke({ input, user }, { configurable: { thread_id: whatsappId }, signal: options?.signal });
+    await compiledApp.invoke({ input, user }, { signal: options?.signal });
   } catch (err: any) {
     if (err.name === 'AbortError') {
       throw err;
     }
 
-    logger.error({ whatsappId, messageId, err: err.message, stack: err.stack }, 'Agent run failed');
+    logger.error({ whatsappId, messageId, err: err.message, stack: err.stack, cause: err.cause }, 'Agent run failed');
 
     if (err instanceof HttpError) {
       throw err;

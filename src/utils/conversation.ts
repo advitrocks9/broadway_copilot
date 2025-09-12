@@ -31,11 +31,14 @@ export async function getConversation(userId: string): Promise<Conversation> {
         where: { id: lastOpenConversation.id },
         data: { status: ConversationStatus.CLOSED },
       });
-      await queueMemoryExtraction(userId, lastOpenConversation.id);
-      logger.info(
-        { userId, conversationId: lastOpenConversation.id },
-        'Queued memory extraction for closed conversation.'
+      if (process.env.NODE_ENV === 'production') {
+        await queueMemoryExtraction(userId, lastOpenConversation.id);
+        logger.info(
+          { userId, conversationId: lastOpenConversation.id },
+          'Queued memory extraction for closed conversation.'
       );
+      }
+      
     } else {
       return lastOpenConversation;
     }

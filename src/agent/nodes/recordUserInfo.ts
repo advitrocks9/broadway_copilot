@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
-import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 import { Gender, AgeGroup, PendingType } from '@prisma/client';
 
 import { prisma } from '../../lib/prisma';
-import { invokeTextLLMWithJsonOutput } from '../../lib/llm';
+import { getTextLLM } from '../../lib/ai';
+import { SystemMessage } from '../../lib/ai/core/messages';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState } from '../state';
 
@@ -22,18 +22,12 @@ const LLMOutputSchema = z.object({
  */
 export async function recordUserInfoNode(state: GraphState): Promise<GraphState> {
 
-  const systemPrompt = await loadPrompt('record_user_info.txt');
+  const systemPromptText = await loadPrompt('record_user_info.txt');
+  const systemPrompt = new SystemMessage(systemPromptText);
 
-  const promptTemplate = ChatPromptTemplate.fromMessages([
-    ["system", systemPrompt],
-    new MessagesPlaceholder("history"),
-  ]);
-
-  const formattedPrompt = await promptTemplate.invoke({ history: state.conversationHistoryTextOnly });
-
-  const response = await invokeTextLLMWithJsonOutput(
-    formattedPrompt.toChatMessages(),
-    LLMOutputSchema,
+  const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
+    systemPrompt,
+    state.conversationHistoryTextOnly,
   );
 
   const user = await prisma.user.update({
