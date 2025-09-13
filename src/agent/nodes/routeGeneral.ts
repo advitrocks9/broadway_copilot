@@ -8,6 +8,7 @@ import { extractTextContent } from '../../utils/text';
 
 import { GeneralIntent } from '../state';
 import { GraphState } from '../state';
+import { InternalServerError } from '../../utils/errors';
 
 const GREETING_REGEX = /\b(hi|hello|hey|heya|yo|sup)\b/i;
 const MENU_REGEX = /\b(help|menu|options?|what can you do\??)\b/i;
@@ -27,7 +28,7 @@ export async function routeGeneralNode(state: GraphState): Promise<GraphState> {
   const lastMessageContent = state.conversationHistoryTextOnly.at(-1)?.content;
   const lastMessage = lastMessageContent ? extractTextContent(lastMessageContent) : '';
 
-  logger.info({ userId, messageId, lastMessage }, 'Routing general intent');
+  logger.debug({ userId, messageId, lastMessage }, 'Routing general intent');
 
   try {
     // Regex routing for common cases
@@ -41,7 +42,7 @@ export async function routeGeneralNode(state: GraphState): Promise<GraphState> {
     }
 
     // LLM routing for other cases
-    const systemPromptText = await loadPrompt('route_general.txt');
+    const systemPromptText = await loadPrompt('routing/route_general.txt');
     const systemPrompt = new SystemMessage(systemPromptText);
 
     const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
@@ -49,17 +50,13 @@ export async function routeGeneralNode(state: GraphState): Promise<GraphState> {
       state.conversationHistoryTextOnly,
     );
 
-    logger.info(
+    logger.debug(
       { userId, generalIntent: response.generalIntent },
       'General intent routed using LLM'
     );
     const { generalIntent } = response;
     return { ...state, generalIntent };
-  } catch (err: any) {
-    logger.error({ userId, messageId, err: err.message, stack: err.stack }, 'Error routing general intent');
-    if (err.statusCode) {
-      throw err;
-    }
-    return { ...state, generalIntent: 'chat' as GeneralIntent };
+  } catch (err: unknown) {
+    throw new InternalServerError('Failed to route general intent', { cause: err });
   }
 }

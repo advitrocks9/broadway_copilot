@@ -7,6 +7,8 @@ import { getTextLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState } from '../state';
+import { logger } from '../../utils/logger';
+import { InternalServerError } from '../../utils/errors';
 
 /**
  * Structured output schema for confirming user profile fields.
@@ -21,19 +23,23 @@ const LLMOutputSchema = z.object({
  * Resets pending state to NONE when complete.
  */
 export async function recordUserInfoNode(state: GraphState): Promise<GraphState> {
+  const userId = state.user.id;
+  try {
+    const systemPromptText = await loadPrompt('data/record_user_info.txt');
+    const systemPrompt = new SystemMessage(systemPromptText);
 
-  const systemPromptText = await loadPrompt('record_user_info.txt');
-  const systemPrompt = new SystemMessage(systemPromptText);
+    const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
+      systemPrompt,
+      state.conversationHistoryTextOnly,
+    );
 
-  const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
-    systemPrompt,
-    state.conversationHistoryTextOnly,
-  );
-
-  const user = await prisma.user.update({
-    where: { id: state.user.id },
-    data: { confirmedGender: response.confirmed_gender, confirmedAgeGroup: response.confirmed_age_group }
-  });
-
-  return { ...state, user, pending: PendingType.NONE };
+    const user = await prisma.user.update({
+      where: { id: state.user.id },
+      data: { confirmedGender: response.confirmed_gender, confirmedAgeGroup: response.confirmed_age_group }
+    });
+    logger.debug({ userId }, 'User info recorded successfully');
+    return { ...state, user, pending: PendingType.NONE };
+  } catch (err: unknown) {
+    throw new InternalServerError('Failed to record user info', { cause: err });
+  }
 }

@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { redis } from '../lib/redis';
 import { USER_REQUEST_LIMIT , TOKEN_REFILL_PERIOD_MS, USER_STATE_TTL_SECONDS } from '../utils/constants';
-import { logger }  from '../utils/logger';
-import { createError } from '../utils/errors';
-
+import { logger } from '../utils/logger';
+import { BadRequestError, ServiceUnavailableError } from '../utils/errors';
+import { TwilioWebhookRequest } from '../lib/twilio/types';
 /**
  * Express middleware implementing token bucket rate limiting for user requests.
  * Uses Redis to track token counts with automatic refill over time.
@@ -16,12 +16,12 @@ import { createError } from '../utils/errors';
  */
 export const rateLimiter = async (req: Request, _res: Response, next: NextFunction) => {
 
-  const whatsappId = req.body.From;
+  const webhook = req.body as TwilioWebhookRequest;
+  const whatsappId = webhook.From;
   const messageId = req.body.MessageSid;
 
   if (!whatsappId) {
-    logger.warn({ messageId, ip: req.ip }, 'Rate limiter: missing WhatsApp ID');
-    throw createError.badRequest('Missing WhatsApp ID');
+    throw new BadRequestError('Missing WhatsApp ID');
   }
 
   const key = `user:${whatsappId}`;
@@ -48,7 +48,9 @@ export const rateLimiter = async (req: Request, _res: Response, next: NextFuncti
 
     if (tokenRemaining <= 0) {
       logger.warn({ whatsappId, messageId }, 'Rate limit exceeded');
-      throw createError.serviceUnavailable('Rate limit exceeded');
+      throw new ServiceUnavailableError(
+        `Rate limit exceeded for user ${whatsappId}`
+      );
     } else {
       await redis.hSet(key, {
         tokens: tokenRemaining - 1,
@@ -61,7 +63,6 @@ export const rateLimiter = async (req: Request, _res: Response, next: NextFuncti
 
     next();
   } catch (err: any) {
-    logger.error({ whatsappId, messageId, err: err?.message }, 'Rate limiter error');
     if (err.statusCode) {
       throw err; // Re-throw HTTP errors as-is
     }

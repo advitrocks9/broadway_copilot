@@ -6,7 +6,7 @@ import { SystemMessage } from '../../lib/ai/core/messages';
 import { numImagesInMessage } from '../../utils/conversation';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
-import { createError } from '../../utils/errors';
+import { InternalServerError } from '../../utils/errors';
 
 import { Replies } from '../state';
 import { GraphState } from '../state';
@@ -52,8 +52,8 @@ export async function colorAnalysisNode(state: GraphState): Promise<GraphState> 
   const imageCount = numImagesInMessage(state.conversationHistoryWithImages);
 
   if (imageCount === 0) {
-    const systemPromptText = await loadPrompt('color_analysis_no_image.txt', { injectPersona: true });
-    const systemPrompt = new SystemMessage(systemPromptText);
+    const systemPromptText = await loadPrompt('handlers/analysis/no_image_request.txt');
+    const systemPrompt = new SystemMessage(systemPromptText.replace('{analysis_type}', 'color analysis'));
     const response = await getTextLLM().withStructuredOutput(NoImageLLMOutputSchema).run(
       systemPrompt,
       state.conversationHistoryTextOnly,
@@ -64,7 +64,7 @@ export async function colorAnalysisNode(state: GraphState): Promise<GraphState> 
   }
 
   try {
-    const systemPromptText = await loadPrompt('color_analysis.txt', { injectPersona: true });
+    const systemPromptText = await loadPrompt('handlers/analysis/color_analysis.txt');
     const systemPrompt = new SystemMessage(systemPromptText);
 
     const output = await getVisionLLM().withStructuredOutput(LLMOutputSchema).run(
@@ -95,9 +95,9 @@ export async function colorAnalysisNode(state: GraphState): Promise<GraphState> 
       replies.push({ reply_type: 'text', reply_text: output.message2_text });
     }
 
-    logger.info({ userId, messageId, replies }, 'Color analysis completed successfully');
+    logger.debug({ userId, messageId, replies }, 'Color analysis completed successfully');
     return { ...state, user, assistantReply: replies, pending: PendingType.NONE };
-  } catch (err: any) {
-    throw createError.internalServerError('Color analysis failed', { cause: err });
+  } catch (err: unknown) {
+    throw new InternalServerError('Color analysis failed', { cause: err });
   }
 }

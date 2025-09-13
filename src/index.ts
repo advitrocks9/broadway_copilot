@@ -81,15 +81,15 @@ app.post('/twilio/', authenticateRequest, rateLimiter, async (req: Request, res:
       processMessage(userId, messageId, webhookPayload);
       return res.status(200).end();
     }
-  } catch (err: any) {
-    const messageId = req.body?.MessageSid;
+  } catch (err: unknown) {
+    const messageId = (req.body as TwilioWebhookRequest)?.MessageSid;
     try {
       if (messageId) {
         const mk = getMessageKey(messageId);
         await redis.hSet(mk, { status: 'failed' });
       }
-    } catch (redisErr: any) {
-      logger.warn({ messageId, err: redisErr.message }, 'Failed to set failed status for message');
+    } catch (redisErr: unknown) {
+      logger.warn({ messageId, err: redisErr instanceof Error ? redisErr.message : String(redisErr) }, 'Failed to set failed status for message');
     }
     next(err);
   }
@@ -102,7 +102,7 @@ app.post('/twilio/callback/', authenticateRequest, async (req: Request, res: Res
   try {
     processStatusCallback(req.body || {});
     return res.status(200).end();
-  } catch (err: any) {
+  } catch (err: unknown) {
     next(err);
   }
 });
@@ -126,15 +126,15 @@ async function processMessage(userId: string, messageId: string, input: TwilioWe
     await redis.hSet(mk, { status: 'running' });
 
     await runAgent(input, { signal: controller.signal });
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
       logger.info({ userId, messageId }, 'Message processing aborted');
     }
 
     try {
       await redis.hSet(mk, { status: 'failed' });
-    } catch (redisErr: any) {
-      logger.error({ redisErr: redisErr.message, userId, messageId }, 'Failed to update message status in Redis');
+    } catch (redisErr: unknown) {
+      logger.error({ redisErr: redisErr instanceof Error ? redisErr.message : String(redisErr), userId, messageId }, 'Failed to update message status in Redis');
     }
   } finally {
     const current = userControllers.get(userId);
@@ -153,8 +153,8 @@ async function processMessage(userId: string, messageId: string, input: TwilioWe
           const uak = getUserActiveKey(userId);
           await redis.del(uak);
         }
-      } catch (queueErr: any) {
-        logger.error({ userId, messageId, err: queueErr.message }, 'Failed to process message queue');
+      } catch (queueErr: unknown) {
+        logger.error({ userId, messageId, err: queueErr instanceof Error ? queueErr.message : String(queueErr) }, 'Failed to process message queue');
       }
     }
   }
@@ -173,8 +173,8 @@ void (async function bootstrap() {
     app.listen(PORT, '0.0.0.0', () => {
       logger.info({ port: PORT }, 'Broadway WhatsApp Bot server started');
     });
-  } catch (err: any) {
-    logger.error({ err: err.message, stack: err.stack }, 'Server bootstrap failed');
+  } catch (err: unknown) {
+    logger.error({ err: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined }, 'Server bootstrap failed');
     process.exit(1);
   }
 })();

@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
-import { createError } from '../utils/errors';
-import { logger }  from '../utils/logger';
+import { ForbiddenError } from '../utils/errors';
 import { validateTwilioRequest } from '../lib/twilio';
 
 /**
@@ -14,22 +13,19 @@ import { validateTwilioRequest } from '../lib/twilio';
  * @throws {HttpError} When webhook signature validation fails
  */
 export const authenticateRequest = (req: Request, _res: Response, next: NextFunction) => {
-  const userId = req.body?.From;
-  const messageId = req.body?.MessageSid;
+  const twilioSignature = req.header('X-Twilio-Signature');
+
+  if (!twilioSignature) {
+    throw new ForbiddenError('Authentication failed');
+  }
 
   try {
     const isValid = validateTwilioRequest(req);
     if (!isValid) {
-      logger.warn({ userId, messageId, ip: req.ip }, 'Twilio webhook authentication failed');
-      throw createError.forbidden('Invalid webhook signature');
+      throw new ForbiddenError('Invalid webhook signature');
     }
-    logger.debug({ userId, messageId }, 'Twilio webhook authentication successful');
     next();
-  } catch (err: any) {
-    logger.error({ userId, messageId, err: err?.message }, 'Twilio webhook authentication error');
-    if (err.statusCode) {
-      throw err; // Re-throw HTTP errors as-is
-    }
-    throw createError.forbidden('Authentication failed');
+  } catch (err: unknown) {
+    throw new ForbiddenError('Authentication failed', { cause: err });
   }
 };

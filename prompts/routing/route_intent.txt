@@ -26,25 +26,46 @@ Availability information:
 - Can perform vibe check: {can_do_vibe_check}
 - Can perform color analysis: {can_do_color_analysis}
 
+## Output Format
+You must output a single JSON object with the following keys and no other text:
+- `intent`: One of "general", "vibe_check", "color_analysis", or "styling".
+- `missingProfileField`: One of "gender", "age_group", or null.
+
 ## Examples
 **User:** Hi there!
 **Expected Output:**
-- **`intent`**: "general"
-- **`missingProfileField`**: null
+```json
+{
+  "intent": "general",
+  "missingProfileField": null
+}
+```
 
 **User:** What should I wear to a wedding?
 **Context:** User's gender is unknown.
 **Expected Output:**
-- **`intent`**: "styling"
-- **`missingProfileField`**: "gender"
+```json
+{
+  "intent": "styling",
+  "missingProfileField": "gender"
+}
+```
 
 **User:** Can you help me style these boots?
 **Context:** User's gender is "female", age group is unknown.
 **Expected Output:**
-- **`intent`**: "styling"
-- **`missingProfileField`**: "age_group"
+```json
+{
+  "intent": "styling",
+  "missingProfileField": "age_group"
+}
+```
 
 **User:** Check out my look! [sends image]
 **Expected Output:**
-- **`intent`**: "vibe_check"
-- **`missingProfileField`**: null
+```json
+{
+  "intent": "vibe_check",
+  "missingProfileField": null
+}
+```

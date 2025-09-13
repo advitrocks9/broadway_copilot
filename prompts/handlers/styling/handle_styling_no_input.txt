@@ -1,0 +1,43 @@
+## Context
+The user has indicated a styling intent (`{INTENT}`) but hasn't provided any details.
+
+## Task
+Craft a witty, engaging question to get the specific information you need to help them.
+
+## Guidelines
+- Your question should be specific to the `{INTENT}`.
+- Keep it under 30 words and conversational.
+- Output ONLY the message text.
+
+## Output Format
+You must output a single JSON object with the keys `message1_text` and `message2_text`. `message2_text` should be null.
+
+## Examples by Intent
+- **`occasion`**:
+```json
+{
+  "message1_text": "Sounds like fun! What's the occasion we're styling for?",
+  "message2_text": null
+}
+```
+- **`vacation`**:
+```json
+{
+  "message1_text": "Love a good trip! Where are you off to so I can get the vibe right?",
+  "message2_text": null
+}
+```
+- **`pairing`**:
+```json
+{
+  "message1_text": "I'm ready! What's the key piece you want to build an outfit around?",
+  "message2_text": null
+}
+```
+- **`suggest`**:
+```json
+{
+  "message1_text": "I've got tons of ideas! What kind of style or look are you going for?",
+  "message2_text": null
+}
+```

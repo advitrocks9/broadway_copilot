@@ -8,6 +8,7 @@ import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
 import { Replies } from '../state';
 import { GraphState } from '../state';
+import { InternalServerError } from '../../utils/errors';
 
 /**
  * Schema for LLM output when asking user for profile information.
@@ -25,10 +26,10 @@ export async function askUserInfoNode(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
   const messageId = state.input.MessageSid;
 
-  logger.info({ userId, messageId, missingField: state.missingProfileField }, 'Asking user for missing profile information');
+  logger.debug({ userId, messageId, missingField: state.missingProfileField }, 'Asking user for missing profile information');
 
   try {
-    const systemPromptText = await loadPrompt('ask_user_info.txt', { injectPersona: true });
+    const systemPromptText = await loadPrompt('data/ask_user_info.txt');
 
     const missingField = state.missingProfileField || 'required information';
     logger.debug({ userId, messageId, missingField }, 'Creating prompt for missing field request');
@@ -41,11 +42,9 @@ export async function askUserInfoNode(state: GraphState): Promise<GraphState> {
     );
 
     const replies: Replies = [{ reply_type: 'text', reply_text: response.text }];
-    logger.info({ userId, messageId, replyLength: response.text.length }, 'Successfully generated ask user info reply');
+    logger.debug({ userId, messageId, replyLength: response.text.length }, 'Successfully generated ask user info reply');
     return { ...state, assistantReply: replies, pending: PendingType.ASK_USER_INFO };
-  } catch (err: any) {
-    logger.warn({ userId, messageId, err: err.message }, 'Failed to generate ask user info response, using fallback');
-    const replies: Replies = [{ reply_type: 'text', reply_text: "Sorry, I'm having a little trouble right now. Let's try again later." }];
-    return { ...state, assistantReply: replies };
+  } catch (err: unknown) {
+    throw new InternalServerError('Failed to generate ask user info response', { cause: err });
   }
 }

@@ -5,7 +5,7 @@ import { getTextLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
-import { createError } from '../../utils/errors';
+import { InternalServerError } from '../../utils/errors';
 import { searchWardrobe, fetchColorAnalysis } from '../tools';
 import { Replies } from '../state';
 import { GraphState } from '../state';
@@ -37,12 +37,12 @@ export async function handleStylingNode(state: GraphState): Promise<GraphState> 
   const lastMessage = conversationHistoryTextOnly.at(-1);
 
   if (!stylingIntent) {
-    throw createError.internalServerError('handleStylingNode called without a styling intent.');
+    throw new InternalServerError('handleStylingNode called without a styling intent.');
   }
 
   try {
     if (lastMessage?.meta?.buttonPayload) {
-    const defaultPromptText = await loadPrompt('handle_styling_no_input.txt', { injectPersona: true });
+    const defaultPromptText = await loadPrompt('handlers/styling/handle_styling_no_input.txt');
     const systemPromptText = defaultPromptText.replace('{INTENT}', stylingIntent);
     const systemPrompt = new SystemMessage(systemPromptText);
     const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
@@ -60,7 +60,7 @@ export async function handleStylingNode(state: GraphState): Promise<GraphState> 
       fetchColorAnalysis(userId),
     ];
 
-    const systemPromptText = await loadPrompt(`handle_${stylingIntent}.txt`, { injectPersona: true });
+    const systemPromptText = await loadPrompt(`handlers/styling/handle_${stylingIntent}.txt`);
     const systemPrompt = new SystemMessage(systemPromptText);
 
     const finalResponse = await agentExecutor(
@@ -79,10 +79,8 @@ export async function handleStylingNode(state: GraphState): Promise<GraphState> 
 
     logger.debug({ userId, replies }, 'Returning styling response');
     return { ...state, assistantReply: replies };
-  } catch (err: any) {
-    logger.error({ userId, err: err.message, stack: err.stack }, 'Error handling styling intent');
-    const replies: Replies = [{ reply_type: 'text', reply_text: "I'm having trouble with that request. Let's try something else." }];
-    return { ...state, assistantReply: replies };
+  } catch (err: unknown) {
+    throw new InternalServerError('Failed to handle styling request', { cause: err });
   }
 }
 

@@ -1,7 +1,7 @@
 import { User } from '@prisma/client';
 
 import { prisma } from '../lib/prisma';
-import { createError } from './errors';
+import { BadRequestError, InternalServerError } from './errors';
 
 /**
  * Gets or creates a user record for the given WhatsApp ID.
@@ -13,7 +13,7 @@ import { createError } from './errors';
  */
 export async function getUser(whatsappId: string): Promise<User> {
   if (!whatsappId) {
-    throw createError.badRequest('WhatsApp ID is required');
+    throw new BadRequestError('WhatsApp ID is required');
   }
 
   try {
@@ -25,10 +25,7 @@ export async function getUser(whatsappId: string): Promise<User> {
 
     return user;
 
-  } catch (err: any) {
-    if (err.statusCode) {
-      throw err;
-    }
-    throw createError.internalServerError('Failed to get or create user');
+  } catch (err: unknown) {
+    throw new InternalServerError('Failed to get or create user', { cause: err });
   }
 }

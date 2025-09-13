@@ -22,7 +22,14 @@ Analyze the provided conversation history to infer the user's gender and age gro
 **User:** "I usually shop in the men's department."
 **User:** "I'm looking for an outfit for my 30th birthday party."
 
+## Output Format
+You must output a single JSON object with the keys `confirmed_gender` and `confirmed_age_group`.
+The values must be from the enums defined in the schema.
+
 **Expected Output:**
-- **`inferred_gender`**: "male"
-- **`confirmed`**: false
-- **`inferred_age_group`**: "Millennial"
+```json
+{
+  "confirmed_gender": "MALE",
+  "confirmed_age_group": "AGE_26_35"
+}
+```

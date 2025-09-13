@@ -20,11 +20,18 @@ Available tools:
 
 If you have enough information, output your final styling suggestion as text. Do not call tools unnecessarily or repeat the same call.
 
+## Output Format
+You must output a single JSON object with the keys `message1_text` and `message2_text`.
+
 ## Example
 **User:** I'm going to Paris for a week in the spring! What should I pack?
 **Wardrobe:** User owns a classic trench coat and comfortable loafers.
 **Color Analysis:** User is a "Soft Summer".
 
 **Expected Output:**
-- **`message1_text`**: "Paris in the spring is an absolute dream! The key is chic layering. Your trench coat is the perfect starting point. I'd build a travel capsule around it with neutral basics you can mix and match. As a Soft Summer, muted pastels like dusty rose will look incredible on you. And definitely pack those comfy loafers!"
-- **`message2_text`**: "Want me to do a quick Color Analysis to find your best travel colors?"
+```json
+{
+  "message1_text": "Paris in the spring is an absolute dream! The key is chic layering. Your trench coat is the perfect starting point. I'd build a travel capsule around it with neutral basics you can mix and match. As a Soft Summer, muted pastels like dusty rose will look incredible on you. And definitely pack those comfy loafers!",
+  "message2_text": "Want me to do a quick Color Analysis to find your best travel colors?"
+}
+```

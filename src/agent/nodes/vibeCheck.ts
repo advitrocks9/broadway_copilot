@@ -10,7 +10,7 @@ import { logger } from '../../utils/logger';
 
 import { Replies } from '../state';
 import { GraphState } from '../state';
-import { createError } from '../../utils/errors';
+import { InternalServerError } from '../../utils/errors';
 import { PendingType } from '@prisma/client';
 
 /**
@@ -35,85 +35,88 @@ const NoImageLLMOutputSchema = z.object({
 
 export async function vibeCheckNode(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
+  try {
+    const imageCount = numImagesInMessage(state.conversationHistoryWithImages);
 
-  const imageCount = numImagesInMessage(state.conversationHistoryWithImages);
-
-  if (imageCount === 0) {
-    const systemPromptText = await loadPrompt('vibe_check_no_image.txt', { injectPersona: true });
-    const systemPrompt = new SystemMessage(systemPromptText);
-    const response = await getTextLLM().withStructuredOutput(NoImageLLMOutputSchema).run(
-      systemPrompt,
-      state.conversationHistoryTextOnly,
-    );
-    logger.debug({ userId, reply_text: response.reply_text }, 'Invoking text LLM for no-image response');
-    const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
-    return { ...state, assistantReply: replies, pending: PendingType.VIBE_CHECK_IMAGE };
-  }
-
-  const systemPromptText = await loadPrompt('vibe_check.txt', { injectPersona: true });
-  const systemPrompt = new SystemMessage(systemPromptText);
-
-  const result = await getVisionLLM().withStructuredOutput(LLMOutputSchema).run(
-    systemPrompt,
-    state.conversationHistoryWithImages,
-  );
-
-  const latestMessage = state.conversationHistoryWithImages.at(-1);
-  if (!latestMessage || !latestMessage.meta?.messageId) {
-    throw createError.internalServerError('Could not find latest message ID for vibe check');
-  }
-  const latestMessageId = latestMessage.meta.messageId as string;
-
-  // Dynamically map categories based on headings
-  const categoryMap: { [key: string]: string } = {
-    'Fit & Silhouette': 'fit_silhouette',
-    'Color Harmony': 'color_harmony',
-    'Styling Details': 'styling_details',
-    'Accessories & Texture': 'accessories_texture',
-  };
-
-  const vibeCheckData: any = {
-    context_confidence: result.vibe_score,
-    overall_score: result.vibe_score,
-    comment: result.vibe_reply,
-  };
-
-  result.categories.forEach(cat => {
-    const key = categoryMap[cat.heading];
-    if (key) {
-      vibeCheckData[key] = cat.score;
-    } else {
-      logger.warn({ userId, unknownHeading: cat.heading }, 'Unknown category heading in vibe check');
+    if (imageCount === 0) {
+      const systemPromptText = await loadPrompt('handlers/analysis/no_image_request.txt');
+      const systemPrompt = new SystemMessage(systemPromptText.replace('{analysis_type}', 'vibe check'));
+      const response = await getTextLLM().withStructuredOutput(NoImageLLMOutputSchema).run(
+        systemPrompt,
+        state.conversationHistoryTextOnly,
+      );
+      logger.debug({ userId, reply_text: response.reply_text }, 'Invoking text LLM for no-image response');
+      const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
+      return { ...state, assistantReply: replies, pending: PendingType.VIBE_CHECK_IMAGE };
     }
-  });
 
-  await prisma.vibeCheck.create({
-    data: {
-      userId,
-      ...vibeCheckData,
-    },
-  });
+    const systemPromptText = await loadPrompt('handlers/analysis/vibe_check.txt');
+    const systemPrompt = new SystemMessage(systemPromptText);
 
-  const user = await prisma.user.update({
-    where: { id: userId },
-    data: { lastVibeCheckAt: new Date() },
-  });
+    const result = await getVisionLLM().withStructuredOutput(LLMOutputSchema).run(
+      systemPrompt,
+      state.conversationHistoryWithImages,
+    );
 
-  if (process.env.NODE_ENV === 'production') {
-  await queueWardrobeIndex(userId, latestMessageId);
-    logger.debug({ userId }, 'Scheduled wardrobe indexing for message');
+    const latestMessage = state.conversationHistoryWithImages.at(-1);
+    if (!latestMessage || !latestMessage.meta?.messageId) {
+      throw new InternalServerError('Could not find latest message ID for vibe check');
+    }
+    const latestMessageId = latestMessage.meta.messageId as string;
+
+    // Dynamically map categories based on headings
+    const categoryMap: { [key: string]: string } = {
+      'Fit & Silhouette': 'fit_silhouette',
+      'Color Harmony': 'color_harmony',
+      'Styling Details': 'styling_details',
+      'Accessories & Texture': 'accessories_texture',
+    };
+
+    const vibeCheckData: any = {
+      context_confidence: result.vibe_score,
+      overall_score: result.vibe_score,
+      comment: result.vibe_reply,
+    };
+
+    result.categories.forEach(cat => {
+      const key = categoryMap[cat.heading];
+      if (key) {
+        vibeCheckData[key] = cat.score;
+      } else {
+        logger.warn({ userId, unknownHeading: cat.heading }, 'Unknown category heading in vibe check');
+      }
+    });
+
+    await prisma.vibeCheck.create({
+      data: {
+        userId,
+        ...vibeCheckData,
+      },
+    });
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { lastVibeCheckAt: new Date() },
+    });
+
+    if (process.env.NODE_ENV === 'production') {
+      await queueWardrobeIndex(userId, latestMessageId);
+      logger.debug({ userId }, 'Scheduled wardrobe indexing for message');
+    }
+
+
+    const replies: Replies = [
+      { reply_type: 'text', reply_text: result.message1_text },
+    ];
+
+    if (result.message2_text) {
+      replies.push({ reply_type: 'text', reply_text: result.message2_text });
+    }
+
+    logger.debug({ userId, vibeScore: result.vibe_score, replies }, 'Vibe check completed successfully');
+    return { ...state, user, assistantReply: replies, pending: PendingType.NONE };
+  } catch (err: unknown) {
+    throw new InternalServerError('Vibe check failed', { cause: err });
   }
-  
-
-  const replies: Replies = [
-    { reply_type: 'text', reply_text: result.message1_text },
-  ];
-
-  if (result.message2_text) {
-    replies.push({ reply_type: 'text', reply_text: result.message2_text });
-  }
-
-  logger.debug({ userId, vibeScore: result.vibe_score, replies }, 'Vibe check completed successfully');
-  return { ...state, user, assistantReply: replies, pending: PendingType.NONE };
 }
 

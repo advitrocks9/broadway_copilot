@@ -4,7 +4,7 @@ import { Tool } from '../lib/ai';
 import { OpenAIEmbeddings } from '../lib/ai';
 
 import { prisma } from '../lib/prisma';
-import { createError } from '../utils/errors';
+import { BadRequestError, InternalServerError } from '../utils/errors';
 import { logger } from '../utils/logger';
 
 
@@ -25,7 +25,7 @@ export function searchWardrobe(userId: string): Tool {
     func: async ({ query }: z.infer<typeof searchWardrobeSchema>) => {
   
       if (!query || query.length === 0) {
-        throw createError.badRequest('Search query is required');
+        throw new BadRequestError('Search query is required');
       }
   
       try {
@@ -64,7 +64,7 @@ export function searchWardrobe(userId: string): Tool {
         if ((err as any).statusCode) {
           throw err;
         }
-        throw createError.internalServerError('Failed to search wardrobe', { cause: err });
+        throw new InternalServerError('Failed to search wardrobe', { cause: err });
       }
     },
   });
@@ -104,7 +104,7 @@ export function fetchColorAnalysis(userId: string): Tool {
         if ((err as any).statusCode) {
           throw err;
         }
-        throw createError.internalServerError('Failed to fetch color analysis', { cause: err });
+        throw new InternalServerError('Failed to fetch color analysis', { cause: err });
       }
     },
   });
@@ -126,7 +126,7 @@ export function fetchRelevantMemories(userId: string): Tool {
     func: async ({ query }: z.infer<typeof fetchRelevantMemoriesSchema>) => {
 
       if (!query) {
-        throw createError.badRequest('Query is required');
+        throw new BadRequestError('Query is required');
       }
 
       try {
@@ -150,7 +150,7 @@ export function fetchRelevantMemories(userId: string): Tool {
         if ((err as any).statusCode) {
           throw err;
         }
-        throw createError.internalServerError('Failed to fetch relevant memories', { cause: err });
+        throw new InternalServerError('Failed to fetch relevant memories', { cause: err });
       }
     },
   });

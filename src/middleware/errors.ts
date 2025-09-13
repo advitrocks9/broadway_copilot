@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 
-import { createErrorResponse, logError, normalizeError } from '../utils/errors';
+import { createErrorResponse, logError } from '../utils/errors';
 
 /**
  * Express error handling middleware that normalizes, logs, and responds to errors.
@@ -19,8 +19,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     ip: req.ip,
   };
 
-  const httpError = normalizeError(err);
-  logError(httpError, context);
+  const httpError = logError(err, context);
 
   res.status(httpError.statusCode).json(createErrorResponse(httpError));
 }

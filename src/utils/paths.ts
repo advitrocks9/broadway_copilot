@@ -1,8 +1,7 @@
-import { promises as fsp } from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
-import { createError } from './errors';
-import { logger } from './logger';
+import { BadRequestError, InternalServerError } from './errors';
 
 /**
  * Filesystem helpers for uploads directory handling.
@@ -12,21 +11,20 @@ import { logger } from './logger';
  * Ensures a directory exists, creating it recursively if necessary.
  *
  * @param dirPath - The directory path to create
- * @throws {HttpError} When directory path is missing or creation fails
+ * @throws {BadRequestError} if path is empty
+ * @throws {InternalServerError} if directory creation fails
  */
 export async function ensureDir(dirPath: string): Promise<void> {
   if (!dirPath) {
-    throw createError.badRequest('Directory path is required');
+    throw new BadRequestError('Directory path is required');
   }
-
   try {
-    await fsp.mkdir(dirPath, { recursive: true });
+    await fs.mkdir(dirPath, { recursive: true });
   } catch (err: any) {
-    logger.error({ dirPath, err: err.message, stack: err.stack }, 'Error ensuring directory');
     if (err.statusCode) {
       throw err; // Re-throw HTTP errors as-is
     }
-    throw createError.internalServerError('Failed to create directory');
+    throw new InternalServerError('Failed to create directory');
   }
 }
 
@@ -44,13 +42,14 @@ function uploadsDir(): string {
  *
  * @param whatsappId - WhatsApp user ID (e.g., "whatsapp:+1234567890")
  * @returns Absolute path to the user's upload directory
- * @throws {HttpError} When WhatsApp ID is missing
+ * @throws {BadRequestError} if whatsappId is empty
  */
 export function userUploadDir(whatsappId: string): string {
   if (!whatsappId) {
-    throw createError.badRequest('WhatsApp ID is required');
+    throw new BadRequestError('WhatsApp ID is required');
   }
-  return path.join(uploadsDir(), whatsappId);
+  const sanitizedId = whatsappId.replace(/[^a-zA-Z0-9_+]/g, '_');
+  return path.join(process.cwd(), 'uploads', sanitizedId);
 }
 
 /**

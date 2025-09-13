@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { agentExecutor } from '../../lib/ai/agents/executor';
 import { getTextLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
-import { createError } from '../../utils/errors';
+import { InternalServerError } from '../../utils/errors';
 import { WELCOME_IMAGE_URL } from '../../utils/constants';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
@@ -31,9 +31,7 @@ export async function handleGeneralNode(state: GraphState): Promise<GraphState> 
 
   try {
     if (generalIntent === 'greeting' || generalIntent === 'menu') {
-      const systemPromptText = await loadPrompt(`handle_${generalIntent}.txt`, {
-        injectPersona: true,
-      });
+      const systemPromptText = await loadPrompt(`handlers/general/handle_${generalIntent}.txt`);
       const systemPrompt = new SystemMessage(systemPromptText);
       const response = await getTextLLM().withStructuredOutput(SimpleOutputSchema).run(
         systemPrompt,
@@ -56,13 +54,13 @@ export async function handleGeneralNode(state: GraphState): Promise<GraphState> 
         buttons: availableActions,
       });
 
-      logger.info({ userId, messageId }, `${generalIntent} handled`);
+      logger.debug({ userId, messageId }, `${generalIntent} handled`);
       return { ...state, assistantReply: replies };
     }
 
     if (generalIntent === 'chat') {
       const tools = [fetchRelevantMemories(userId)];
-      const systemPromptText = await loadPrompt('handle_chat.txt', { injectPersona: true });
+      const systemPromptText = await loadPrompt('handlers/general/handle_chat.txt');
       const systemPrompt = new SystemMessage(systemPromptText);
 
       const finalResponse = await agentExecutor(
@@ -77,21 +75,12 @@ export async function handleGeneralNode(state: GraphState): Promise<GraphState> 
         replies.push({ reply_type: 'text', reply_text: finalResponse.message2_text });
       }
 
-      logger.info({ userId, messageId }, 'Chat handled');
+      logger.debug({ userId, messageId }, 'Chat handled');
       return { ...state, assistantReply: replies };
     }
 
-    throw createError.internalServerError(`Unhandled general intent: ${generalIntent}`);
-  } catch (err: any) {
-    logger.error({ userId, messageId, err: err.message, stack: err.stack }, 'Error in handleGeneralNode');
-    if (err.statusCode) throw err;
-
-    const replies: Replies = [
-      {
-        reply_type: 'text',
-        reply_text: "I'm not sure how to help with that. Could you try asking in a different way?",
-      },
-    ];
-    return { ...state, assistantReply: replies };
+    throw new InternalServerError(`Unhandled general intent: ${generalIntent}`);
+  } catch (err: unknown) {
+    throw new InternalServerError('Failed to handle general intent', { cause: err });
   }
 }

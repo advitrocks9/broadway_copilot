@@ -15,10 +15,11 @@ import { routeGeneralNode } from './nodes/routeGeneral';
 import { sendReplyNode } from './nodes/sendReply';
 import { vibeCheckNode } from './nodes/vibeCheck';
 import { GraphState } from './state';
-import { HttpError, createError } from '../utils/errors';
+import { logError } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { TwilioWebhookRequest } from '../lib/twilio/types';
 import { getUser } from '../utils/user';
+import { sendText } from '../lib/twilio';
 
 let compiledAppPromise: Promise<ReturnType<typeof StateGraph.prototype.compile>> | null = null;
 
@@ -140,17 +141,27 @@ export async function runAgent(input: TwilioWebhookRequest, options?: { signal?:
     const compiledApp = await compiledAppPromise;
 
     await compiledApp.invoke({ input, user }, { signal: options?.signal });
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
       throw err;
     }
 
-    logger.error({ whatsappId, messageId, err: err.message, stack: err.stack, cause: err.cause }, 'Agent run failed');
+    const error = logError(err, {
+      whatsappId,
+      messageId,
+      location: 'runAgent',
+    });
 
-    if (err instanceof HttpError) {
-      throw err;
+    try {
+      await sendText(whatsappId, 'Sorry, I encountered an error. Please try again later.');
+    } catch (sendErr: unknown) {
+      logError(sendErr, {
+        whatsappId,
+        messageId,
+        location: 'runAgent.sendTextFallback',
+        originalError: error.message,
+      });
     }
-
-    throw createError.internalServerError('Agent execution failed', { cause: err });
+    throw error;
   }
 }

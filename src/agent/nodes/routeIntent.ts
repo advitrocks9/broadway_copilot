@@ -8,6 +8,7 @@ import { numImagesInMessage } from '../../utils/conversation';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
 import { GraphState } from '../state';
+import { InternalServerError } from '../../utils/errors';
 
 /**
  * Schema for LLM output defining the routing decision.
@@ -72,7 +73,7 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
 
   // Priority 3: Use LLM for intelligent intent classification
   try {
-    const systemPromptText = await loadPrompt('route_intent.txt');
+    const systemPromptText = await loadPrompt('routing/route_intent.txt');
     const formattedSystemPrompt = systemPromptText
       .replace('{can_do_vibe_check}', canDoVibeCheck.toString())
       .replace('{can_do_color_analysis}', canDoColorAnalysis.toString());
@@ -94,11 +95,10 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
       }
     }
 
-    logger.info({ userId, intent, missingProfileField }, 'Intent routed via LLM');
+    logger.debug({ userId, intent, missingProfileField }, 'Intent routed via LLM');
 
     return { ...state, intent, missingProfileField };
-  } catch (error) {
-    logger.warn({ userId, error }, 'Failed to route intent via LLM, falling back to general intent');
-    return { ...state, intent: 'general', missingProfileField: null };
+  } catch (err: unknown) {
+    throw new InternalServerError('Failed to route intent', { cause: err });
   }
 }

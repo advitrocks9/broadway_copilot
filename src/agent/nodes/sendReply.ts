@@ -7,7 +7,7 @@ import { prisma } from '../../lib/prisma';
 import { redis } from '../../lib/redis';
 import { sendText, sendMenu, sendImage } from '../../lib/twilio';
 import { logger } from '../../utils/logger';
-import { createError, normalizeError } from '../../utils/errors';
+import { InternalServerError } from '../../utils/errors';
 import { Replies } from '../state';
 import { GraphState } from '../state';
 import { ConversationStatus } from '@prisma/client';
@@ -31,7 +31,7 @@ export async function sendReplyNode(state: GraphState): Promise<GraphState> {
   });
 
   if (!conversation) {
-    throw createError.internalServerError('No open conversation found for user');
+    throw new InternalServerError('No open conversation found for user');
   }
 
   logger.debug({ whatsappId }, 'Setting message status to sending in Redis');
@@ -77,8 +77,7 @@ export async function sendReplyNode(state: GraphState): Promise<GraphState> {
     logger.info({ whatsappId, replyCount: replies.length }, 'All replies sent successfully');
   } catch (err: unknown) {
     success = false;
-    const normalized = normalizeError(err);
-    throw createError.internalServerError('Failed to send replies', { cause: normalized });
+    throw new InternalServerError('Failed to send replies', { cause: err });
   } finally {
     logger.debug({ status: success ? 'delivered' : 'failed' }, 'Updating message status in Redis');
     await redis.hSet(messageKey, { status: success ? 'delivered' : 'failed' });

@@ -1,12 +1,12 @@
 import 'dotenv/config';
 
-import { Request } from 'express';
 import twilio, { Twilio } from 'twilio';
-import RequestClient from 'twilio/lib/base/RequestClient';
+import { Request } from 'express';
 
-import { createError } from '../utils/errors';
+import RequestClient from 'twilio/lib/base/RequestClient';
 import { TWILIO_WHATSAPP_FROM, TWILIO_QUICKREPLY2_SID, TWILIO_QUICKREPLY3_SID } from '../utils/constants';
 import { logger } from '../utils/logger';
+import { BadRequestError, InternalServerError, ServiceUnavailableError, UnauthorizedError } from '../utils/errors';
 
 import { QuickReplyButton, TwilioApiError, TwilioMessageOptions, StatusResolvers, TwilioStatusCallbackPayload } from './twilio/types';
 
@@ -20,11 +20,11 @@ let cachedClient: Twilio | undefined;
  * @returns The Twilio client instance.
  * @throws {HttpError} If Twilio credentials are missing.
  */
-function getClient(): Twilio {
+function getTwilioClient(): Twilio {
   if (cachedClient) return cachedClient;
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
-  if (!accountSid || !authToken) throw createError.internalServerError('Twilio credentials missing');
+  if (!accountSid || !authToken) throw new InternalServerError('Twilio credentials missing');
 
   const httpClient = new RequestClient({
     keepAlive: true,
@@ -48,7 +48,7 @@ function getClient(): Twilio {
  * @throws {HttpError} If sending fails.
  */
 export async function sendText(to: string, body: string, imageUrl?: string): Promise<void> {
-  const client = getClient();
+  const client = getTwilioClient();
   const fromNumber = TWILIO_WHATSAPP_FROM;
   try {
     const messageOptions: TwilioMessageOptions = {
@@ -77,7 +77,7 @@ export async function sendText(to: string, body: string, imageUrl?: string): Pro
  * @throws {HttpError} If sending fails.
  */
 export async function sendMenu(to: string, replyText: string, buttons?: readonly QuickReplyButton[]): Promise<void> {
-  const client = getClient();
+  const client = getTwilioClient();
 
   if (!buttons || buttons.length === 0) {
     logger.warn('No buttons provided for menu; falling back to text');
@@ -205,21 +205,21 @@ function addStatusCallback(options: TwilioMessageOptions): void {
 function handleTwilioError(err: TwilioApiError): never {
   if (err && err.code === 20003) {
     logger.error('Twilio auth failed (401). Verify TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.');
-    throw createError.unauthorized('Twilio authentication failed');
+    throw new UnauthorizedError('Twilio authentication failed');
   }
 
   if (err && err.code === 21211) {
     logger.error('Invalid phone number format');
-    throw createError.badRequest('Invalid phone number format');
+    throw new BadRequestError('Invalid phone number format');
   }
 
   if (err && err.code === 21610) {
     logger.error('Message blocked by carrier');
-    throw createError.serviceUnavailable('Message delivery blocked');
+    throw new ServiceUnavailableError('Message delivery blocked');
   }
 
   logger.error({ err }, 'Twilio API error');
-  throw createError.serviceUnavailable('Message delivery failed');
+  throw new ServiceUnavailableError('Message delivery failed');
 }
 
 /**

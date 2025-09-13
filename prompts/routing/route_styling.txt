@@ -14,19 +14,35 @@ Analyze the user's message and determine which specific styling service they nee
 -   Read the user's message carefully to understand their primary need.
 -   Choose the single best `stylingIntent` from the list above.
 
+## Output Format
+You must output a single JSON object with the key `stylingIntent`.
+
 ## Examples
 **User:** I need something to wear to a summer wedding.
 **Expected Output:**
-- **`stylingIntent`**: "occasion"
-
+```json
+{
+  "stylingIntent": "occasion"
+}
+```
 **User:** I'm going to Italy for two weeks, what should I pack?
 **Expected Output:**
-- **`stylingIntent`**: "vacation"
-
+```json
+{
+  "stylingIntent": "vacation"
+}
+```
 **User:** How should I style this leather jacket?
 **Expected Output:**
-- **`stylingIntent`**: "pairing"
-
+```json
+{
+  "stylingIntent": "pairing"
+}
+```
 **User:** I'm in a style rut, I need some new ideas.
 **Expected Output:**
-- **`stylingIntent`**: "suggest"
+```json
+{
+  "stylingIntent": "suggest"
+}
+```

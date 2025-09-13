@@ -2,7 +2,7 @@ import 'dotenv/config';
 
 import { CloudTasksClient } from "@google-cloud/tasks";
 import { TaskType } from "@prisma/client";
-import { createError } from "../utils/errors";
+import { InternalServerError } from "../utils/errors";
 import { logger } from "../utils/logger";
 import { prisma } from "./prisma";
 
@@ -24,7 +24,7 @@ const SERVICE_ACCOUNT_EMAIL = process.env.CLOUD_TASKS_SERVICE_ACCOUNT;
  */
 export async function queueWardrobeIndex(userId: string, messageId: string): Promise<void> {
   if (!PROJECT_ID || !WARDROBE_FUNCTION_URL) {
-    throw createError.internalServerError("Missing required environment variables for Cloud Tasks");
+    throw new InternalServerError("Missing required environment variables for Cloud Tasks");
   }
 
   const parent = client.queuePath(PROJECT_ID, CLOUD_TASKS_REGION, "wardrobe-index");
@@ -58,7 +58,7 @@ export async function queueWardrobeIndex(userId: string, messageId: string): Pro
     });
   } catch (err: any) {
     logger.error({ err: err.message }, "Failed to queue wardrobe index task");
-    throw createError.internalServerError("Failed to queue task");
+    throw new InternalServerError("Failed to queue task");
   }
 }
 
@@ -68,7 +68,7 @@ export async function queueWardrobeIndex(userId: string, messageId: string): Pro
  */
 export async function queueMemoryExtraction(userId: string, conversationId: string): Promise<void> {
   if (!PROJECT_ID || !MEMORY_FUNCTION_URL) {
-    throw createError.internalServerError("Missing required environment variables for Cloud Tasks");
+    throw new InternalServerError("Missing required environment variables for Cloud Tasks");
   }
 
   const parent = client.queuePath(PROJECT_ID, CLOUD_TASKS_REGION, "memory-extraction");
@@ -102,7 +102,7 @@ export async function queueMemoryExtraction(userId: string, conversationId: stri
     });
   } catch (err: any) {
     logger.error({ err: err.message }, "Failed to queue memory extraction task");
-    throw createError.internalServerError("Failed to queue task");
+    throw new InternalServerError("Failed to queue task");
   }
 }
 
@@ -113,7 +113,7 @@ export async function queueMemoryExtraction(userId: string, conversationId: stri
  */
 export async function queueImageUpload(userId: string, messageId: string): Promise<void> {
   if (!PROJECT_ID || !IMAGE_UPLOAD_FUNCTION_URL) {
-    throw createError.internalServerError("Missing required environment variables for Cloud Tasks");
+    throw new InternalServerError("Missing required environment variables for Cloud Tasks");
   }
 
   const parent = client.queuePath(PROJECT_ID, CLOUD_TASKS_REGION, "image-upload");
@@ -147,6 +147,6 @@ export async function queueImageUpload(userId: string, messageId: string): Promi
     });
   } catch (err: any) {
     logger.error({ err: err.message }, "Failed to queue image upload task");
-    throw createError.internalServerError("Failed to queue task");
+    throw new InternalServerError("Failed to queue task");
   }
 }

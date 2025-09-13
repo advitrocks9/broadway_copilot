@@ -7,6 +7,7 @@ import { logger } from '../../utils/logger';
 
 import { StylingIntent, Replies } from '../state';
 import { GraphState } from '../state';
+import { InternalServerError } from '../../utils/errors';
 /**
  * Routes the input to the appropriate styling handler based on the sub-router prompt.
  */
@@ -22,7 +23,7 @@ export async function routeStyling(state: GraphState): Promise<GraphState> {
   const messageId = state.input.MessageSid;
   const buttonPayload = state.input.ButtonPayload;
 
-  logger.info({ userId, messageId, buttonPayload }, 'Routing styling intent');
+  logger.debug({ userId, messageId, buttonPayload }, 'Routing styling intent');
 
   try {
     if (buttonPayload === 'styling') {
@@ -46,7 +47,7 @@ export async function routeStyling(state: GraphState): Promise<GraphState> {
       return { ...state, stylingIntent: buttonPayload as StylingIntent };
     }
 
-    const systemPromptText = await loadPrompt('route_styling.txt');
+    const systemPromptText = await loadPrompt('routing/route_styling.txt');
     const systemPrompt = new SystemMessage(systemPromptText);
 
     const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
@@ -54,14 +55,10 @@ export async function routeStyling(state: GraphState): Promise<GraphState> {
       state.conversationHistoryTextOnly,
     );
 
-    logger.info({ userId, stylingIntent: response.stylingIntent }, 'Styling intent routed using LLM');
+    logger.debug({ userId, stylingIntent: response.stylingIntent }, 'Styling intent routed using LLM');
 
     return { ...state, ...response };
-  } catch (err: any) {
-    if (err.statusCode) {
-      throw err;
-    }
-    logger.warn({ userId, err: err.message }, 'Failed to route styling intent, falling back to general');
-    return { ...state, stylingIntent: null };
+  } catch (err: unknown) {
+    throw new InternalServerError('Failed to route styling intent', { cause: err });
   }
 }

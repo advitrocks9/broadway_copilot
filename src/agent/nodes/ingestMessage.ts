@@ -37,7 +37,7 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
       content.push({ type: 'image_url', image_url: { url: serverUrl } });
       media = { serverUrl, twilioUrl: mediaUrl0, mimeType: mediaContentType0 };
     } catch (error) {
-      logger.warn({ error, whatsappId, mediaUrl0 }, 'Failed to download image');
+      logger.warn({ error: error instanceof Error ? error.message : String(error), whatsappId, mediaUrl0 }, 'Failed to download image, proceeding without it.');
     }
   }
 
