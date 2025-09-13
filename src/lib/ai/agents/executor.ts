@@ -3,12 +3,55 @@ import {
   BaseMessage,
   ToolMessage,
   SystemMessage,
+  AssistantMessage,
+  UserMessage,
+  TextPart,
 } from '../core/messages';
 import { Tool } from '../core/tools';
 import { BaseChatModel } from '../core/base_chat_model';
 import { logger } from '../../../utils/logger';
 
 const MAX_ITERATIONS = 5;
+
+/**
+ * Parses the final assistant message into a structured JSON output.
+ * It takes the last message, if it's from the assistant, and asks the model
+ * to format it into the desired schema with a specific, direct prompt.
+ *
+ * @param runner The chat model instance.
+ * @param conversation The full conversation history.
+ * @param outputSchema The Zod schema for the final output.
+ * @returns A promise that resolves to the structured output.
+ */
+async function getFinalStructuredOutput<T extends ZodType>(
+  runner: BaseChatModel,
+  conversation: BaseMessage[],
+  outputSchema: T,
+): Promise<T['_output']> {
+  const lastMessage = conversation[conversation.length - 1];
+
+  // If the last message is an assistant's message, use it for parsing.
+  if (lastMessage instanceof AssistantMessage) {
+    const customPrompt = new SystemMessage(
+      'Parse the user message which contains the output from a previous step into a JSON object ' +
+      'that strictly adheres to the provided schema. ' +
+      'Do not add any extra commentary or change any of the values.',
+    );
+
+    const textContent = lastMessage.content
+      .filter((p): p is TextPart => p.type === 'text')
+      .map(p => p.text)
+      .join('');
+
+    const parsingConversation: BaseMessage[] = [new UserMessage(textContent)];
+
+    const structuredRunner = runner.withStructuredOutput(outputSchema);
+    return await structuredRunner.run(customPrompt, parsingConversation);
+  }
+  else {
+    throw new Error('Last message is not an assistant message');
+  }
+}
 
 /**
  * Orchestrates an agentic loop of model calls and tool executions to fulfill a user request.
@@ -80,8 +123,11 @@ export async function agentExecutor<T extends ZodType>(
       logger.debug(
         '[AgentExecutor] No tool calls, generating final structured output',
       );
-      const structuredRunner = runner.withStructuredOutput(options.outputSchema);
-      return await structuredRunner.run(systemPrompt, conversation);
+      return await getFinalStructuredOutput(
+        runner,
+        conversation,
+        options.outputSchema,
+      );
     }
 
     // Filter out tool calls that have already been executed
@@ -93,8 +139,11 @@ export async function agentExecutor<T extends ZodType>(
     newToolCalls.forEach(toolCall => seenToolCallIds.add(toolCall.id));
 
     if (newToolCalls.length === 0) {
-      const structuredRunner = runner.withStructuredOutput(options.outputSchema);
-      return await structuredRunner.run(systemPrompt, conversation);
+      return await getFinalStructuredOutput(
+        runner,
+        conversation,
+        options.outputSchema,
+      );
     }
 
     const toolResults = await Promise.all(
@@ -146,6 +195,9 @@ export async function agentExecutor<T extends ZodType>(
     });
   }
 
-  const structuredRunner = runner.withStructuredOutput(options.outputSchema);
-  return await structuredRunner.run(systemPrompt, conversation);
+  return await getFinalStructuredOutput(
+    runner,
+    conversation,
+    options.outputSchema,
+  );
 }

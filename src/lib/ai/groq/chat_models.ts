@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import Groq from 'groq-sdk';
 import { BaseChatModel } from '../core/base_chat_model';
 import { ChatModelParams } from '../core/runnables';
 
@@ -8,35 +8,36 @@ import { ChatModelParams } from '../core/runnables';
  *
  * @example
  * ```typescript
- * const model = new ChatGroq({ model: 'openai/gpt-oss-120b' });
+ * const model = new ChatGroq({ model: 'llama3-70b-8192' });
  * const result = await model.run(
+ *   new SystemMessage('You are a helpful assistant.'),
  *   [new UserMessage('Explain the importance of low-latency LLMs')]
  * );
- * console.log(result.assistant.content[0].text);
+ * console.log(result);
  * ```
  */
 export class ChatGroq extends BaseChatModel {
-  protected client: OpenAI;
+  protected client: Groq;
 
   /**
    * Creates an instance of ChatGroq.
    * @param params - Optional parameters to override the model defaults.
-   * @param client - An optional OpenAI client instance, useful for testing or custom configurations.
+   * @param client - An optional Groq client instance, useful for testing or custom configurations.
    */
   constructor(
     params: Partial<ChatModelParams> = {},
-    client?: OpenAI
+    client?: Groq,
   ) {
     const combinedParams: ChatModelParams = {
-      model: 'openai/gpt-oss-120b',
+      model: 'llama3-70b-8192',
       ...params,
     };
     super(combinedParams);
     this.client =
       client ||
-      new OpenAI({
+      new Groq({
         apiKey: process.env.GROQ_API_KEY,
-        baseURL: 'https://api.groq.com/openai/v1',
       });
+    this.structuredOutputToolName = 'json';
   }
 }

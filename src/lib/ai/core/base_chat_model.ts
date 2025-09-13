@@ -1,3 +1,4 @@
+import Groq from 'groq-sdk';
 import OpenAI from 'openai';
 import z, { ZodType } from 'zod';
 import type {
@@ -19,6 +20,13 @@ import { ToolCall, Tool, toOpenAIToolSpec } from './tools';
 import { StructuredOutputRunnable } from './structured_output_runnable';
 import { logger } from '../../../utils/logger';
 
+import {
+  ChatCompletion,
+  ChatCompletionMessageParam,
+  ChatCompletionTool,
+  ChatCompletionToolChoiceOption,
+} from 'openai/resources/chat/completions';
+
 /**
  * Abstract base class for chat models, providing a common interface for
  * interacting with different LLM providers. It handles tool binding,
@@ -36,13 +44,17 @@ import { logger } from '../../../utils/logger';
  * ```
  */
 export abstract class BaseChatModel implements ModelRunner {
-  protected abstract client: OpenAI;
+  protected abstract client: OpenAI | Groq;
   public params: ChatModelParams;
   protected boundTools?: Tool<any>[];
   protected structuredOutputSchema?: ZodType;
+  public structuredOutputToolName: string = 'structured_output';
 
   constructor(params: ChatModelParams) {
-    this.params = params;
+    this.params = {
+      useResponsesApi: false,
+      ...params,
+    };
   }
 
   /**
@@ -115,24 +127,51 @@ export abstract class BaseChatModel implements ModelRunner {
    * ```
    */
   async run(systemPrompt: SystemMessage, msgs: BaseMessage[]): Promise<RunOutcome> {
-    const params = this._buildParams(systemPrompt, msgs);
-    
+    if (this.params.useResponsesApi) {
+      return this._runResponses(systemPrompt, msgs);
+    }
+    return this._runChatCompletions(systemPrompt, msgs);
+  }
+
+  /**
+   * Runs the model using the Responses API.
+   * @param systemPrompt The system prompt.
+   * @param msgs The conversation history.
+   * @returns The outcome of the model run.
+   * @internal
+   */
+  private async _runResponses(
+    systemPrompt: SystemMessage,
+    msgs: BaseMessage[],
+  ): Promise<RunOutcome> {
+    const params = this._buildResponsesParams(systemPrompt, msgs);
+
     logger.debug(
-      { model: this.params.model, messageCount: msgs.length },
-      '[BaseChatModel] Making API call'
+      {
+        api: 'responses',
+        model: this.params.model,
+        messageCount: msgs.length,
+        request: params,
+      },
+      '[BaseChatModel] Making API call',
     );
-    
+
+    if (!(this.client instanceof OpenAI)) {
+      throw new Error(
+        'Responses API is only supported for OpenAI compatible clients.',
+      );
+    }
     const response = await this.client.responses.create(
-      params as ResponseCreateParamsNonStreaming
+      params as ResponseCreateParamsNonStreaming,
     );
-    
+
     logger.debug(
-      { model: this.params.model, response },
-      '[BaseChatModel] API call completed'
+      { api: 'responses', model: this.params.model, response },
+      '[BaseChatModel] API call completed',
     );
 
     const { assistantContent, toolCalls, rawToolCalls } =
-      this._processResponse(response);
+      this._processResponsesResponse(response);
 
     const assistant = new AssistantMessage(assistantContent);
     assistant.meta = {
@@ -140,6 +179,56 @@ export abstract class BaseChatModel implements ModelRunner {
       tool_calls: toolCalls,
       raw_tool_calls: rawToolCalls,
     };
+
+    return {
+      assistant,
+      toolCalls,
+      raw: response,
+    };
+  }
+
+  /**
+   * Runs the model using the Chat Completions API.
+   * @param systemPrompt The system prompt.
+   * @param msgs The conversation history.
+   * @returns The outcome of the model run.
+   * @internal
+   */
+  private async _runChatCompletions(
+    systemPrompt: SystemMessage,
+    msgs: BaseMessage[],
+  ): Promise<RunOutcome> {
+    const params = this._buildChatCompletionsParams(systemPrompt, msgs);
+
+    logger.debug(
+      {
+        api: 'chat.completions',
+        model: this.params.model,
+        messageCount: msgs.length,
+        request: params,
+      },
+      '[BaseChatModel] Making API call',
+    );
+
+    const requestOptions: { maxRetries?: number; timeout?: number } = {};
+    if (this.params.maxRetries !== undefined) {
+      requestOptions.maxRetries = this.params.maxRetries;
+    }
+    if (this.params.timeout !== undefined) {
+      requestOptions.timeout = this.params.timeout;
+    }
+
+    const response = await (
+      this.client as any
+    ).chat.completions.create(params, requestOptions);
+
+    logger.debug(
+      { api: 'chat.completions', model: this.params.model, response },
+      '[BaseChatModel] API call completed',
+    );
+
+    const { assistant, toolCalls } =
+      this._processChatCompletionsResponse(response);
 
     return {
       assistant,
@@ -157,7 +246,7 @@ export abstract class BaseChatModel implements ModelRunner {
    * @returns The parameters object for the API call.
    * @protected
    */
-  protected _buildParams(
+  protected _buildResponsesParams(
     systemPrompt: SystemMessage,
     msgs: BaseMessage[],
   ): ResponseCreateParamsNonStreaming {
@@ -244,7 +333,7 @@ export abstract class BaseChatModel implements ModelRunner {
     }
 
     if (this.structuredOutputSchema) {
-      const toolName = 'structured_output';
+      const toolName = this.structuredOutputToolName;
       const tool: FunctionTool = {
         type: 'function',
         name: toolName,
@@ -257,6 +346,133 @@ export abstract class BaseChatModel implements ModelRunner {
         type: 'function',
         name: toolName,
       };
+    }
+
+    return params;
+  }
+
+  /**
+   * Builds the API-compatible parameters for the `client.chat.completions.create` call.
+   * @param systemPrompt The system prompt.
+   * @param msgs The conversation history.
+   * @returns The parameters object for the API call.
+   * @protected
+   */
+  protected _buildChatCompletionsParams(
+    systemPrompt: SystemMessage,
+    msgs: BaseMessage[],
+  ): OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming {
+    const system_prompt = systemPrompt.content
+      .filter((p): p is TextPart => p.type === 'text')
+      .map(p => p.text)
+      .join('');
+
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: 'system',
+        content: system_prompt,
+      },
+    ];
+
+    for (const m of msgs) {
+      if (m.role === 'user') {
+        messages.push({
+          role: 'user',
+          content: m.content.map(c => {
+            if (c.type === 'text') {
+              return { type: 'text', text: c.text };
+            }
+            return {
+              type: 'image_url',
+              image_url: {
+                url: c.image_url.url,
+                detail: c.image_url.detail,
+              },
+            };
+          }),
+        });
+      } else if (m.role === 'assistant') {
+        const textContent = m.content
+          .filter((p): p is TextPart => p.type === 'text')
+          .map(p => p.text)
+          .join('')
+          .trim();
+        
+        const toolCalls = m.meta?.tool_calls as ToolCall[] | undefined;
+
+        messages.push({
+          role: 'assistant',
+          content: textContent,
+          tool_calls: toolCalls?.map(tc => ({
+            id: tc.id,
+            type: 'function',
+            function: {
+              name: tc.name,
+              arguments: JSON.stringify(tc.arguments),
+            },
+          })),
+        });
+      } else if (m.role === 'tool') {
+        messages.push({
+          role: 'tool',
+          tool_call_id: m.tool_call_id!,
+          content: m.content
+            .filter((p): p is TextPart => p.type === 'text')
+            .map(p => p.text)
+            .join(''),
+        });
+      }
+    }
+
+    const tools: ChatCompletionTool[] | undefined = this.boundTools?.map(t => {
+      const spec = toOpenAIToolSpec(t);
+      return {
+        type: spec.type,
+        function: {
+          name: spec.name,
+          description: spec.description ?? undefined,
+          parameters: spec.parameters ?? {},
+        },
+      };
+    });
+
+    const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
+      model: this.params.model,
+      messages: messages,
+      temperature: this.params.temperature,
+      max_tokens: this.params.maxTokens,
+      top_p: this.params.topP,
+      stream: false,
+    };
+
+    if (this.params.seed) {
+      params.seed = this.params.seed;
+    }
+
+    if (this.params.responseFormat) {
+      params.response_format = this.params.responseFormat;
+    }
+
+    if (tools && tools.length > 0) {
+      params.tools = tools;
+      params.tool_choice = 'auto';
+    }
+
+    if (this.structuredOutputSchema) {
+      const toolName = this.structuredOutputToolName;
+      const tool: ChatCompletionTool = {
+        type: 'function',
+        function: {
+          name: toolName,
+          description: 'Structured output formatter',
+          parameters: z.toJSONSchema(this.structuredOutputSchema),
+        },
+      };
+      params.tools = [...(params.tools || []), tool];
+      params.tool_choice = {
+        type: 'function',
+        function: { name: toolName },
+      } as ChatCompletionToolChoiceOption;
     }
 
     return params;
@@ -279,8 +495,8 @@ export abstract class BaseChatModel implements ModelRunner {
    * @returns An object containing the assistant's content and parsed tool calls.
    * @protected
    */
-  protected _processResponse(
-    response: Response
+  protected _processResponsesResponse(
+    response: Response,
   ): {
     assistantContent: string;
     toolCalls?: ToolCall[];
@@ -309,6 +525,51 @@ export abstract class BaseChatModel implements ModelRunner {
       assistantContent,
       toolCalls: toolCalls.length ? toolCalls : undefined,
       rawToolCalls: rawToolCalls.length ? rawToolCalls : undefined,
+    };
+  }
+
+  /**
+   * Processes the raw response from the Chat Completions API.
+   * @param response The raw response object from the provider.
+   * @returns An object containing the assistant's message and parsed tool calls.
+   * @protected
+   */
+  protected _processChatCompletionsResponse(
+    response: ChatCompletion,
+  ): {
+    assistant: AssistantMessage;
+    toolCalls?: ToolCall[];
+  } {
+    const choice = response.choices[0];
+    const message = choice.message;
+
+    const assistant = new AssistantMessage(message.content ?? '');
+    assistant.meta = {
+      raw: response,
+      finish_reason: choice.finish_reason,
+      logprobs: choice.logprobs,
+    };
+
+    const toolCalls: ToolCall[] | undefined = message.tool_calls?.filter(tc => tc.type === 'function').map(tc => {
+      try {
+        return {
+          id: tc.id,
+          name: tc.function.name,
+          arguments: JSON.parse(tc.function.arguments),
+        };
+      } catch (e) {
+        throw new Error(
+          `Failed to parse arguments for ${tc.function.name}: ${e}`,
+        );
+      }
+    });
+    
+    assistant.meta.tool_calls = toolCalls;
+    assistant.meta.raw_tool_calls = message.tool_calls;
+
+    return {
+      assistant,
+      toolCalls,
     };
   }
 }

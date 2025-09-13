@@ -39,6 +39,26 @@ export type ChatModelParams = {
    * which can improve performance on complex tasks.
    */
   reasoning?: { effort: 'minimal' | 'low' | 'medium' | 'high' };
+  /**
+   * Toggles between the Responses API and the Chat Completions API.
+   * Defaults to `false` (Chat Completions API).
+   */
+  useResponsesApi?: boolean;
+  /**
+   * (Groq-specific) The maximum number of times to retry a request if it fails.
+   * Defaults to 2.
+   */
+  maxRetries?: number;
+  /**
+   * (Groq-specific) The maximum time in milliseconds to wait for a response from the API.
+   * Defaults to 1 minute.
+   */
+  timeout?: number;
+  /**
+   * (OpenAI-specific) An object specifying the format that the model must output.
+   * Setting to `{ type: "json_object" }` enables JSON mode.
+   */
+  responseFormat?: { type: 'text' | 'json_object' };
 };
 
 /**

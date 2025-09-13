@@ -131,7 +131,7 @@ export class StructuredOutputRunnable<T extends ZodType> {
 
     if (toolCalls && toolCalls.length > 0) {
       const structuredToolCall = toolCalls.find(
-        (tc) => tc.name === 'structured_output'
+        (tc) => tc.name === this.runner.structuredOutputToolName,
       );
       if (structuredToolCall) {
         data = structuredToolCall.arguments;
