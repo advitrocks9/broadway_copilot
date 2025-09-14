@@ -30,13 +30,13 @@ CREATE TABLE "public"."User" (
     "id" TEXT NOT NULL,
     "whatsappId" TEXT NOT NULL,
     "profileName" TEXT NOT NULL DEFAULT '',
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "inferredGender" "public"."Gender",
     "inferredAgeGroup" "public"."AgeGroup",
     "confirmedGender" "public"."Gender",
     "confirmedAgeGroup" "public"."AgeGroup",
     "lastVibeCheckAt" TIMESTAMP(3),
     "lastColorAnalysisAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
@@ -45,9 +45,9 @@ CREATE TABLE "public"."User" (
 CREATE TABLE "public"."Conversation" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
+    "status" "public"."ConversationStatus" NOT NULL DEFAULT 'OPEN',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "status" "public"."ConversationStatus" NOT NULL DEFAULT 'OPEN',
 
     CONSTRAINT "Conversation_pkey" PRIMARY KEY ("id")
 );
@@ -57,14 +57,14 @@ CREATE TABLE "public"."Message" (
     "id" TEXT NOT NULL,
     "conversationId" TEXT NOT NULL,
     "role" "public"."MessageRole" NOT NULL,
-    "content" JSONB[] DEFAULT ARRAY[]::JSONB[],
-    "additionalKwargs" JSONB,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "intent" TEXT,
     "buttonPayload" TEXT,
     "pending" "public"."PendingType" DEFAULT 'NONE',
+    "content" JSONB[] DEFAULT ARRAY[]::JSONB[],
+    "additionalKwargs" JSONB,
     "memoriesProcessed" BOOLEAN NOT NULL DEFAULT false,
     "wardrobeProcessed" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
 );
@@ -81,44 +81,6 @@ CREATE TABLE "public"."Media" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Media_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "public"."GraphRun" (
-    "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "conversationId" TEXT NOT NULL,
-    "initialState" JSONB NOT NULL,
-    "finalState" JSONB,
-    "status" "public"."GraphRunStatus" NOT NULL DEFAULT 'RUNNING',
-    "errorTrace" TEXT,
-    "startTime" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "endTime" TIMESTAMP(3),
-    "durationMs" INTEGER,
-
-    CONSTRAINT "GraphRun_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "public"."LLMTrace" (
-    "id" TEXT NOT NULL,
-    "graphRunId" TEXT NOT NULL,
-    "nodeName" TEXT,
-    "model" TEXT NOT NULL,
-    "inputMessages" JSONB NOT NULL,
-    "outputMessage" JSONB,
-    "rawRequest" JSONB NOT NULL,
-    "rawResponse" JSONB,
-    "promptTokens" INTEGER,
-    "completionTokens" INTEGER,
-    "totalTokens" INTEGER,
-    "costUsd" DECIMAL(10,6),
-    "errorTrace" TEXT,
-    "startTime" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "endTime" TIMESTAMP(3),
-    "durationMs" INTEGER,
-
-    CONSTRAINT "LLMTrace_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -174,18 +136,56 @@ CREATE TABLE "public"."WardrobeItem" (
     "name" TEXT NOT NULL,
     "nameLower" TEXT NOT NULL,
     "category" TEXT NOT NULL,
-    "colors" JSONB NOT NULL,
     "type" TEXT NOT NULL,
     "subtype" TEXT,
     "description" TEXT,
+    "colors" JSONB NOT NULL,
     "attributes" JSONB,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "embedding" vector,
     "embeddingModel" TEXT,
     "embeddingDim" INTEGER,
     "embeddingAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "WardrobeItem_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."GraphRun" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "conversationId" TEXT NOT NULL,
+    "status" "public"."GraphRunStatus" NOT NULL DEFAULT 'RUNNING',
+    "errorTrace" TEXT,
+    "initialState" JSONB NOT NULL,
+    "finalState" JSONB,
+    "startTime" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "endTime" TIMESTAMP(3),
+    "durationMs" INTEGER,
+
+    CONSTRAINT "GraphRun_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."LLMTrace" (
+    "id" TEXT NOT NULL,
+    "graphRunId" TEXT NOT NULL,
+    "nodeName" TEXT,
+    "model" TEXT NOT NULL,
+    "promptTokens" INTEGER,
+    "completionTokens" INTEGER,
+    "totalTokens" INTEGER,
+    "costUsd" DECIMAL(10,6),
+    "errorTrace" TEXT,
+    "inputMessages" JSONB NOT NULL,
+    "outputMessage" JSONB,
+    "rawRequest" JSONB NOT NULL,
+    "rawResponse" JSONB,
+    "startTime" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "endTime" TIMESTAMP(3),
+    "durationMs" INTEGER,
+
+    CONSTRAINT "LLMTrace_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -214,6 +214,32 @@ CREATE TABLE "public"."Task" (
     CONSTRAINT "Task_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "public"."Admins" (
+    "id" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "name" TEXT,
+    "image" TEXT,
+
+    CONSTRAINT "Admins_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."AdminWhitelist" (
+    "id" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+
+    CONSTRAINT "AdminWhitelist_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."UserWhitelist" (
+    "id" TEXT NOT NULL,
+    "waId" TEXT NOT NULL,
+
+    CONSTRAINT "UserWhitelist_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_whatsappId_key" ON "public"."User"("whatsappId");
 
@@ -239,15 +265,6 @@ CREATE INDEX "Message_buttonPayload_idx" ON "public"."Message"("buttonPayload");
 CREATE INDEX "Media_messageId_idx" ON "public"."Media"("messageId");
 
 -- CreateIndex
-CREATE INDEX "GraphRun_conversationId_startTime_idx" ON "public"."GraphRun"("conversationId", "startTime");
-
--- CreateIndex
-CREATE INDEX "GraphRun_userId_startTime_idx" ON "public"."GraphRun"("userId", "startTime");
-
--- CreateIndex
-CREATE INDEX "LLMTrace_graphRunId_idx" ON "public"."LLMTrace"("graphRunId");
-
--- CreateIndex
 CREATE INDEX "Memory_userId_createdAt_idx" ON "public"."Memory"("userId", "createdAt");
 
 -- CreateIndex
@@ -258,6 +275,15 @@ CREATE INDEX "ColorAnalysis_userId_createdAt_idx" ON "public"."ColorAnalysis"("u
 
 -- CreateIndex
 CREATE INDEX "WardrobeItem_userId_nameLower_category_idx" ON "public"."WardrobeItem"("userId", "nameLower", "category");
+
+-- CreateIndex
+CREATE INDEX "GraphRun_conversationId_startTime_idx" ON "public"."GraphRun"("conversationId", "startTime");
+
+-- CreateIndex
+CREATE INDEX "GraphRun_userId_startTime_idx" ON "public"."GraphRun"("userId", "startTime");
+
+-- CreateIndex
+CREATE INDEX "LLMTrace_graphRunId_idx" ON "public"."LLMTrace"("graphRunId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Feedback_conversationId_key" ON "public"."Feedback"("conversationId");
@@ -271,6 +297,15 @@ CREATE INDEX "Task_userId_runAt_idx" ON "public"."Task"("userId", "runAt");
 -- CreateIndex
 CREATE INDEX "Task_status_runAt_idx" ON "public"."Task"("status", "runAt");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "Admins_email_key" ON "public"."Admins"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "AdminWhitelist_email_key" ON "public"."AdminWhitelist"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "UserWhitelist_waId_key" ON "public"."UserWhitelist"("waId");
+
 -- AddForeignKey
 ALTER TABLE "public"."Conversation" ADD CONSTRAINT "Conversation_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -279,15 +314,6 @@ ALTER TABLE "public"."Message" ADD CONSTRAINT "Message_conversationId_fkey" FORE
 
 -- AddForeignKey
 ALTER TABLE "public"."Media" ADD CONSTRAINT "Media_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "public"."Message"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "public"."GraphRun" ADD CONSTRAINT "GraphRun_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "public"."GraphRun" ADD CONSTRAINT "GraphRun_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "public"."Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "public"."LLMTrace" ADD CONSTRAINT "LLMTrace_graphRunId_fkey" FOREIGN KEY ("graphRunId") REFERENCES "public"."GraphRun"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."Memory" ADD CONSTRAINT "Memory_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -300,6 +326,15 @@ ALTER TABLE "public"."ColorAnalysis" ADD CONSTRAINT "ColorAnalysis_userId_fkey" 
 
 -- AddForeignKey
 ALTER TABLE "public"."WardrobeItem" ADD CONSTRAINT "WardrobeItem_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."GraphRun" ADD CONSTRAINT "GraphRun_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."GraphRun" ADD CONSTRAINT "GraphRun_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "public"."Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."LLMTrace" ADD CONSTRAINT "LLMTrace_graphRunId_fkey" FOREIGN KEY ("graphRunId") REFERENCES "public"."GraphRun"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."Feedback" ADD CONSTRAINT "Feedback_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "public"."Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
