@@ -3,7 +3,6 @@ import { MessageRole, PendingType } from '@prisma/client';
 
 import { prisma } from '../../lib/prisma';
 import { downloadTwilioMedia } from '../../utils/media';
-import { getConversation } from '../../utils/conversation';
 import { extractTextContent } from '../../utils/text';
 import { logger } from '../../utils/logger';
 import { GraphState } from '../state';
@@ -17,7 +16,7 @@ import { queueImageUpload } from '../../lib/tasks';
  * and conversation history preparation with both image and text-only versions.
  */
 export async function ingestMessageNode(state: GraphState): Promise<GraphState> {
-  const { input, user } = state;
+  const { input, user, conversationId, graphRunId } = state;
   const {
     Body: text,
     ButtonPayload: buttonPayload,
@@ -25,7 +24,6 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
     MediaUrl0: mediaUrl0,
     MediaContentType0: mediaContentType0,
     From: whatsappId,
-    MessageSid: messageId
   } = input;
 
 
@@ -41,16 +39,14 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
     }
   }
 
-  const conversation = await getConversation(user.id);
-
   const [lastMessage, latestAssistantMessage] = await Promise.all([
     prisma.message.findFirst({
-      where: { conversationId: conversation.id },
+      where: { conversationId },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, role: true, content: true, pending: true }
+      select: { id: true, role: true, content: true }
     }),
     prisma.message.findFirst({
-      where: { conversation: { userId: user.id }, role: MessageRole.AI },
+      where: { conversation: { id: conversationId, userId: user.id }, role: MessageRole.AI },
       orderBy: { createdAt: 'desc' },
       select: { pending: true }
     })
@@ -82,7 +78,7 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
   } else {
     savedMessage = await prisma.message.create({
       data: {
-        conversationId: conversation.id,
+        conversationId,
         role: MessageRole.USER,
         content,
         ...(buttonPayload != null && { buttonPayload }),
@@ -105,7 +101,7 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
 
   const messages = await prisma.message.findMany({
     where: {
-      conversationId: conversation.id,
+      conversationId,
     },
     orderBy: { createdAt: 'desc' },
     take: 10,
@@ -145,7 +141,7 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
     }
   });
 
-  logger.debug({ whatsappId, messageId }, 'Message ingested successfully');
+  logger.debug({ whatsappId, graphRunId }, 'Message ingested successfully');
 
   return {
     ...state,

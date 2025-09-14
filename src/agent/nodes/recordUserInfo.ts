@@ -28,10 +28,14 @@ export async function recordUserInfoNode(state: GraphState): Promise<GraphState>
     const systemPromptText = await loadPrompt('data/record_user_info.txt');
     const systemPrompt = new SystemMessage(systemPromptText);
 
-    const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
-      systemPrompt,
-      state.conversationHistoryTextOnly,
-    );
+    const response = await getTextLLM()
+      .withStructuredOutput(LLMOutputSchema)
+      .run(
+        systemPrompt,
+        state.conversationHistoryTextOnly,
+        state.graphRunId,
+        'recordUserInfo',
+      );
 
     const user = await prisma.user.update({
       where: { id: state.user.id },

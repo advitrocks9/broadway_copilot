@@ -9,7 +9,6 @@ import {
 } from '../core/messages';
 import { Tool } from '../core/tools';
 import { BaseChatModel } from '../core/base_chat_model';
-import { logger } from '../../../utils/logger';
 
 const MAX_ITERATIONS = 5;
 
@@ -27,6 +26,8 @@ async function getFinalStructuredOutput<T extends ZodType>(
   runner: BaseChatModel,
   conversation: BaseMessage[],
   outputSchema: T,
+  graphRunId: string,
+  nodeName?: string,
 ): Promise<T['_output']> {
   const lastMessage = conversation[conversation.length - 1];
 
@@ -46,7 +47,12 @@ async function getFinalStructuredOutput<T extends ZodType>(
     const parsingConversation: BaseMessage[] = [new UserMessage(textContent)];
 
     const structuredRunner = runner.withStructuredOutput(outputSchema);
-    return await structuredRunner.run(customPrompt, parsingConversation);
+    return await structuredRunner.run(
+      customPrompt,
+      parsingConversation,
+      graphRunId,
+      nodeName,
+    );
   }
   else {
     throw new Error('Last message is not an assistant message');
@@ -67,21 +73,27 @@ async function getFinalStructuredOutput<T extends ZodType>(
  *
  * @example
  * ```typescript
- * const weatherTool: Tool<{ location: string }> = {
+ * import { z } from 'zod';
+ * import { Tool } from '../core/tools';
+ * import { ChatOpenAI } from '../openai/chat_models';
+ *
+ * const model = new ChatOpenAI({ model: 'gpt-4o-mini' });
+ * const weatherTool = new Tool({
  *   name: 'get_weather',
  *   description: 'Get weather for a location',
  *   schema: z.object({ location: z.string() }),
  *   func: async ({ location }) => `The weather in ${location} is sunny.`,
- * };
+ * });
  *
  * const output = await agentExecutor(
  *   model,
- *   'You are a helpful weather assistant.',
+ *   new SystemMessage('You are a helpful weather assistant.'),
  *   [new UserMessage('What is the weather in New York?')],
  *   {
  *     tools: [weatherTool],
  *     outputSchema: z.object({ weather: z.string() })
- *   }
+ *   },
+ *   'some-graph-run-id'
  * );
  *
  * // output.weather might be: "The weather in New York is sunny."
@@ -91,14 +103,14 @@ export async function agentExecutor<T extends ZodType>(
   runner: BaseChatModel,
   systemPrompt: SystemMessage,
   history: BaseMessage[],
-  options: { tools: Tool<any>[]; outputSchema: T },
+  options: {
+    tools: Tool<any>[];
+    outputSchema: T;
+    nodeName?: string;
+  },
+  graphRunId: string,
   maxLoops: number = MAX_ITERATIONS,
 ): Promise<T['_output']> {
-  logger.debug(
-    { toolCount: options.tools.length, maxLoops },
-    '[AgentExecutor] Starting',
-  );
-  
   const runnerWithTools = runner.bind(options.tools);
 
   const conversation: BaseMessage[] = [...history];
@@ -106,27 +118,22 @@ export async function agentExecutor<T extends ZodType>(
   const seenToolCallIds = new Set<string>();
 
   for (let i = 0; i < maxLoops; i++) {
-    logger.debug({ loop: i + 1, maxLoops }, '[AgentExecutor] Loop');
     const { assistant, toolCalls } = await runnerWithTools.run(
       systemPrompt,
       conversation,
+      graphRunId,
+      options.nodeName,
     );
 
-    logger.debug(
-      { toolCallCount: toolCalls?.length || 0 },
-      '[AgentExecutor] Received tool calls',
-    );
-    
     conversation.push(assistant);
 
     if (!toolCalls || toolCalls.length === 0) {
-      logger.debug(
-        '[AgentExecutor] No tool calls, generating final structured output',
-      );
       return await getFinalStructuredOutput(
         runner,
         conversation,
         options.outputSchema,
+        graphRunId,
+        options.nodeName,
       );
     }
 
@@ -143,6 +150,8 @@ export async function agentExecutor<T extends ZodType>(
         runner,
         conversation,
         options.outputSchema,
+        graphRunId,
+        options.nodeName,
       );
     }
 
@@ -167,10 +176,6 @@ export async function agentExecutor<T extends ZodType>(
             isError: false,
           };
         } catch (error) {
-          logger.error(
-            { err: error, toolName: toolCall.name },
-            'Error executing tool',
-          );
           return {
             id: toolCall.id,
             name: toolCall.name,
@@ -199,5 +204,7 @@ export async function agentExecutor<T extends ZodType>(
     runner,
     conversation,
     options.outputSchema,
+    graphRunId,
+    options.nodeName,
   );
 }

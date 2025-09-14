@@ -171,7 +171,9 @@ const conversation = await agentExecutor(
   [new UserMessage('What is the weather in New York?')],
   {
     tools: [weatherTool],
-  }
+    outputSchema: z.object({ weather: z.string() }),
+  },
+  'some-graph-run-id',
 );
 ```
 
@@ -192,8 +194,8 @@ async function main() {
   const model = new ChatOpenAI({ model: 'gpt-4o-mini' });
   const messages = [new UserMessage('What is the capital of France?')];
   const systemPrompt = new SystemMessage('You are a helpful assistant.');
-  
-  const result = await model.run(systemPrompt, messages);
+
+  const result = await model.run(systemPrompt, messages, 'some-graph-run-id');
 
   console.log(result.assistant.content[0].text);
   // Output: The capital of France is Paris.
@@ -211,23 +213,24 @@ import { ChatOpenAI, UserMessage, SystemMessage } from '@ai';
 
 async function analyzeImage() {
   const model = new ChatOpenAI({ model: 'gpt-4o-mini' });
-  
+
   const message = new UserMessage([
     { type: 'text', text: 'What do you see in this image?' },
-    { 
-      type: 'image_url', 
-      image_url: { 
+    {
+      type: 'image_url',
+      image_url: {
         url: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...',
-        detail: 'high'
-      } 
+        detail: 'high',
+      },
     },
   ]);
-  
+
   const result = await model.run(
     new SystemMessage('You are an image analysis expert.'),
-    [message]
+    [message],
+    'some-graph-run-id',
   );
-  
+
   console.log(result.assistant.content[0].text);
 }
 
@@ -244,7 +247,7 @@ import { z } from 'zod';
 
 async function extractUserInfo() {
   const model = new ChatOpenAI({ model: 'gpt-4o-mini' });
-  
+
   const extractionSchema = z.object({
     name: z.string().describe('The full name of the user'),
     age: z.number().describe('The age of the user'),
@@ -256,14 +259,21 @@ async function extractUserInfo() {
   const structuredModel = model.withStructuredOutput(extractionSchema);
 
   const result = await structuredModel.run(
-    new SystemMessage('Extract structured information from the user message.'),
-    [new UserMessage('Hi, I\'m John Doe, 30 years old. My email is john@example.com. I love coding and hiking. I work as a software engineer.')]
+    new SystemMessage(
+      'Extract structured information from the user message.',
+    ),
+    [
+      new UserMessage(
+        'Hi, I\'m John Doe, 30 years old. My email is john@example.com. I love coding and hiking. I work as a software engineer.',
+      ),
+    ],
+    'some-graph-run-id',
   );
 
   console.log(result);
-  // Output: { 
-  //   name: 'John Doe', 
-  //   age: 30, 
+  // Output: {
+  //   name: 'John Doe',
+  //   age: 30,
   //   email: 'john@example.com',
   //   interests: ['coding', 'hiking'],
   //   isStudent: false
@@ -278,7 +288,13 @@ extractUserInfo();
 Create a sophisticated agent that can use multiple tools to answer complex questions.
 
 ```typescript
-import { ChatOpenAI, UserMessage, SystemMessage, agentExecutor, Tool } from '@ai';
+import {
+  ChatOpenAI,
+  UserMessage,
+  SystemMessage,
+  agentExecutor,
+  Tool,
+} from '@ai';
 import { z } from 'zod';
 
 async function createWeatherAgent() {
@@ -320,13 +336,18 @@ async function createWeatherAgent() {
   });
 
   const model = new ChatOpenAI({ model: 'gpt-4o-mini' });
-  const history = [new UserMessage('What\'s the weather like in New York and tell me about the city?')];
+  const history = [
+    new UserMessage('What\'s the weather like in New York and tell me about the city?'),
+  ];
 
   const finalConversation = await agentExecutor(
     model,
-    new SystemMessage('You are a helpful weather and travel assistant. Use tools to get accurate information.'),
+    new SystemMessage(
+      'You are a helpful weather and travel assistant. Use tools to get accurate information.',
+    ),
     history,
-    { tools: [weatherTool, locationTool] }
+    { tools: [weatherTool, locationTool] },
+    'some-graph-run-id',
   );
 
   const finalMessage = finalConversation[finalConversation.length - 1];
@@ -367,7 +388,8 @@ async function handleToolErrors() {
       model,
       new SystemMessage('You are a helpful assistant. If a tool fails, explain the error to the user.'),
       history,
-      { tools: [unreliableTool] }
+      { tools: [unreliableTool] },
+      'some-graph-run-id',
     );
 
     const finalMessage = conversation[conversation.length - 1];
@@ -413,12 +435,18 @@ async function modelConfiguration() {
 
   const creativeResult = await creativeModel.run(
     new SystemMessage('You are a creative writer.'),
-    [new UserMessage('Write a short story about a robot learning to paint.')]
+    [new UserMessage('Write a short story about a robot learning to paint.')],
+    'some-graph-run-id',
   );
 
   const extractionResult = await deterministicModel.run(
     new SystemMessage('Extract only the facts from the following text.'),
-    [new UserMessage('The meeting is scheduled for March 15th at 2:00 PM in room 101.')]
+    [
+      new UserMessage(
+        'The meeting is scheduled for March 15th at 2:00 PM in room 101.',
+      ),
+    ],
+    'some-graph-run-id',
   );
 
   console.log('Creative:', creativeResult.assistant.content[0].text);
@@ -463,13 +491,18 @@ async function complexStructuredOutput() {
   const structuredModel = model.withStructuredOutput(complexSchema);
 
   const result = await structuredModel.run(
-    new SystemMessage('Extract all information about the person and their preferences.'),
-    [new UserMessage(`
+    new SystemMessage(
+      'Extract all information about the person and their preferences.',
+    ),
+    [
+      new UserMessage(`
       John Smith is 30 years old. His email is john@example.com and phone is 555-1234.
       He prefers dark theme, wants notifications enabled, and speaks English.
       He's interested in technology, programming, and hiking.
       This information was collected from our website contact form.
-    `)]
+    `),
+    ],
+    'some-graph-run-id',
   );
 
   console.log(JSON.stringify(result, null, 2));
@@ -484,9 +517,11 @@ complexStructuredOutput();
 ### ChatOpenAI
 
 ```typescript
-class ChatOpenAI extends BaseChatModel {
+import { OpenAIChatModelParams } from '@ai';
+
+class ChatOpenAI extends BaseChatCompletionsModel {
   constructor(
-    params?: Partial<ChatModelParams>,
+    params?: Partial<OpenAIChatModelParams>,
     client?: OpenAI
   );
 }
@@ -497,15 +532,17 @@ class ChatOpenAI extends BaseChatModel {
 ### ChatGroq
 
 ```typescript
-class ChatGroq extends BaseChatModel {
+import { GroqChatModelParams } from '@ai';
+
+class ChatGroq extends BaseChatCompletionsModel {
   constructor(
-    params?: Partial<ChatModelParams>,
-    client?: OpenAI
+    params?: Partial<GroqChatModelParams>,
+    client?: Groq
   );
 }
 ```
 
-**Default Model:** `openai/gpt-oss-120b`
+**Default Model:** `llama3-70b-8192`
 
 ### Tool
 
@@ -532,9 +569,14 @@ function agentExecutor(
   runner: BaseChatModel,
   systemPrompt: SystemMessage,
   history: BaseMessage[],
-  options: { tools: Tool<any>[] },
-  maxLoops?: number
-): Promise<BaseMessage[]>;
+  options: {
+    tools: Tool<any>[];
+    outputSchema: T;
+    nodeName?: string;
+  },
+  graphRunId: string,
+  maxLoops?: number,
+): Promise<T['_output']>;
 ```
 
 **Parameters:**
@@ -542,6 +584,8 @@ function agentExecutor(
 - `systemPrompt`: A guiding prompt for the agent's persona
 - `history`: Initial conversation history
 - `options.tools`: Array of available tools
+- `options.outputSchema`: Zod schema for the final, structured output
+- `graphRunId`: The ID of the current graph run for tracing
 - `maxLoops`: Maximum iterations (default: 5)
 
 ## Error Handling

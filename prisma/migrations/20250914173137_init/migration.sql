@@ -20,7 +20,7 @@ CREATE TYPE "public"."TaskType" AS ENUM ('SEND_FEEDBACK_REQUEST', 'SCHEDULE_WARD
 CREATE TYPE "public"."TaskStatus" AS ENUM ('QUEUED', 'IN_PROGRESS', 'COMPLETED', 'FAILED');
 
 -- CreateEnum
-CREATE TYPE "public"."GraphRunStatus" AS ENUM ('RUNNING', 'SUCCESSFUL', 'ERROR', 'ABORTED');
+CREATE TYPE "public"."GraphRunStatus" AS ENUM ('RUNNING', 'COMPLETED', 'ERROR', 'ABORTED');
 
 -- CreateEnum
 CREATE TYPE "public"."ConversationStatus" AS ENUM ('OPEN', 'CLOSED');
@@ -29,6 +29,7 @@ CREATE TYPE "public"."ConversationStatus" AS ENUM ('OPEN', 'CLOSED');
 CREATE TABLE "public"."User" (
     "id" TEXT NOT NULL,
     "whatsappId" TEXT NOT NULL,
+    "profileName" TEXT NOT NULL DEFAULT '',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "inferredGender" "public"."Gender",
     "inferredAgeGroup" "public"."AgeGroup",
@@ -85,12 +86,15 @@ CREATE TABLE "public"."Media" (
 -- CreateTable
 CREATE TABLE "public"."GraphRun" (
     "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
     "conversationId" TEXT NOT NULL,
     "initialState" JSONB NOT NULL,
-    "finalState" JSONB NOT NULL,
+    "finalState" JSONB,
     "status" "public"."GraphRunStatus" NOT NULL DEFAULT 'RUNNING',
     "errorTrace" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "startTime" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "endTime" TIMESTAMP(3),
+    "durationMs" INTEGER,
 
     CONSTRAINT "GraphRun_pkey" PRIMARY KEY ("id")
 );
@@ -99,13 +103,20 @@ CREATE TABLE "public"."GraphRun" (
 CREATE TABLE "public"."LLMTrace" (
     "id" TEXT NOT NULL,
     "graphRunId" TEXT NOT NULL,
-    "model" TEXT,
+    "nodeName" TEXT,
+    "model" TEXT NOT NULL,
+    "inputMessages" JSONB NOT NULL,
+    "outputMessage" JSONB,
     "rawRequest" JSONB NOT NULL,
-    "rawResponse" JSONB NOT NULL,
+    "rawResponse" JSONB,
     "promptTokens" INTEGER,
     "completionTokens" INTEGER,
+    "totalTokens" INTEGER,
     "costUsd" DECIMAL(10,6),
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "errorTrace" TEXT,
+    "startTime" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "endTime" TIMESTAMP(3),
+    "durationMs" INTEGER,
 
     CONSTRAINT "LLMTrace_pkey" PRIMARY KEY ("id")
 );
@@ -228,7 +239,10 @@ CREATE INDEX "Message_buttonPayload_idx" ON "public"."Message"("buttonPayload");
 CREATE INDEX "Media_messageId_idx" ON "public"."Media"("messageId");
 
 -- CreateIndex
-CREATE INDEX "GraphRun_conversationId_createdAt_idx" ON "public"."GraphRun"("conversationId", "createdAt");
+CREATE INDEX "GraphRun_conversationId_startTime_idx" ON "public"."GraphRun"("conversationId", "startTime");
+
+-- CreateIndex
+CREATE INDEX "GraphRun_userId_startTime_idx" ON "public"."GraphRun"("userId", "startTime");
 
 -- CreateIndex
 CREATE INDEX "LLMTrace_graphRunId_idx" ON "public"."LLMTrace"("graphRunId");
@@ -265,6 +279,9 @@ ALTER TABLE "public"."Message" ADD CONSTRAINT "Message_conversationId_fkey" FORE
 
 -- AddForeignKey
 ALTER TABLE "public"."Media" ADD CONSTRAINT "Media_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "public"."Message"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."GraphRun" ADD CONSTRAINT "GraphRun_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."GraphRun" ADD CONSTRAINT "GraphRun_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "public"."Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;

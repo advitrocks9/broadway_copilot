@@ -36,10 +36,14 @@ export async function askUserInfoNode(state: GraphState): Promise<GraphState> {
 
     const systemPrompt = new SystemMessage(systemPromptText.replace('{missingField}', missingField));
 
-    const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
-      systemPrompt,
-      state.conversationHistoryTextOnly,
-    );
+    const response = await getTextLLM()
+      .withStructuredOutput(LLMOutputSchema)
+      .run(
+        systemPrompt,
+        state.conversationHistoryTextOnly,
+        state.graphRunId,
+        'askUserInfo',
+      );
 
     const replies: Replies = [{ reply_type: 'text', reply_text: response.text }];
     logger.debug({ userId, messageId, replyLength: response.text.length }, 'Successfully generated ask user info reply');

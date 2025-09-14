@@ -45,10 +45,14 @@ export async function handleStylingNode(state: GraphState): Promise<GraphState> 
     const defaultPromptText = await loadPrompt('handlers/styling/handle_styling_no_input.txt');
     const systemPromptText = defaultPromptText.replace('{INTENT}', stylingIntent);
     const systemPrompt = new SystemMessage(systemPromptText);
-    const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
-      systemPrompt,
-      state.conversationHistoryTextOnly,
-    );
+    const response = await getTextLLM()
+      .withStructuredOutput(LLMOutputSchema)
+      .run(
+        systemPrompt,
+        state.conversationHistoryTextOnly,
+        state.graphRunId,
+        'handleStyling',
+      );
     const reply_text = response.message1_text as string;
     logger.debug({ userId, reply_text }, 'Returning with default LLM reply');
     const replies: Replies = [{ reply_type: 'text', reply_text }];
@@ -67,12 +71,19 @@ export async function handleStylingNode(state: GraphState): Promise<GraphState> 
       getTextLLM(),
       systemPrompt,
       conversationHistoryTextOnly,
-      { tools, outputSchema: LLMOutputSchema },
+      {
+        tools,
+        outputSchema: LLMOutputSchema,
+        nodeName: 'handleStyling',
+      },
+      state.graphRunId,
     );
 
 
 
-    const replies: Replies = [{ reply_type: 'text', reply_text: finalResponse.message1_text }];
+    const replies: Replies = [
+      { reply_type: 'text', reply_text: finalResponse.message1_text },
+    ];
     if (finalResponse.message2_text) {
       replies.push({ reply_type: 'text', reply_text: finalResponse.message2_text });
     }

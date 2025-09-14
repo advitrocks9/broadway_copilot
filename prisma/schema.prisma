@@ -54,7 +54,7 @@ enum TaskStatus {
 
 enum GraphRunStatus {
   RUNNING
-  SUCCESSFUL
+  COMPLETED
   ERROR
   ABORTED
 }
@@ -70,6 +70,7 @@ enum ConversationStatus {
 model User {
   id          String   @id @default(cuid())
   whatsappId  String   @unique
+  profileName String   @default("")
   createdAt   DateTime @default(now())
 
   conversations Conversation[]
@@ -78,6 +79,7 @@ model User {
   vibeChecks    VibeCheck[]
   colorAnalyses ColorAnalysis[]
   tasks         Task[]
+  graphRuns     GraphRun[]
 
   inferredGender    Gender?
   inferredAgeGroup  AgeGroup?
@@ -153,36 +155,47 @@ model Media {
 // --- AGENT & LOGGING ---
 
 model GraphRun {
-  id             String       @id @default(cuid())
+  id             String       @id
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   conversationId String
-  
-  initialState   Json
-  finalState     Json
-  status         GraphRunStatus @default(RUNNING)
-  errorTrace     String?
-  
-  createdAt      DateTime     @default(now())
 
-  traces         LLMTrace[]
+  initialState Json
+  finalState   Json?
+  status       GraphRunStatus @default(RUNNING)
+  errorTrace   String?
 
-  @@index([conversationId, createdAt])
+  startTime  DateTime  @default(now())
+  endTime    DateTime?
+  durationMs Int?
+
+  llmTraces LLMTrace[]
+
+  @@index([conversationId, startTime])
+  @@index([userId, startTime])
 }
 
 model LLMTrace {
   id          String   @id @default(cuid())
   graphRun    GraphRun @relation(fields: [graphRunId], references: [id], onDelete: Cascade)
   graphRunId  String
+  nodeName    String?
 
-  model           String?
-  rawRequest      Json
-  rawResponse     Json
-  
+  model            String
+  inputMessages    Json
+  outputMessage    Json?
+  rawRequest       Json
+  rawResponse      Json?
   promptTokens     Int?
   completionTokens Int?
+  totalTokens      Int?
   costUsd          Decimal? @db.Decimal(10, 6)
-  
-  createdAt       DateTime @default(now())
+  errorTrace       String?
+
+  startTime  DateTime  @default(now())
+  endTime    DateTime?
+  durationMs Int?
 
   @@index([graphRunId])
 }

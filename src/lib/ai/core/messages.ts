@@ -62,6 +62,16 @@ export class BaseMessage {
     this.tool_call_id = tool_call_id;
     this.meta = meta;
   }
+
+  toJSON() {
+    return {
+      role: this.role,
+      content: this.content,
+      name: this.name,
+      tool_call_id: this.tool_call_id,
+      meta: this.meta,
+    };
+  }
 }
 
 /**

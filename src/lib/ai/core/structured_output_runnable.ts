@@ -123,8 +123,15 @@ export class StructuredOutputRunnable<T extends ZodType> {
   async run(
     systemPrompt: SystemMessage,
     messages: BaseMessage[],
+    graphRunId: string,
+    nodeName?: string,
   ): Promise<T['_output']> {
-    const response = await this.runner.run(systemPrompt, messages);
+    const response = await this.runner.run(
+      systemPrompt,
+      messages,
+      graphRunId,
+      nodeName,
+    );
     const { toolCalls } = response;
 
     let data;

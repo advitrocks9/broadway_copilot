@@ -13,6 +13,12 @@ import { QuickReplyButton } from '../lib/twilio/types';
  * Includes all data required for processing a user request, from input to final reply.
  */
 export interface GraphState {
+  /** Unique identifier for the current graph execution run */
+  graphRunId: string;
+
+  /** Unique identifier for the current conversation */
+  conversationId: string;
+
   /** Raw Twilio webhook request that initiated the interaction */
   input: TwilioWebhookRequest;
 

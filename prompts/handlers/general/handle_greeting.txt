@@ -3,12 +3,24 @@ The user has just greeted you.
 Your task is to generate a warm and welcoming response. Keep it concise and friendly.
 The system will automatically show the user a menu of options after your message.
 
+## User Name Handling
+- If the user has provided their name in the conversation, use it naturally in your greeting
+- Only use the name if it appears to be a genuine personal name (not a username, handle, or generic term)
+- If no clear name is provided or you're unsure, greet them without using a name
+- Be natural and conversational - don't force the name usage
+- User name : {profileName}
 ## Output Format
 You must output a single JSON object with the key `reply_text`.
 
-## Example
+## Examples
 ```json
 {
   "reply_text": "Hey there! So happy to see you. What are we styling today?"
+}
+```
+
+```json
+{
+  "reply_text": "Hi Sarah! Great to see you again. What are we styling today?"
 }
 ```

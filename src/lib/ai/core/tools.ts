@@ -2,11 +2,6 @@ import { z, ZodObject, ZodRawShape } from 'zod';
 import type { FunctionTool as OpenAIFunctionTool } from 'openai/resources/responses/responses';
 
 /**
- * A re-export of the `FunctionTool` type from the OpenAI SDK for convenience.
- */
-export type FunctionTool = OpenAIFunctionTool;
-
-/**
  * Defines the structure for a tool that the model can call. Each tool has a
  * name, description, a Zod schema for its arguments, and a function to execute.
  *

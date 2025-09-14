@@ -80,10 +80,14 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
 
     const systemPrompt = new SystemMessage(formattedSystemPrompt);
 
-    const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
-      systemPrompt,
-      conversationHistoryTextOnly,
-    );
+    const response = await getTextLLM()
+      .withStructuredOutput(LLMOutputSchema)
+      .run(
+        systemPrompt,
+        conversationHistoryTextOnly,
+        state.graphRunId,
+        'routeIntent',
+      );
 
     let { intent, missingProfileField } = response;
 

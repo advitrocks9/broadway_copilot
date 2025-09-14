@@ -31,12 +31,19 @@ export async function handleGeneralNode(state: GraphState): Promise<GraphState> 
 
   try {
     if (generalIntent === 'greeting' || generalIntent === 'menu') {
-      const systemPromptText = await loadPrompt(`handlers/general/handle_${generalIntent}.txt`);
+      let systemPromptText = await loadPrompt(`handlers/general/handle_${generalIntent}.txt`);
+      if (generalIntent === 'greeting') {
+        systemPromptText = systemPromptText.replace('{profileName}', user.profileName);
+      }
       const systemPrompt = new SystemMessage(systemPromptText);
-      const response = await getTextLLM().withStructuredOutput(SimpleOutputSchema).run(
-        systemPrompt,
-        conversationHistoryTextOnly,
-      );
+      const response = await getTextLLM()
+        .withStructuredOutput(SimpleOutputSchema)
+        .run(
+          systemPrompt,
+          conversationHistoryTextOnly,
+          state.graphRunId,
+          'handleGeneral',
+        );
 
       const availableActions = [
         { text: 'Vibe check', id: 'vibe_check' },
@@ -67,10 +74,13 @@ export async function handleGeneralNode(state: GraphState): Promise<GraphState> 
         getTextLLM(),
         systemPrompt,
         conversationHistoryTextOnly,
-        { tools, outputSchema: LLMOutputSchema },
+        { tools, outputSchema: LLMOutputSchema, nodeName: 'handleGeneral' },
+        state.graphRunId,
       );
 
-      const replies: Replies = [{ reply_type: 'text', reply_text: finalResponse.message1_text }];
+      const replies: Replies = [
+        { reply_type: 'text', reply_text: finalResponse.message1_text },
+      ];
       if (finalResponse.message2_text) {
         replies.push({ reply_type: 'text', reply_text: finalResponse.message2_text });
       }

@@ -45,10 +45,14 @@ export async function routeGeneralNode(state: GraphState): Promise<GraphState> {
     const systemPromptText = await loadPrompt('routing/route_general.txt');
     const systemPrompt = new SystemMessage(systemPromptText);
 
-    const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
-      systemPrompt,
-      state.conversationHistoryTextOnly,
-    );
+    const response = await getTextLLM()
+      .withStructuredOutput(LLMOutputSchema)
+      .run(
+        systemPrompt,
+        state.conversationHistoryTextOnly,
+        state.graphRunId,
+        'routeGeneral',
+      );
 
     logger.debug(
       { userId, generalIntent: response.generalIntent },

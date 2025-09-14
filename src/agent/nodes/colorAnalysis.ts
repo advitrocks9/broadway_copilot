@@ -54,23 +54,31 @@ export async function colorAnalysisNode(state: GraphState): Promise<GraphState> 
   if (imageCount === 0) {
     const systemPromptText = await loadPrompt('handlers/analysis/no_image_request.txt');
     const systemPrompt = new SystemMessage(systemPromptText.replace('{analysis_type}', 'color analysis'));
-    const response = await getTextLLM().withStructuredOutput(NoImageLLMOutputSchema).run(
-      systemPrompt,
-      state.conversationHistoryTextOnly,
-    );
+    const response = await getTextLLM()
+      .withStructuredOutput(NoImageLLMOutputSchema)
+      .run(
+        systemPrompt,
+        state.conversationHistoryTextOnly,
+        state.graphRunId,
+        'colorAnalysis',
+      );
     logger.debug({ userId: state.user.id, reply_text: response.reply_text }, 'Invoking text LLM for no-image response');
     const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
-   return { ...state, assistantReply: replies, pending: PendingType.COLOR_ANALYSIS_IMAGE };
+    return { ...state, assistantReply: replies, pending: PendingType.COLOR_ANALYSIS_IMAGE };
   }
 
   try {
     const systemPromptText = await loadPrompt('handlers/analysis/color_analysis.txt');
     const systemPrompt = new SystemMessage(systemPromptText);
 
-    const output = await getVisionLLM().withStructuredOutput(LLMOutputSchema).run(
-      systemPrompt,
-      state.conversationHistoryWithImages,
-    );
+    const output = await getVisionLLM()
+      .withStructuredOutput(LLMOutputSchema)
+      .run(
+        systemPrompt,
+        state.conversationHistoryWithImages,
+        state.graphRunId,
+        'colorAnalysis',
+      );
 
     await prisma.colorAnalysis.create({
       data: {

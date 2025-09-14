@@ -6,7 +6,7 @@ import express, { NextFunction, Request, Response } from 'express';
 import { authenticateRequest } from './middleware/auth';
 import { errorHandler } from './middleware/errors';
 import { rateLimiter } from './middleware/rateLimiter';
-import { initializeAgent, runAgent } from './agent/graph';
+import { initializeAgent, runAgent } from './agent';
 import { connectRedis, redis } from './lib/redis';
 import { connectPrisma } from './lib/prisma';
 import { processStatusCallback } from './lib/twilio';

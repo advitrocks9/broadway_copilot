@@ -1,7 +1,4 @@
-import 'dotenv/config';
-
 import { PendingType } from '@prisma/client';
-
 import { END, START, StateGraph } from '../lib/graph';
 import { askUserInfoNode } from './nodes/askUserInfo';
 import { colorAnalysisNode } from './nodes/colorAnalysis';
@@ -15,33 +12,7 @@ import { routeGeneralNode } from './nodes/routeGeneral';
 import { sendReplyNode } from './nodes/sendReply';
 import { vibeCheckNode } from './nodes/vibeCheck';
 import { GraphState } from './state';
-import { logError } from '../utils/errors';
 import { logger } from '../utils/logger';
-import { TwilioWebhookRequest } from '../lib/twilio/types';
-import { getUser } from '../utils/user';
-import { sendText } from '../lib/twilio';
-
-let compiledAppPromise: Promise<ReturnType<typeof StateGraph.prototype.compile>> | null = null;
-
-/**
- * Builds and compiles the agent's state graph defining all nodes and their transitions.
- * The graph orchestrates the conversation flow from message ingestion through routing
- * and handling to final response generation.
- *
- * This function should be called once at application startup.
- */
-export function initializeAgent() {
-  logger.info('Starting agent graph compilation...');
-  compiledAppPromise = Promise.resolve().then(() => {
-    const app = buildAgentGraph();
-    logger.info('Agent graph compiled successfully');
-    return app;
-  });
-  compiledAppPromise.catch((err) => {
-    logger.error({ err: err.message, stack: err.stack }, 'Agent graph compilation failed');
-    process.exit(1);
-  });
-}
 
 /**
  * Builds and compiles the agent's state graph defining all nodes and their transitions.
@@ -78,18 +49,22 @@ export function buildAgentGraph() {
       },
     )
     .addEdge('record_user_info', 'route_intent')
-    .addConditionalEdges('route_intent', (s: GraphState) => {
-      if (s.missingProfileField) {
-        return 'ask_user_info';
-      }
-      return s.intent || 'general';
-    }, {
-      ask_user_info: 'ask_user_info',
-      general: 'route_general',
-      vibe_check: 'vibe_check',
-      color_analysis: 'color_analysis',
-      styling: 'route_styling',
-    })
+    .addConditionalEdges(
+      'route_intent',
+      (s: GraphState) => {
+        if (s.missingProfileField) {
+          return 'ask_user_info';
+        }
+        return s.intent || 'general';
+      },
+      {
+        ask_user_info: 'ask_user_info',
+        general: 'route_general',
+        vibe_check: 'vibe_check',
+        color_analysis: 'color_analysis',
+        styling: 'route_styling',
+      },
+    )
     .addEdge('route_general', 'handle_general')
     .addConditionalEdges(
       'route_styling',
@@ -117,51 +92,4 @@ export function buildAgentGraph() {
     .addEdge('send_reply', END);
 
   return graph.compile();
-}
-
-/**
- * Executes the agent graph for a single message with proper error handling and abort support.
- * Compiles the graph on first run and reuses it for subsequent executions.
- *
- * @param input - Raw Twilio webhook payload containing message data
- * @param options - Optional configuration including abort signal
- * @throws {AbortError} When the operation is aborted via signal
- * @throws {HttpError} For business logic errors (preserved with original status)
- * @throws {HttpError} For unexpected errors (wrapped as 500 internal server error)
- */
-export async function runAgent(input: TwilioWebhookRequest, options?: { signal?: AbortSignal }): Promise<void> {
-  const { From: whatsappId, MessageSid: messageId } = input;
-
-  if (!compiledAppPromise) {
-    throw new Error('Agent graph not initialized. Call initializeAgent() at startup.');
-  }
-
-  try {
-    const user = await getUser(whatsappId);
-    const compiledApp = await compiledAppPromise;
-
-    await compiledApp.invoke({ input, user }, { signal: options?.signal });
-  } catch (err: unknown) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw err;
-    }
-
-    const error = logError(err, {
-      whatsappId,
-      messageId,
-      location: 'runAgent',
-    });
-
-    try {
-      await sendText(whatsappId, 'Sorry, I encountered an error. Please try again later.');
-    } catch (sendErr: unknown) {
-      logError(sendErr, {
-        whatsappId,
-        messageId,
-        location: 'runAgent.sendTextFallback',
-        originalError: error.message,
-      });
-    }
-    throw error;
-  }
 }

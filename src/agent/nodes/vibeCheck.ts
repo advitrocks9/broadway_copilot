@@ -41,10 +41,14 @@ export async function vibeCheckNode(state: GraphState): Promise<GraphState> {
     if (imageCount === 0) {
       const systemPromptText = await loadPrompt('handlers/analysis/no_image_request.txt');
       const systemPrompt = new SystemMessage(systemPromptText.replace('{analysis_type}', 'vibe check'));
-      const response = await getTextLLM().withStructuredOutput(NoImageLLMOutputSchema).run(
-        systemPrompt,
-        state.conversationHistoryTextOnly,
-      );
+      const response = await getTextLLM()
+        .withStructuredOutput(NoImageLLMOutputSchema)
+        .run(
+          systemPrompt,
+          state.conversationHistoryTextOnly,
+          state.graphRunId,
+          'vibeCheck',
+        );
       logger.debug({ userId, reply_text: response.reply_text }, 'Invoking text LLM for no-image response');
       const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
       return { ...state, assistantReply: replies, pending: PendingType.VIBE_CHECK_IMAGE };
@@ -53,10 +57,14 @@ export async function vibeCheckNode(state: GraphState): Promise<GraphState> {
     const systemPromptText = await loadPrompt('handlers/analysis/vibe_check.txt');
     const systemPrompt = new SystemMessage(systemPromptText);
 
-    const result = await getVisionLLM().withStructuredOutput(LLMOutputSchema).run(
-      systemPrompt,
-      state.conversationHistoryWithImages,
-    );
+    const result = await getVisionLLM()
+      .withStructuredOutput(LLMOutputSchema)
+      .run(
+        systemPrompt,
+        state.conversationHistoryWithImages,
+        state.graphRunId,
+        'vibeCheck',
+      );
 
     const latestMessage = state.conversationHistoryWithImages.at(-1);
     if (!latestMessage || !latestMessage.meta?.messageId) {

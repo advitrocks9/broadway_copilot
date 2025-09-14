@@ -50,12 +50,19 @@ export async function routeStyling(state: GraphState): Promise<GraphState> {
     const systemPromptText = await loadPrompt('routing/route_styling.txt');
     const systemPrompt = new SystemMessage(systemPromptText);
 
-    const response = await getTextLLM().withStructuredOutput(LLMOutputSchema).run(
-      systemPrompt,
-      state.conversationHistoryTextOnly,
-    );
+    const response = await getTextLLM()
+      .withStructuredOutput(LLMOutputSchema)
+      .run(
+        systemPrompt,
+        state.conversationHistoryTextOnly,
+        state.graphRunId,
+        'routeStyling',
+      );
 
-    logger.debug({ userId, stylingIntent: response.stylingIntent }, 'Styling intent routed using LLM');
+    logger.debug(
+      { userId, stylingIntent: response.stylingIntent },
+      'Styling intent routed using LLM',
+    );
 
     return { ...state, ...response };
   } catch (err: unknown) {

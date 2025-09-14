@@ -4,16 +4,6 @@ import { ToolCall } from './tools';
 /**
  * Defines the core parameters for configuring a chat model instance.
  * These parameters control the model's behavior during generation.
- *
- * @example
- * ```typescript
- * const params: ChatModelParams = {
- *   model: 'gpt-4o-mini',
- *   temperature: 0.7,
- *   maxTokens: 1024,
- *   topP: 1.0,
- * };
- * ```
  */
 export type ChatModelParams = {
   /** The specific model identifier to use for the chat completion. */
@@ -34,16 +24,31 @@ export type ChatModelParams = {
   stop?: string | string[];
   /** A seed for ensuring reproducible outputs when temperature is non-zero. */
   seed?: number;
+};
+
+// --- Provider Specific Params ---
+
+export interface OpenAIChatModelParams extends ChatModelParams {
   /**
-   * (Provider-specific) Enables reasoning steps or chain-of-thought,
+   * (OpenAI-specific) Enables reasoning steps or chain-of-thought,
    * which can improve performance on complex tasks.
+   * Only applicable when `useResponsesApi` is `true`.
    */
   reasoning?: { effort: 'minimal' | 'low' | 'medium' | 'high' };
   /**
-   * Toggles between the Responses API and the Chat Completions API.
+   * (OpenAI-specific) Toggles between the Responses API and the Chat Completions API.
    * Defaults to `false` (Chat Completions API).
    */
   useResponsesApi?: boolean;
+  /**
+   * (OpenAI-specific) An object specifying the format that the model must output.
+   * Setting to `{ type: "json_object" }` enables JSON mode.
+   * Only applicable for Chat Completions API.
+   */
+  responseFormat?: { type: 'text' | 'json_object' };
+}
+
+export interface GroqChatModelParams extends ChatModelParams {
   /**
    * (Groq-specific) The maximum number of times to retry a request if it fails.
    * Defaults to 2.
@@ -54,12 +59,7 @@ export type ChatModelParams = {
    * Defaults to 1 minute.
    */
   timeout?: number;
-  /**
-   * (OpenAI-specific) An object specifying the format that the model must output.
-   * Setting to `{ type: "json_object" }` enables JSON mode.
-   */
-  responseFormat?: { type: 'text' | 'json_object' };
-};
+}
 
 /**
  * Represents the final outcome of a model run.
@@ -107,7 +107,14 @@ export interface ModelRunner {
    *
    * @param systemPrompt The system prompt to guide the model's behavior.
    * @param messages The array of messages representing the conversation history.
+   * @param graphRunId The ID of the current graph run for tracing purposes.
+   * @param nodeName The name of the graph node making this call.
    * @returns A promise that resolves to the outcome of the model run.
    */
-  run(systemPrompt: SystemMessage, messages: BaseMessage[]): Promise<RunOutcome>;
+  run(
+    systemPrompt: SystemMessage,
+    messages: BaseMessage[],
+    graphRunId: string,
+    nodeName?: string,
+  ): Promise<RunOutcome>;
 }
