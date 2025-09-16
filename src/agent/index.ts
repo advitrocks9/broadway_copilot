@@ -40,7 +40,7 @@ export async function initializeAgent(): Promise<void> {
       { err: error.message, stack: error.stack },
       "Agent graph compilation failed",
     );
-    process.exit(1);
+    throw error;
   }
 }
 
@@ -73,20 +73,28 @@ async function handleGraphRun(
 
   if (finalState?.traceBuffer) {
     const { nodeRuns, llmTraces } = finalState.traceBuffer;
+    const promises: Promise<any>[] = [];
     if (nodeRuns.length > 0) {
-      await prisma.nodeRun.createMany({
-        data: nodeRuns.map((ne) => ({
-          ...ne,
-          graphRunId,
-        })),
-      });
+      promises.push(
+        prisma.nodeRun.createMany({
+          data: nodeRuns.map((ne) => ({
+            ...ne,
+            graphRunId,
+          })),
+        }),
+      );
     }
     if (llmTraces.length > 0) {
-      await prisma.lLMTrace.createMany({
-        data: llmTraces.map((lt) => ({
-          ...lt,
-        })),
-      });
+      promises.push(
+        prisma.lLMTrace.createMany({
+          data: llmTraces.map((lt) => ({
+            ...lt,
+          })),
+        }),
+      );
+    }
+    if (promises.length > 0) {
+      await Promise.all(promises);
     }
     delete finalState.traceBuffer;
   }
@@ -117,7 +125,6 @@ async function handleGraphRun(
  * @param input - Raw Twilio webhook payload containing message data
  * @param options - Optional configuration including abort signal
  */
-// Refactored to handle Redis-based abort signals
 export async function runAgent(
   userId: string,
   messageId: string,

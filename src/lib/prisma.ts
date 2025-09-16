@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 
 import { logger } from "../utils/logger";
 
@@ -26,11 +26,11 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 // Log Prisma events
-(prisma as any).$on("error", (e: any) => {
+(prisma as any).$on("error", (e: Prisma.LogEvent) => {
   logger.error({ target: e.target, message: e.message }, "Database error");
 });
 
-(prisma as any).$on("warn", (e: any) => {
+(prisma as any).$on("warn", (e: Prisma.LogEvent) => {
   logger.warn({ message: e.message }, "Database warning");
 });
 

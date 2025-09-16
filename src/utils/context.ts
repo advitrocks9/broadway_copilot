@@ -3,9 +3,45 @@ import { User, Conversation, ConversationStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { queueMemoryExtraction } from "../lib/tasks";
 import { logger } from "./logger";
-import { BadRequestError, InternalServerError } from "./errors";
+import { BadRequestError } from "./errors";
+import { BaseMessage } from "../lib/ai/core/messages";
 
 const CONVERSATION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * Handles a stale conversation by closing it and creating a new one.
+ *
+ * @param user - The user for whom to handle the stale conversation.
+ * @param conversation - The stale conversation to close.
+ * @returns The new conversation.
+ */
+async function handleStaleConversation(
+  user: User,
+  conversation: Conversation,
+): Promise<Conversation> {
+  logger.debug(
+    { userId: user.id, conversationId: conversation.id },
+    "Stale conversation detected, closing and creating a new one.",
+  );
+
+  const [, newConversation] = await prisma.$transaction([
+    prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { status: ConversationStatus.CLOSED },
+    }),
+    prisma.conversation.create({
+      data: { userId: user.id },
+    }),
+  ]);
+
+  await queueMemoryExtraction(user.id, conversation.id);
+  logger.debug(
+    { userId: user.id, conversationId: conversation.id },
+    "Queued memory extraction for closed conversation.",
+  );
+
+  return newConversation;
+}
 
 /**
  * Retrieves or creates a user and their active conversation.
@@ -24,67 +60,40 @@ export async function getOrCreateUserAndConversation(
     throw new BadRequestError("WhatsApp ID is required");
   }
 
-  try {
-    const user = await prisma.user.upsert({
-      where: { whatsappId },
-      update: { profileName },
-      create: { whatsappId, profileName },
-    });
+  const user = await prisma.user.upsert({
+    where: { whatsappId },
+    update: { profileName },
+    create: { whatsappId, profileName },
+  });
 
-    const lastOpenConversation = await prisma.conversation.findFirst({
-      where: {
-        userId: user.id,
-        status: ConversationStatus.OPEN,
-      },
-      orderBy: {
-        updatedAt: "desc",
-      },
-    });
+  const lastOpenConversation = await prisma.conversation.findFirst({
+    where: {
+      userId: user.id,
+      status: ConversationStatus.OPEN,
+    },
+    orderBy: { updatedAt: "desc" },
+  });
 
-    if (lastOpenConversation) {
-      const timeSinceLastUpdate =
-        Date.now() - new Date(lastOpenConversation.updatedAt).getTime();
-      if (timeSinceLastUpdate > CONVERSATION_TIMEOUT_MS) {
-        logger.debug(
-          { userId: user.id, conversationId: lastOpenConversation.id },
-          "Stale conversation detected, closing and creating a new one.",
-        );
-
-        const [, newConversation] = await prisma.$transaction([
-          prisma.conversation.update({
-            where: { id: lastOpenConversation.id },
-            data: { status: ConversationStatus.CLOSED },
-          }),
-          prisma.conversation.create({
-            data: { userId: user.id },
-          }),
-        ]);
-
-        await queueMemoryExtraction(user.id, lastOpenConversation.id);
-        logger.debug(
-          { userId: user.id, conversationId: lastOpenConversation.id },
-          "Queued memory extraction for closed conversation.",
-        );
-
-        return { user, conversation: newConversation };
-      }
-      return { user, conversation: lastOpenConversation };
+  if (lastOpenConversation) {
+    const timeSinceLastUpdate =
+      Date.now() - new Date(lastOpenConversation.updatedAt).getTime();
+    if (timeSinceLastUpdate > CONVERSATION_TIMEOUT_MS) {
+      return {
+        user,
+        conversation: await handleStaleConversation(user, lastOpenConversation),
+      };
     }
-
-    logger.debug(
-      { userId: user.id },
-      "No open conversation found, creating a new one.",
-    );
-    const newConversation = await prisma.conversation.create({
-      data: { userId: user.id },
-    });
-    return { user, conversation: newConversation };
-  } catch (err: unknown) {
-    throw new InternalServerError(
-      "Failed to get or create user and conversation",
-      { cause: err },
-    );
+    return { user, conversation: lastOpenConversation };
   }
+
+  logger.debug(
+    { userId: user.id },
+    "No open conversation found, creating a new one.",
+  );
+  const newConversation = await prisma.conversation.create({
+    data: { userId: user.id },
+  });
+  return { user, conversation: newConversation };
 }
 
 /**
@@ -95,7 +104,7 @@ export async function getOrCreateUserAndConversation(
  * @returns Number of image URLs in the latest message
  */
 export function numImagesInMessage(
-  conversationHistoryWithImages: any[],
+  conversationHistoryWithImages: BaseMessage[],
 ): number {
   if (
     !conversationHistoryWithImages ||
@@ -113,6 +122,5 @@ export function numImagesInMessage(
     return 0;
   }
 
-  return latestMessage.content.filter((item: any) => item.type === "image_url")
-    .length;
+  return latestMessage.content.filter(item => item.type === "image_url").length;
 }

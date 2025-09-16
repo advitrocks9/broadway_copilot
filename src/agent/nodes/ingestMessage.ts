@@ -124,7 +124,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
         where: {
           conversationId,
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: "asc" },
         take: 10,
         select: {
           id: true,
@@ -141,38 +141,31 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
 
   await queueImageUpload(user.id, savedMessage.id);
 
-  const conversationHistoryWithImages = messages.reverse().map((msg) => {
-    if (msg.role === MessageRole.USER) {
-      const message = new UserMessage(msg.content as MessageContent);
-      message.meta = {
-        createdAt: msg.createdAt,
+  const conversationHistoryWithImages: (UserMessage | AssistantMessage)[] = [];
+  const conversationHistoryTextOnly: (UserMessage | AssistantMessage)[] = [];
+
+  for (const msg of messages) {
+    const MessageClass =
+      msg.role === MessageRole.USER ? UserMessage : AssistantMessage;
+
+    const meta = {
+      createdAt: msg.createdAt,
+      messageId: msg.id,
+      ...(msg.role === MessageRole.USER && {
         buttonPayload: msg.buttonPayload,
-        messageId: msg.id,
-      };
-      return message;
-    } else {
-      const message = new AssistantMessage("");
-      message.content = msg.content as MessageContent;
-      message.meta = { createdAt: msg.createdAt, messageId: msg.id };
-      return message;
-    }
-  });
+      }),
+    };
 
-  const conversationHistoryTextOnly = conversationHistoryWithImages.map(
-    (msg) => {
-      const textContent = extractTextContent(msg.content as MessageContent);
+    const contentWithImage = msg.content as MessageContent;
+    const messageWithImage = new MessageClass(contentWithImage);
+    messageWithImage.meta = meta;
+    conversationHistoryWithImages.push(messageWithImage);
 
-      if (msg instanceof UserMessage) {
-        const message = new UserMessage(textContent);
-        message.meta = msg.meta;
-        return message;
-      } else {
-        const message = new AssistantMessage(textContent);
-        message.meta = msg.meta;
-        return message;
-      }
-    },
-  );
+    const textContent = extractTextContent(contentWithImage);
+    const textOnlyMessage = new MessageClass(textContent);
+    textOnlyMessage.meta = meta;
+    conversationHistoryTextOnly.push(textOnlyMessage);
+  }
 
   logger.debug({ whatsappId, graphRunId }, "Message ingested successfully");
 
