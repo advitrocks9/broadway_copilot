@@ -139,7 +139,16 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     },
   );
 
-  await queueImageUpload(user.id, savedMessage.id);
+  queueImageUpload(user.id, savedMessage.id).catch((err) => {
+    logger.error(
+      {
+        err: err instanceof Error ? err.message : String(err),
+        userId: user.id,
+        messageId: savedMessage.id,
+      },
+      "Failed to queue image upload",
+    );
+  });
 
   const conversationHistoryWithImages: (UserMessage | AssistantMessage)[] = [];
   const conversationHistoryTextOnly: (UserMessage | AssistantMessage)[] = [];

@@ -7,7 +7,7 @@ import { SystemMessage } from "../../lib/ai/core/messages";
 import { numImagesInMessage } from "../../utils/context";
 import { loadPrompt } from "../../utils/prompts";
 import { logger } from "../../utils/logger";
-import { GraphState } from "../state";
+import { GraphState, IntentLabel } from "../state";
 import { InternalServerError } from "../../utils/errors";
 
 /**
@@ -42,38 +42,26 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
 
   // Priority 1: Handle explicit button payload routing
   if (buttonPayload) {
-    const stylingRelated = [
+    const stylingRelated: string[] = [
       "styling",
       "occasion",
       "vacation",
       "pairing",
-      "suggest",
-    ] as const;
-    const otherValid = ["general", "vibe_check", "color_analysis"] as const;
+    ];
+    const otherValid: string[] = ["general", "vibe_check", "color_analysis", "suggest"];
 
-    if (stylingRelated.includes(buttonPayload as any)) {
-      logger.debug(
-        { userId, routedIntent: "styling" },
-        "Routed to styling intent from button payload",
-      );
-      return { ...state, intent: "styling", missingProfileField: null };
-    } else if (otherValid.includes(buttonPayload as any)) {
-      logger.debug(
-        { userId, routedIntent: buttonPayload },
-        "Routed to specific intent from button payload",
-      );
-      return {
-        ...state,
-        intent: buttonPayload as (typeof otherValid)[number],
-        missingProfileField: null,
-      };
-    } else {
-      logger.debug(
-        { userId, routedIntent: "general" },
-        "Routing unknown button payload to general intent",
-      );
-      return { ...state, intent: "general", missingProfileField: null };
+    let intent: IntentLabel = "general";
+    if (stylingRelated.includes(buttonPayload)) {
+      intent = "styling";
+    } else if (otherValid.includes(buttonPayload)) {
+      intent = buttonPayload as IntentLabel;
     }
+
+    logger.debug(
+      { userId, routedIntent: intent, buttonPayload },
+      "Routed intent from button payload",
+    );
+    return { ...state, intent, missingProfileField: null };
   }
 
   // Priority 2: Handle pending image-based intents

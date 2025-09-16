@@ -1,6 +1,6 @@
 import "dotenv/config";
 
-import { Conversation, PendingType, MessageRole } from "@prisma/client";
+import { Conversation, GraphRunStatus, PendingType, MessageRole } from "@prisma/client";
 import { StateGraph } from "../lib/graph";
 import { GraphState } from "./state";
 import { logError } from "../utils/errors";
@@ -44,78 +44,71 @@ export async function initializeAgent(): Promise<void> {
   }
 }
 
-async function handleGraphRun(
+async function logGraphResult(
   graphRunId: string,
-  fn: () => Promise<Partial<GraphState> | null>,
+  status: GraphRunStatus,
+  finalState: Partial<GraphState> | null,
+  error?: unknown,
 ): Promise<void> {
-  let finalState: Partial<GraphState> | null = null;
-  let status: "COMPLETED" | "ABORTED" | "ERROR" = "COMPLETED";
-  let error: unknown;
-
   try {
-    finalState = await fn();
-  } catch (err) {
-    error = err;
-    if (err instanceof Error && err.name === "AbortError") {
-      status = "ABORTED";
-    } else {
-      status = "ERROR";
+    const graphRun = await prisma.graphRun.findUnique({
+      where: { id: graphRunId },
+    });
+    if (!graphRun) return;
+
+    const endTime = new Date();
+    const durationMs = endTime.getTime() - graphRun.startTime.getTime();
+
+    if (finalState?.traceBuffer) {
+      const { nodeRuns, llmTraces } = finalState.traceBuffer;
+      const promises: Promise<any>[] = [];
+      if (nodeRuns.length > 0) {
+        promises.push(
+          prisma.nodeRun.createMany({
+            data: nodeRuns.map((ne) => ({
+              ...ne,
+              graphRunId,
+            })),
+          }),
+        );
+      }
+      if (llmTraces.length > 0) {
+        promises.push(
+          prisma.lLMTrace.createMany({
+            data: llmTraces.map((lt) => ({
+              ...lt,
+            })),
+          }),
+        );
+      }
+      if (promises.length > 0) {
+        await Promise.all(promises);
+      }
+      delete finalState.traceBuffer;
     }
-  }
 
-  const graphRun = await prisma.graphRun.findUnique({
-    where: { id: graphRunId },
-  });
-  if (!graphRun) return;
-
-  const endTime = new Date();
-  const durationMs = endTime.getTime() - graphRun.startTime.getTime();
-
-  if (finalState?.traceBuffer) {
-    const { nodeRuns, llmTraces } = finalState.traceBuffer;
-    const promises: Promise<any>[] = [];
-    if (nodeRuns.length > 0) {
-      promises.push(
-        prisma.nodeRun.createMany({
-          data: nodeRuns.map((ne) => ({
-            ...ne,
-            graphRunId,
-          })),
-        }),
-      );
-    }
-    if (llmTraces.length > 0) {
-      promises.push(
-        prisma.lLMTrace.createMany({
-          data: llmTraces.map((lt) => ({
-            ...lt,
-          })),
-        }),
-      );
-    }
-    if (promises.length > 0) {
-      await Promise.all(promises);
-    }
-    delete finalState.traceBuffer;
-  }
-
-  await prisma.graphRun.update({
-    where: { id: graphRunId },
-    data: {
-      finalState: finalState as any,
-      status,
-      errorTrace: error
-        ? error instanceof Error
-          ? error.stack
-          : String(error)
-        : undefined,
-      endTime,
-      durationMs,
-    },
-  });
-
-  if (status === "ERROR" || status === "ABORTED") {
-    throw error;
+    await prisma.graphRun.update({
+      where: { id: graphRunId },
+      data: {
+        finalState: finalState as any,
+        status,
+        errorTrace: error
+          ? error instanceof Error
+            ? error.stack
+            : String(error)
+          : undefined,
+        endTime,
+        durationMs,
+      },
+    });
+  } catch (logErr: unknown) {
+    logger.error(
+      {
+        err: logErr instanceof Error ? logErr.message : String(logErr),
+        graphRunId,
+      },
+      "Failed to log graph result",
+    );
   }
 }
 
@@ -154,36 +147,40 @@ export async function runAgent(
   }
 
   let conversation: Conversation | undefined;
+  let finalState: Partial<GraphState> | null = null;
+  const graphRunId = messageId;
   try {
     const { user, conversation: _conversation } =
       await getOrCreateUserAndConversation(whatsappId, profileName);
     conversation = _conversation;
 
-    const graphRun = await prisma.graphRun.create({
+    await prisma.graphRun.create({
       data: {
-        id: messageId,
+        id: graphRunId,
         userId: user.id,
         conversationId: conversation.id,
         initialState: { input, user },
       },
     });
 
-    await handleGraphRun(graphRun.id, () =>
-      compiledApp!.invoke(
-        {
-          input,
-          user,
-          graphRunId: graphRun.id,
-          conversationId: conversation!.id,
-          traceBuffer: { nodeRuns: [], llmTraces: [] },
-        },
-        { signal: controller.signal, runId: graphRun.id },
-      ),
+    finalState = await compiledApp.invoke(
+      {
+        input,
+        user,
+        graphRunId,
+        conversationId: conversation.id,
+        traceBuffer: { nodeRuns: [], llmTraces: [] },
+      },
+      { signal: controller.signal, runId: graphRunId },
     );
+    logGraphResult(graphRunId, "COMPLETED", finalState);
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
+      logGraphResult(graphRunId, "ABORTED", finalState, err);
       throw err;
     }
+    logGraphResult(graphRunId, "ERROR", finalState, err);
+
     const error = logError(err, {
       whatsappId,
       messageId,

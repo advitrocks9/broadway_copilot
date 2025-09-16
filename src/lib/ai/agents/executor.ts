@@ -128,65 +128,48 @@ export async function agentExecutor<T extends ZodType>(
     conversation.push(assistant);
 
     if (!toolCalls || toolCalls.length === 0) {
-      return await getFinalStructuredOutput(
-        runner,
-        conversation,
-        options.outputSchema,
-        traceBuffer,
-        options.nodeName,
-      );
-    }
-
-    // Filter out tool calls that have already been executed
-    const newToolCalls = toolCalls.filter(
-      (toolCall) => !seenToolCallIds.has(toolCall.id),
-    );
-
-    // Mark new tool calls as seen
-    newToolCalls.forEach((toolCall) => seenToolCallIds.add(toolCall.id));
-
-    if (newToolCalls.length === 0) {
-      return await getFinalStructuredOutput(
-        runner,
-        conversation,
-        options.outputSchema,
-        traceBuffer,
-        options.nodeName,
-      );
+      break;
     }
 
     const toolResults = await Promise.all(
-      newToolCalls.map(async (toolCall) => {
-        const toolDef = options.tools.find((t) => t.name === toolCall.name);
-        if (!toolDef) {
-          return {
-            id: toolCall.id,
-            name: toolCall.name,
-            result: `Tool '${toolCall.name}' not found.`,
-            isError: true,
-          };
-        }
-        try {
-          const parsedArgs = toolDef.schema.parse(toolCall.arguments);
-          const result = await Promise.resolve(toolDef.func(parsedArgs));
-          return {
-            id: toolCall.id,
-            name: toolDef.name,
-            result,
-            isError: false,
-          };
-        } catch (error) {
-          return {
-            id: toolCall.id,
-            name: toolCall.name,
-            result: `Error executing tool '${toolCall.name}': ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-            isError: true,
-          };
-        }
-      }),
+      toolCalls
+        .filter((toolCall) => !seenToolCallIds.has(toolCall.id))
+        .map(async (toolCall) => {
+          seenToolCallIds.add(toolCall.id);
+          const toolDef = options.tools.find((t) => t.name === toolCall.name);
+          if (!toolDef) {
+            return {
+              id: toolCall.id,
+              name: toolCall.name,
+              result: `Tool '${toolCall.name}' not found.`,
+              isError: true,
+            };
+          }
+          try {
+            const parsedArgs = toolDef.schema.parse(toolCall.arguments);
+            const result = await Promise.resolve(toolDef.func(parsedArgs));
+            return {
+              id: toolCall.id,
+              name: toolDef.name,
+              result,
+              isError: false,
+            };
+          } catch (error) {
+            return {
+              id: toolCall.id,
+              name: toolCall.name,
+              result: `Error executing tool '${toolCall.name}': ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+              isError: true,
+            };
+          }
+        }),
     );
+
+    if (toolResults.length === 0) {
+      break;
+    }
 
     toolResults.forEach((toolResult) => {
       conversation.push(
