@@ -4,6 +4,7 @@ import twilio, { Twilio } from "twilio";
 import { Request } from "express";
 
 import RequestClient from "twilio/lib/base/RequestClient";
+import { redis } from "./redis";
 import {
   TWILIO_WHATSAPP_FROM,
   TWILIO_QUICKREPLY2_SID,
@@ -21,12 +22,18 @@ import {
   QuickReplyButton,
   TwilioApiError,
   TwilioMessageOptions,
-  StatusResolvers,
   TwilioStatusCallbackPayload,
 } from "./twilio/types";
 
-const sidToResolvers = new Map<string, StatusResolvers>();
-const sidToSeenStatuses = new Map<string, Set<string>>();
+let subscriber: ReturnType<typeof redis.duplicate> | undefined;
+
+async function getSubscriber() {
+  if (!subscriber || !subscriber.isOpen) {
+    subscriber = redis.duplicate();
+    await subscriber.connect();
+  }
+  return subscriber;
+}
 
 let cachedClient: Twilio | undefined;
 
@@ -183,27 +190,46 @@ async function awaitStatuses(sid: string): Promise<void> {
     process.env.TWILIO_DELIVERED_TIMEOUT_MS || 15000,
   );
 
+  const channel = `twilio:status:${sid}`;
+  const seenStatusesKey = `twilio:seen:${sid}`;
+
+  const sub = await getSubscriber();
+
   let resolveSent!: () => void;
   let resolveDelivered!: () => void;
+
   const sentPromise = new Promise<void>((resolve) => {
     resolveSent = resolve;
   });
   const deliveredPromise = new Promise<void>((resolve) => {
     resolveDelivered = resolve;
   });
-  const resolvers: StatusResolvers = {
-    resolveSent,
-    resolveDelivered,
-    sentPromise,
-    deliveredPromise,
-  };
-  sidToResolvers.set(sid, resolvers);
 
-  const preSeen = sidToSeenStatuses.get(sid);
-  if (preSeen) {
-    if (preSeen.has("sent")) resolveSent();
-    if (preSeen.has("delivered")) resolveDelivered();
-    sidToSeenStatuses.delete(sid);
+  const listener = (message: string) => {
+    if (message === "sent") {
+      resolveSent();
+    } else if (
+      message === "delivered" ||
+      message === "failed" ||
+      message === "undelivered"
+    ) {
+      resolveDelivered();
+    }
+  };
+
+  sub.subscribe(channel, listener);
+
+  // Check for statuses that arrived before we subscribed
+  const preSeenStatuses = await redis.sMembers(seenStatusesKey);
+  if (preSeenStatuses.includes("sent")) {
+    resolveSent();
+  }
+  if (
+    preSeenStatuses.some((s) =>
+      ["delivered", "failed", "undelivered"].includes(s),
+    )
+  ) {
+    resolveDelivered();
   }
 
   const sentTimer = setTimeout(() => {
@@ -230,11 +256,8 @@ async function awaitStatuses(sid: string): Promise<void> {
   clearTimeout(deliveredTimer);
   logger.debug({ sid }, 'Received "delivered" status');
 
-  const cleanupTimer = setTimeout(() => {
-    logger.debug({ sid }, "Cleaning up expired message resolvers");
-    sidToResolvers.delete(sid);
-  }, 300000); // 5 minutes
-  resolvers.cleanupTimer = cleanupTimer;
+  await sub.unsubscribe(channel);
+  redis.del(seenStatusesKey);
 }
 
 /**
@@ -330,74 +353,33 @@ export function processStatusCallback(
   }
 
   const statusLower = status.toLowerCase();
+  const channel = `twilio:status:${sid}`;
+  const seenStatusesKey = `twilio:seen:${sid}`;
 
-  const resolvers = sidToResolvers.get(sid);
+  redis.publish(channel, statusLower);
 
-  if (resolvers) {
-    switch (statusLower) {
-      case "sent":
-        logger.debug({ sid }, "Message sent successfully");
-        resolvers.resolveSent();
+  // Store status in case callback arrives before listener is ready
+  redis.sAdd(seenStatusesKey, statusLower);
+  redis.expire(seenStatusesKey, 300); // 5 minutes TTL
 
-        if (resolvers.cleanupTimer) {
-          clearTimeout(resolvers.cleanupTimer);
-          resolvers.cleanupTimer = undefined;
-        }
-        break;
-
-      case "delivered":
-        logger.info({ sid }, "Message delivered successfully");
-        resolvers.resolveDelivered();
-
-        setTimeout(() => {
-          sidToResolvers.delete(sid);
-        }, 1000);
-        break;
-
-      case "failed":
-      case "undelivered":
-        logger.warn({ sid, status }, "Message delivery failed");
-        resolvers.resolveDelivered();
-
-        setTimeout(() => {
-          sidToResolvers.delete(sid);
-        }, 1000);
-        break;
-
-      case "queued":
-      case "sending":
-        break;
-
-      default:
-        logger.warn(
-          { sid, status: statusLower },
-          "Unknown message status received",
-        );
-    }
-  } else {
-    logger.debug(
-      { sid, status: statusLower },
-      "No waiting resolvers found for message",
-    );
-
-    const seenStatuses = sidToSeenStatuses.get(sid) || new Set<string>();
-    seenStatuses.add(statusLower);
-
-    if (seenStatuses.size > 10) {
-      const recentStatuses = Array.from(seenStatuses).slice(-5);
-      sidToSeenStatuses.set(sid, new Set(recentStatuses));
-    } else {
-      sidToSeenStatuses.set(sid, seenStatuses);
-    }
-
-    setTimeout(() => {
-      const currentStatuses = sidToSeenStatuses.get(sid);
-      if (currentStatuses) {
-        currentStatuses.delete(statusLower);
-        if (currentStatuses.size === 0) {
-          sidToSeenStatuses.delete(sid);
-        }
-      }
-    }, 300000);
+  switch (statusLower) {
+    case "sent":
+      logger.debug({ sid }, "Message sent successfully");
+      break;
+    case "delivered":
+      logger.info({ sid }, "Message delivered successfully");
+      break;
+    case "failed":
+    case "undelivered":
+      logger.warn({ sid, status }, "Message delivery failed");
+      break;
+    case "queued":
+    case "sending":
+      break;
+    default:
+      logger.warn(
+        { sid, status: statusLower },
+        "Unknown message status received",
+      );
   }
 }

@@ -9,9 +9,21 @@ import { TwilioWebhookRequest } from "../lib/twilio/types";
 import { getOrCreateUserAndConversation } from "../utils/context";
 import { sendText } from "../lib/twilio";
 import { prisma } from "../lib/prisma";
+import { redis } from "../lib/redis";
 import { buildAgentGraph } from "./graph";
 
 let compiledApp: ReturnType<typeof StateGraph.prototype.compile> | null = null;
+let subscriber: ReturnType<typeof redis.duplicate> | undefined;
+
+const getUserAbortChannel = (id: string) => `user_abort:${id}`;
+
+async function getSubscriber() {
+  if (!subscriber || !subscriber.isOpen) {
+    subscriber = redis.duplicate();
+    await subscriber.connect();
+  }
+  return subscriber;
+}
 
 /**
  * Builds and compiles the agent's state graph. This function should be called
@@ -105,15 +117,24 @@ async function handleGraphRun(
  * @param input - Raw Twilio webhook payload containing message data
  * @param options - Optional configuration including abort signal
  */
+// Refactored to handle Redis-based abort signals
 export async function runAgent(
+  userId: string,
+  messageId: string,
   input: TwilioWebhookRequest,
-  options?: { signal?: AbortSignal },
 ): Promise<void> {
-  const {
-    WaId: whatsappId,
-    MessageSid: messageId,
-    ProfileName: profileName,
-  } = input;
+  const controller = new AbortController();
+  const sub = await getSubscriber();
+  const channel = getUserAbortChannel(userId);
+
+  const listener = (message: string) => {
+    if (message === messageId) {
+      controller.abort();
+    }
+  };
+  sub.subscribe(channel, listener);
+
+  const { WaId: whatsappId, ProfileName: profileName } = input;
 
   if (!whatsappId) {
     throw new Error("Whatsapp ID not found in webhook payload");
@@ -149,7 +170,7 @@ export async function runAgent(
           conversationId: conversation!.id,
           traceBuffer: { nodeRuns: [], llmTraces: [] },
         },
-        { signal: options?.signal, runId: graphRun.id },
+        { signal: controller.signal, runId: graphRun.id },
       ),
     );
   } catch (err: unknown) {
@@ -190,5 +211,7 @@ export async function runAgent(
       });
     }
     throw error;
+  } finally {
+    await sub.unsubscribe(channel);
   }
 }

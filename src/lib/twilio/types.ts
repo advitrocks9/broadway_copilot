@@ -150,18 +150,3 @@ export interface QuickReplyButton {
   text: string;
   id: string;
 }
-
-/**
- * Promise-based resolvers for tracking WhatsApp message delivery status.
- *
- * Provides a mechanism to asynchronously wait for message delivery confirmations
- * from Twilio. Includes separate promises for 'sent' and 'delivered' status updates,
- * along with manual resolver functions and cleanup timers for timeout handling.
- */
-export interface StatusResolvers {
-  resolveSent: () => void;
-  resolveDelivered: () => void;
-  sentPromise: Promise<void>;
-  deliveredPromise: Promise<void>;
-  cleanupTimer?: NodeJS.Timeout;
-}

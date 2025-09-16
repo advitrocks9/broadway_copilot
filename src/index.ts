@@ -33,11 +33,7 @@ app.use("/uploads", express.static(staticUploadsMount()));
 const getMessageKey = (id: string) => `message:${id}`;
 const getUserActiveKey = (id: string) => `user_active:${id}`;
 const getUserQueueKey = (id: string) => `user_queue:${id}`;
-
-const userControllers: Map<
-  string,
-  { controller: AbortController; messageId: string }
-> = new Map();
+const getUserAbortChannel = (id: string) => `user_abort:${id}`;
 
 /**
  * Main Twilio webhook handler for incoming WhatsApp messages.
@@ -82,17 +78,13 @@ app.post(
       const currentStatus = currentActive
         ? await redis.hGet(getMessageKey(currentActive), "status")
         : null;
-      const hasActiveRun = userControllers.has(userId);
 
-      if (hasActiveRun && currentStatus === "running") {
-        const active = userControllers.get(userId);
-        if (active) {
-          active.controller.abort();
-          logger.info(
-            { userId, abortedMessageId: active.messageId },
-            "Aborted previous message processing",
-          );
-        }
+      if (currentActive && currentStatus === "running") {
+        await redis.publish(getUserAbortChannel(userId), currentActive);
+        logger.info(
+          { userId, abortedMessageId: currentActive },
+          "Published abort signal for previous message processing",
+        );
       }
 
       if (currentStatus === "sending") {
@@ -165,14 +157,12 @@ async function processMessage(
   messageId: string,
   input: TwilioWebhookRequest,
 ): Promise<void> {
-  const controller = new AbortController();
-  userControllers.set(userId, { controller, messageId });
   const mk = getMessageKey(messageId);
 
   try {
     await redis.hSet(mk, { status: "running" });
 
-    await runAgent(input, { signal: controller.signal });
+    await runAgent(userId, messageId, input);
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
       logger.info({ userId, messageId }, "Message processing aborted");
@@ -192,20 +182,20 @@ async function processMessage(
       );
     }
   } finally {
-    const current = userControllers.get(userId);
-    if (current && current.messageId === messageId) {
-      userControllers.delete(userId);
+    const uak = getUserActiveKey(userId);
+    const activeMessageId = await redis.get(uak);
 
+    if (activeMessageId === messageId) {
       try {
         const uqk = getUserQueueKey(userId);
         const nextStr = await redis.lPop(uqk);
         if (nextStr) {
           const next = JSON.parse(nextStr);
-          const uak = getUserActiveKey(userId);
-          await redis.set(uak, next.messageId, { EX: USER_STATE_TTL_SECONDS });
+          await redis.set(uak, next.messageId, {
+            EX: USER_STATE_TTL_SECONDS,
+          });
           processMessage(userId, next.messageId, next.input);
         } else {
-          const uak = getUserActiveKey(userId);
           await redis.del(uak);
         }
       } catch (queueErr: unknown) {
