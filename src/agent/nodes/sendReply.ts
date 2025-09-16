@@ -10,7 +10,6 @@ import { logger } from "../../utils/logger";
 import { InternalServerError } from "../../utils/errors";
 import { Replies } from "../state";
 import { GraphState } from "../state";
-import { ConversationStatus } from "@prisma/client";
 
 /**
  * Sends the reply via Twilio based on the assistant's generated replies.
@@ -20,17 +19,12 @@ import { ConversationStatus } from "@prisma/client";
  * @returns An empty object as no state updates are needed.
  */
 export async function sendReply(state: GraphState): Promise<GraphState> {
-  const { input, user } = state;
+  const { input, user, conversationId } = state;
   const messageId = input.MessageSid;
   const messageKey = `message:${messageId}`;
   const whatsappId = user.whatsappId;
 
-  const conversation = await prisma.conversation.findFirst({
-    where: { userId: user.id, status: ConversationStatus.OPEN },
-    orderBy: { createdAt: "desc" },
-  });
-
-  if (!conversation) {
+  if (!conversationId) {
     throw new InternalServerError("No open conversation found for user");
   }
 
@@ -51,15 +45,6 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
 
   const pendingToPersist =
     (state.pending as PendingType | undefined) ?? PendingType.NONE;
-
-  await prisma.message.create({
-    data: {
-      conversationId: conversation.id,
-      role: MessageRole.AI,
-      content: formattedContent,
-      pending: pendingToPersist,
-    },
-  });
 
   let success = true;
   try {
@@ -102,6 +87,15 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
     );
     await redis.hSet(messageKey, { status: success ? "delivered" : "failed" });
   }
+
+  await prisma.message.create({
+    data: {
+      conversationId,
+      role: MessageRole.AI,
+      content: formattedContent,
+      pending: pendingToPersist,
+    },
+  });
 
   return { ...state };
 }

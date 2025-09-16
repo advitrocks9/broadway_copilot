@@ -135,23 +135,24 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
         "colorAnalysis",
       );
 
-    await prisma.colorAnalysis.create({
-      data: {
-        userId,
-        skin_tone: output.skin_tone?.name ?? null,
-        eye_color: output.eye_color?.name ?? null,
-        hair_color: output.hair_color?.name ?? null,
-        undertone: output.undertone ?? null,
-        palette_name: output.palette_name ?? null,
-        top3_colors: output.top3_colors,
-        avoid3_colors: output.avoid3_colors,
-      },
-    });
-
-    const user = await prisma.user.update({
-      where: { id: state.user.id },
-      data: { lastColorAnalysisAt: new Date() },
-    });
+    const [, user] = await prisma.$transaction([
+      prisma.colorAnalysis.create({
+        data: {
+          userId,
+          skin_tone: output.skin_tone?.name ?? null,
+          eye_color: output.eye_color?.name ?? null,
+          hair_color: output.hair_color?.name ?? null,
+          undertone: output.undertone ?? null,
+          palette_name: output.palette_name ?? null,
+          top3_colors: output.top3_colors,
+          avoid3_colors: output.avoid3_colors,
+        },
+      }),
+      prisma.user.update({
+        where: { id: state.user.id },
+        data: { lastColorAnalysisAt: new Date() },
+      }),
+    ]);
 
     const replies: Replies = [
       { reply_type: "text", reply_text: output.message1_text },

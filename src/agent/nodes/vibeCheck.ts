@@ -152,17 +152,18 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
       }
     });
 
-    await prisma.vibeCheck.create({
-      data: {
-        userId,
-        ...vibeCheckData,
-      },
-    });
-
-    const user = await prisma.user.update({
-      where: { id: userId },
-      data: { lastVibeCheckAt: new Date() },
-    });
+    const [, user] = await prisma.$transaction([
+      prisma.vibeCheck.create({
+        data: {
+          userId,
+          ...vibeCheckData,
+        },
+      }),
+      prisma.user.update({
+        where: { id: userId },
+        data: { lastVibeCheckAt: new Date() },
+      }),
+    ]);
 
     await queueWardrobeIndex(userId, latestMessageId);
     logger.debug({ userId }, "Scheduled wardrobe indexing for message");

@@ -25,40 +25,21 @@ export async function getOrCreateUserAndConversation(
   }
 
   try {
-    const userWithConversation = await prisma.user.findUnique({
+    const user = await prisma.user.upsert({
       where: { whatsappId },
-      include: {
-        conversations: {
-          where: { status: ConversationStatus.OPEN },
-          orderBy: { updatedAt: "desc" },
-          take: 1,
-        },
-      },
+      update: { profileName },
+      create: { whatsappId, profileName },
     });
 
-    if (!userWithConversation) {
-      logger.debug(
-        { whatsappId },
-        "User not found, creating new user and conversation.",
-      );
-      const newUser = await prisma.user.create({
-        data: {
-          whatsappId,
-          profileName,
-          conversations: {
-            create: {},
-          },
-        },
-        include: {
-          conversations: true,
-        },
-      });
-      const { conversations, ...user } = newUser;
-      return { user, conversation: conversations[0] };
-    }
-
-    const { conversations, ...user } = userWithConversation;
-    const lastOpenConversation = conversations[0];
+    const lastOpenConversation = await prisma.conversation.findFirst({
+      where: {
+        userId: user.id,
+        status: ConversationStatus.OPEN,
+      },
+      orderBy: {
+        updatedAt: "desc",
+      },
+    });
 
     if (lastOpenConversation) {
       const timeSinceLastUpdate =

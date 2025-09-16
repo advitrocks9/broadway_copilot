@@ -59,81 +59,87 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     }
   }
 
-  const [lastMessage, latestAssistantMessage] = await Promise.all([
-    prisma.message.findFirst({
-      where: { conversationId },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, role: true, content: true },
-    }),
-    prisma.message.findFirst({
-      where: {
-        conversation: { id: conversationId, userId: user.id },
-        role: MessageRole.AI,
-      },
-      orderBy: { createdAt: "desc" },
-      select: { pending: true },
-    }),
-  ]);
-
-  const pending = latestAssistantMessage?.pending ?? PendingType.NONE;
-
-  let savedMessage;
-  if (lastMessage && lastMessage.role === MessageRole.USER) {
-    const existingContent = lastMessage.content as MessageContent;
-    const mergedContent = [...existingContent, ...content];
-
-    savedMessage = await prisma.message.update({
-      where: { id: lastMessage.id },
-      data: {
-        content: mergedContent,
-        ...(buttonPayload != null && { buttonPayload }),
-        ...(media && {
-          media: {
-            create: {
-              twilioUrl: media.twilioUrl,
-              serverUrl: media.serverUrl,
-              mimeType: media.mimeType,
-            },
-          },
+  const { savedMessage, messages, pending } = await prisma.$transaction(
+    async (tx) => {
+      const [lastMessage, latestAssistantMessage] = await Promise.all([
+        tx.message.findFirst({
+          where: { conversationId },
+          orderBy: { createdAt: "desc" },
+          select: { id: true, role: true, content: true },
         }),
-      },
-    });
-  } else {
-    savedMessage = await prisma.message.create({
-      data: {
-        conversationId,
-        role: MessageRole.USER,
-        content,
-        ...(buttonPayload != null && { buttonPayload }),
-        ...(media && {
-          media: {
-            create: {
-              twilioUrl: media.twilioUrl,
-              serverUrl: media.serverUrl,
-              mimeType: media.mimeType,
-            },
+        tx.message.findFirst({
+          where: {
+            conversation: { id: conversationId, userId: user.id },
+            role: MessageRole.AI,
           },
+          orderBy: { createdAt: "desc" },
+          select: { pending: true },
         }),
-      },
-    });
-  }
+      ]);
+
+      const pendingState = latestAssistantMessage?.pending ?? PendingType.NONE;
+
+      let savedMessage;
+      if (lastMessage && lastMessage.role === MessageRole.USER) {
+        const existingContent = lastMessage.content as MessageContent;
+        const mergedContent = [...existingContent, ...content];
+
+        savedMessage = await tx.message.update({
+          where: { id: lastMessage.id },
+          data: {
+            content: mergedContent,
+            ...(buttonPayload != null && { buttonPayload }),
+            ...(media && {
+              media: {
+                create: {
+                  twilioUrl: media.twilioUrl,
+                  serverUrl: media.serverUrl,
+                  mimeType: media.mimeType,
+                },
+              },
+            }),
+          },
+        });
+      } else {
+        savedMessage = await tx.message.create({
+          data: {
+            conversationId,
+            role: MessageRole.USER,
+            content,
+            ...(buttonPayload != null && { buttonPayload }),
+            ...(media && {
+              media: {
+                create: {
+                  twilioUrl: media.twilioUrl,
+                  serverUrl: media.serverUrl,
+                  mimeType: media.mimeType,
+                },
+              },
+            }),
+          },
+        });
+      }
+
+      const messages = await tx.message.findMany({
+        where: {
+          conversationId,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: {
+          id: true,
+          role: true,
+          content: true,
+          buttonPayload: true,
+          createdAt: true,
+        },
+      });
+
+      return { savedMessage, messages, pending: pendingState };
+    },
+  );
 
   await queueImageUpload(user.id, savedMessage.id);
-
-  const messages = await prisma.message.findMany({
-    where: {
-      conversationId,
-    },
-    orderBy: { createdAt: "desc" },
-    take: 10,
-    select: {
-      id: true,
-      role: true,
-      content: true,
-      buttonPayload: true,
-      createdAt: true,
-    },
-  });
 
   const conversationHistoryWithImages = messages.reverse().map((msg) => {
     if (msg.role === MessageRole.USER) {
