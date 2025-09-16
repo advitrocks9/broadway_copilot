@@ -6,6 +6,7 @@ import express, { NextFunction, Request, Response } from 'express';
 import { authenticateRequest } from './middleware/auth';
 import { errorHandler } from './middleware/errors';
 import { rateLimiter } from './middleware/rateLimiter';
+import { whitelist } from './middleware/whitelist';
 import { initializeAgent, runAgent } from './agent';
 import { connectRedis, redis } from './lib/redis';
 import { connectPrisma } from './lib/prisma';
@@ -37,7 +38,7 @@ const userControllers: Map<string, { controller: AbortController; messageId: str
  * Main Twilio webhook handler for incoming WhatsApp messages.
  * Handles message queuing, duplicate detection, and concurrency control.
  */
-app.post('/twilio/', authenticateRequest, rateLimiter, async (req: Request, res: Response, next: NextFunction) => {
+app.post('/twilio/', authenticateRequest, whitelist, rateLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const webhookPayload = req.body as TwilioWebhookRequest;
     const { WaId: userId, MessageSid: messageId } = webhookPayload;

@@ -54,7 +54,7 @@ export async function sendText(to: string, body: string, imageUrl?: string): Pro
     const messageOptions: TwilioMessageOptions = {
       body,
       from: fromNumber,
-      to: `whatsapp:${to}`,
+      to: `whatsapp:+${to}`,
     };
     if (imageUrl) {
       messageOptions.mediaUrl = [imageUrl];
@@ -112,7 +112,7 @@ export async function sendMenu(to: string, replyText: string, buttons?: readonly
       contentSid,
       contentVariables: JSON.stringify(contentVariables),
       from: fromNumber,
-      to: `whatsapp:${to}`,
+      to: `whatsapp:+${to}`,
     };
 
     addStatusCallback(payload);

@@ -1,11 +1,13 @@
 import { NextFunction, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
+import { sendText } from '../lib/twilio';
 import { TwilioWebhookRequest } from '../lib/twilio/types';
 import { ForbiddenError, InternalServerError } from '../utils/errors';
+import { logger } from '../utils/logger';
 
 export const whitelist = async (
   req: Request,
-  _res: Response,
+  res: Response,
   next: NextFunction
 ) => {
   const { WaId } = req.body as TwilioWebhookRequest;
@@ -22,7 +24,12 @@ export const whitelist = async (
     });
 
     if (!user) {
-      return next(new ForbiddenError('Unauthorized'));
+      logger.info(`Unauthorized access attempt by ${WaId}`);
+      await sendText(
+        WaId,
+        "Hey! Thanks for your interest in Broadway. We're currently in a private beta. We'll let you know when we're ready for you!"
+      );
+      return res.status(403).send('Forbidden');
     }
 
     next();
