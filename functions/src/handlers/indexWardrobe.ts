@@ -1,14 +1,14 @@
-import fs from 'fs';
-import path from 'path';
-import { PrismaClient } from '@prisma/client';
-import { buildSearchDoc, buildKeywords, Item } from '../utils/wardrobe';
-import { getEmbedding, generateJson } from '../utils/openai';
+import fs from "fs";
+import path from "path";
+import { PrismaClient } from "@prisma/client";
+import { buildSearchDoc, buildKeywords, Item } from "../utils/wardrobe";
+import { getEmbedding, generateJson } from "../utils/openai";
 
 const WARDROBE_PROMPT = fs.readFileSync(
-  path.join(__dirname, '..', '..', 'wardrobe_prompt.txt'),
-  'utf-8'
+  path.join(__dirname, "..", "..", "wardrobe_prompt.txt"),
+  "utf-8",
 );
-const WARDROBE_MODEL = process.env.OPENAI_WARDROBE_INDEXING_MODEL || 'gpt-5';
+const WARDROBE_MODEL = process.env.OPENAI_WARDROBE_INDEXING_MODEL || "gpt-5";
 
 export type IndexWardrobePayload = {
   userId: string;
@@ -21,7 +21,7 @@ export type IndexWardrobeResult = {
 
 export const indexWardrobeHandler = async (
   prisma: PrismaClient,
-  payload: IndexWardrobePayload
+  payload: IndexWardrobePayload,
 ): Promise<IndexWardrobeResult> => {
   const { userId, messageId } = payload;
 
@@ -31,20 +31,20 @@ export const indexWardrobeHandler = async (
   });
 
   if (!message?.media?.length) {
-    return { message: 'No media to process' };
+    return { message: "No media to process" };
   }
 
   let itemsCreated = 0;
 
   for (const media of message.media) {
-    if (!media.mimeType.startsWith('image/')) continue;
+    if (!media.mimeType.startsWith("image/")) continue;
 
     const result = await generateJson<{ items: Item[] }>(WARDROBE_MODEL, [
       {
-        role: 'user',
+        role: "user",
         content: [
-          { type: 'input_text', text: WARDROBE_PROMPT },
-          { type: 'input_image', image_url: media.serverUrl, detail: 'high' },
+          { type: "input_text", text: WARDROBE_PROMPT },
+          { type: "input_image", image_url: media.serverUrl, detail: "high" },
         ],
       },
     ]);
