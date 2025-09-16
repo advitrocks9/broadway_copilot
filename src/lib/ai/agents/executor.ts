@@ -9,6 +9,7 @@ import {
 } from '../core/messages';
 import { Tool } from '../core/tools';
 import { BaseChatModel } from '../core/base_chat_model';
+import { TraceBuffer } from '../../../agent/tracing';
 
 const MAX_ITERATIONS = 5;
 
@@ -26,7 +27,7 @@ async function getFinalStructuredOutput<T extends ZodType>(
   runner: BaseChatModel,
   conversation: BaseMessage[],
   outputSchema: T,
-  graphRunId: string,
+  traceBuffer: TraceBuffer,
   nodeName?: string,
 ): Promise<T['_output']> {
   const lastMessage = conversation[conversation.length - 1];
@@ -50,7 +51,7 @@ async function getFinalStructuredOutput<T extends ZodType>(
     return await structuredRunner.run(
       customPrompt,
       parsingConversation,
-      graphRunId,
+      traceBuffer,
       nodeName,
     );
   }
@@ -108,7 +109,7 @@ export async function agentExecutor<T extends ZodType>(
     outputSchema: T;
     nodeName?: string;
   },
-  graphRunId: string,
+  traceBuffer: TraceBuffer,
   maxLoops: number = MAX_ITERATIONS,
 ): Promise<T['_output']> {
   const runnerWithTools = runner.bind(options.tools);
@@ -121,7 +122,7 @@ export async function agentExecutor<T extends ZodType>(
     const { assistant, toolCalls } = await runnerWithTools.run(
       systemPrompt,
       conversation,
-      graphRunId,
+      traceBuffer,
       options.nodeName,
     );
 
@@ -132,7 +133,7 @@ export async function agentExecutor<T extends ZodType>(
         runner,
         conversation,
         options.outputSchema,
-        graphRunId,
+        traceBuffer,
         options.nodeName,
       );
     }
@@ -150,7 +151,7 @@ export async function agentExecutor<T extends ZodType>(
         runner,
         conversation,
         options.outputSchema,
-        graphRunId,
+        traceBuffer,
         options.nodeName,
       );
     }
@@ -204,7 +205,7 @@ export async function agentExecutor<T extends ZodType>(
     runner,
     conversation,
     options.outputSchema,
-    graphRunId,
+    traceBuffer,
     options.nodeName,
   );
 }

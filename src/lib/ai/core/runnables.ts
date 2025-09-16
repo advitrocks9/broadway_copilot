@@ -1,5 +1,6 @@
 import { BaseMessage, SystemMessage } from './messages';
 import { ToolCall } from './tools';
+import { TraceBuffer } from '../../../agent/tracing';
 
 /**
  * Defines the core parameters for configuring a chat model instance.
@@ -107,14 +108,14 @@ export interface ModelRunner {
    *
    * @param systemPrompt The system prompt to guide the model's behavior.
    * @param messages The array of messages representing the conversation history.
-   * @param graphRunId The ID of the current graph run for tracing purposes.
+   * @param traceBuffer The buffer to store trace information.
    * @param nodeName The name of the graph node making this call.
    * @returns A promise that resolves to the outcome of the model run.
    */
   run(
     systemPrompt: SystemMessage,
     messages: BaseMessage[],
-    graphRunId: string,
+    traceBuffer: TraceBuffer,
     nodeName?: string,
   ): Promise<RunOutcome>;
 }

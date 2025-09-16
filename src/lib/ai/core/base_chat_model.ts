@@ -1,7 +1,5 @@
 import 'dotenv/config';
 
-import { LLMTrace } from '@prisma/client';
-import { Prisma } from '@prisma/client';
 import Groq from 'groq-sdk';
 import OpenAI from 'openai';
 import { ZodType } from 'zod';
@@ -12,42 +10,7 @@ import {
 } from './messages';
 import { Tool } from './tools';
 import { StructuredOutputRunnable } from './structured_output_runnable';
-import { prisma } from '../../../lib/prisma';
-
-export async function traceLLMCall<T>(
-  graphRunId: string,
-  modelParams: ChatModelParams,
-  messages: BaseMessage[],
-  requestParams: any,
-  apiCall: () => Promise<T>,
-  nodeName?: string,
-): Promise<{ response: T; llmTrace: LLMTrace }> {
-  const llmTrace = await prisma.lLMTrace.create({
-    data: {
-      graphRunId,
-      nodeName,
-      model: modelParams.model,
-      inputMessages: messages.map(m => m.toJSON()) as Prisma.JsonArray,
-      rawRequest: requestParams as Prisma.JsonObject,
-    },
-  });
-
-  try {
-    const response = await apiCall();
-    return { response, llmTrace };
-  } catch (err) {
-    const endTime = new Date();
-    await prisma.lLMTrace.update({
-      where: { id: llmTrace.id },
-      data: {
-        errorTrace: err instanceof Error ? err.stack : String(err),
-        endTime,
-        durationMs: endTime.getTime() - llmTrace.startTime.getTime(),
-      },
-    });
-    throw err;
-  }
-}
+import { TraceBuffer } from '../../../agent/tracing';
 
 /**
  * Abstract base class for chat models, providing a common interface for
@@ -111,7 +74,7 @@ export abstract class BaseChatModel implements ModelRunner {
   abstract run(
     systemPrompt: SystemMessage,
     msgs: BaseMessage[],
-    graphRunId: string,
+    traceBuffer: TraceBuffer,
     nodeName?: string,
   ): Promise<RunOutcome>;
 

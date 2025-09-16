@@ -250,18 +250,17 @@ model GraphRun {
   endTime    DateTime?
   durationMs Int?
 
-  llmTraces LLMTrace[]
+  nodeRuns NodeRun[]
 
   @@index([conversationId, startTime])
   @@index([userId, startTime])
 }
 
 model LLMTrace {
-  id         String   @id @default(cuid())
-  graphRunId String
-  graphRun   GraphRun @relation(fields: [graphRunId], references: [id], onDelete: Cascade)
+  id        String        @id @default(cuid())
+  nodeRunId String
+  nodeRun   NodeRun @relation(fields: [nodeRunId], references: [id], onDelete: Cascade)
 
-  nodeName         String?
   model            String
   promptTokens     Int?
   completionTokens Int?
@@ -277,6 +276,21 @@ model LLMTrace {
   startTime  DateTime  @default(now())
   endTime    DateTime?
   durationMs Int?
+
+  @@index([nodeRunId])
+}
+
+model NodeRun {
+  id         String     @id @default(cuid())
+  graphRunId String
+  graphRun   GraphRun   @relation(fields: [graphRunId], references: [id], onDelete: Cascade)
+  nodeName   String
+  startTime  DateTime
+  endTime    DateTime?
+  durationMs Int?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  llmTraces  LLMTrace[]
 
   @@index([graphRunId])
 }
@@ -335,14 +349,14 @@ model Admins {
   image         String?
   emailVerified DateTime?
 
-  accounts AdminAccount[]
-  sessions AdminSession[]
+  accounts       AdminAccount[]
+  sessions       AdminSession[]
   authenticators AdminAuthenticator[]
 }
 
 model AdminAccount {
   id                String @id @default(cuid())
-  userId           String
+  userId            String
   type              String
   provider          String
   providerAccountId String
@@ -364,7 +378,7 @@ model AdminAccount {
 model AdminSession {
   id           String   @id @default(cuid())
   sessionToken String   @unique
-  userId      String
+  userId       String
   expires      DateTime
 
   admin Admins @relation(fields: [userId], references: [id], onDelete: Cascade)

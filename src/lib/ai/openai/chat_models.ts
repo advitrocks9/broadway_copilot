@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import z from 'zod';
+import { createId } from '@paralleldrive/cuid2';
 import type {
   Response,
   ResponseCreateParamsNonStreaming,
@@ -9,7 +10,6 @@ import type {
   FunctionTool,
 } from 'openai/resources/responses/responses';
 
-import { traceLLMCall } from '../core/base_chat_model';
 import { OpenAIChatModelParams, RunOutcome } from '../core/runnables';
 import {
   AssistantMessage,
@@ -18,10 +18,10 @@ import {
   TextPart,
 } from '../core/messages';
 import { ToolCall, toOpenAIToolSpec } from '../core/tools';
-import { prisma } from '../../../lib/prisma';
 import { Prisma } from '@prisma/client';
 import { BaseChatCompletionsModel } from '../core/base_chat_completions_model';
 import { MODEL_COSTS } from '../config/costs';
+import { TraceBuffer } from '../../../agent/tracing';
 
 /**
  * A chat model that interacts with the OpenAI API.
@@ -64,34 +64,64 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
   async run(
     systemPrompt: SystemMessage,
     msgs: BaseMessage[],
-    graphRunId: string,
+    traceBuffer: TraceBuffer,
     nodeName?: string,
   ): Promise<RunOutcome> {
     if (this.params.useResponsesApi) {
-      return this._runResponses(systemPrompt, msgs, graphRunId, nodeName);
+      return this._runResponses(
+        systemPrompt,
+        msgs,
+        traceBuffer,
+        nodeName,
+      );
     }
-    return this._runChatCompletions(systemPrompt, msgs, graphRunId, nodeName);
+    return this._runChatCompletions(
+      systemPrompt,
+      msgs,
+      traceBuffer,
+      nodeName,
+    );
   }
 
   private async _runResponses(
     systemPrompt: SystemMessage,
     msgs: BaseMessage[],
-    graphRunId: string,
+    traceBuffer: TraceBuffer,
     nodeName?: string,
   ): Promise<RunOutcome> {
     const params = this._buildResponsesParams(systemPrompt, msgs);
 
-    const { response, llmTrace } = await traceLLMCall(
-      graphRunId,
-      this.params,
-      msgs,
-      params,
-      () =>
-        this.client.responses.create(
-          params as ResponseCreateParamsNonStreaming,
-        ),
-      nodeName,
+    const nodeRun = traceBuffer.nodeRuns.find(
+      ne => ne.nodeName === nodeName && !ne.endTime,
     );
+    if (!nodeRun) {
+      throw new Error(
+        `Could not find an active node execution for nodeName: ${nodeName}`,
+      );
+    }
+
+    const llmTrace: any = {
+      id: createId(),
+      nodeRunId: nodeRun.id,
+      model: this.params.model,
+      inputMessages: params.input as unknown as Prisma.JsonArray,
+      rawRequest: params as unknown as Prisma.JsonObject,
+      startTime: new Date(),
+    };
+
+    let response: Response;
+    try {
+      response = await this.client.responses.create(
+        params as ResponseCreateParamsNonStreaming,
+      );
+    } catch (err) {
+      const endTime = new Date();
+      llmTrace.errorTrace = err instanceof Error ? err.stack : String(err);
+      llmTrace.endTime = endTime;
+      llmTrace.durationMs = endTime.getTime() - llmTrace.startTime.getTime();
+      traceBuffer.llmTraces.push(llmTrace);
+      throw err;
+    }
 
     const { assistantContent, toolCalls, rawToolCalls } =
       this._processResponsesResponse(response);
@@ -104,18 +134,14 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
     };
 
     const endTime = new Date();
-    await prisma.lLMTrace.update({
-      where: { id: llmTrace.id },
-      data: {
-        rawResponse: response as any,
-        outputMessage: assistant.toJSON() as Prisma.JsonObject,
-        promptTokens: response.usage?.total_tokens, // Note: Responses API only provides total_tokens
-        completionTokens: 0, // Note: Responses API only provides total_tokens
-        totalTokens: response.usage?.total_tokens,
-        endTime,
-        durationMs: endTime.getTime() - llmTrace.startTime.getTime(),
-      },
-    });
+    llmTrace.rawResponse = response as unknown as Prisma.JsonObject;
+    llmTrace.outputMessage = assistant.toJSON() as Prisma.JsonObject;
+    llmTrace.promptTokens = response.usage?.total_tokens; // Note: Responses API only provides total_tokens
+    llmTrace.completionTokens = 0; // Note: Responses API only provides total_tokens
+    llmTrace.totalTokens = response.usage?.total_tokens;
+    llmTrace.endTime = endTime;
+    llmTrace.durationMs = endTime.getTime() - llmTrace.startTime.getTime();
+    traceBuffer.llmTraces.push(llmTrace);
 
     return {
       assistant,
@@ -127,19 +153,40 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
   private async _runChatCompletions(
     systemPrompt: SystemMessage,
     msgs: BaseMessage[],
-    graphRunId: string,
+    traceBuffer: TraceBuffer,
     nodeName?: string,
   ): Promise<RunOutcome> {
     const params = this._buildChatCompletionsParams(systemPrompt, msgs);
 
-    const { response, llmTrace } = await traceLLMCall(
-      graphRunId,
-      this.params,
-      msgs,
-      params,
-      () => this.client.chat.completions.create(params),
-      nodeName,
+    const nodeRun = traceBuffer.nodeRuns.find(
+      ne => ne.nodeName === nodeName && !ne.endTime,
     );
+    if (!nodeRun) {
+      throw new Error(
+        `Could not find an active node execution for nodeName: ${nodeName}`,
+      );
+    }
+
+    const llmTrace: any = {
+      id: createId(),
+      nodeRunId: nodeRun.id,
+      model: this.params.model,
+      inputMessages: params.messages as unknown as Prisma.JsonArray,
+      rawRequest: params as unknown as Prisma.JsonObject,
+      startTime: new Date(),
+    };
+
+    let response: OpenAI.Chat.Completions.ChatCompletion;
+    try {
+      response = await this.client.chat.completions.create(params);
+    } catch (err) {
+      const endTime = new Date();
+      llmTrace.errorTrace = err instanceof Error ? err.stack : String(err);
+      llmTrace.endTime = endTime;
+      llmTrace.durationMs = endTime.getTime() - llmTrace.startTime.getTime();
+      traceBuffer.llmTraces.push(llmTrace);
+      throw err;
+    }
 
     const { assistant, toolCalls } =
       this._processChatCompletionsResponse(response);
@@ -156,19 +203,15 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
       costUsd = inputCost + outputCost;
     }
 
-    await prisma.lLMTrace.update({
-      where: { id: llmTrace.id },
-      data: {
-        rawResponse: response as any,
-        outputMessage: assistant.toJSON() as Prisma.JsonObject,
-        promptTokens: response.usage?.prompt_tokens,
-        completionTokens: response.usage?.completion_tokens,
-        totalTokens: response.usage?.total_tokens,
-        costUsd,
-        endTime,
-        durationMs: endTime.getTime() - llmTrace.startTime.getTime(),
-      },
-    });
+    llmTrace.rawResponse = response as unknown as Prisma.JsonObject;
+    llmTrace.outputMessage = assistant.toJSON() as Prisma.JsonObject;
+    llmTrace.promptTokens = response.usage?.prompt_tokens;
+    llmTrace.completionTokens = response.usage?.completion_tokens;
+    llmTrace.totalTokens = response.usage?.total_tokens;
+    llmTrace.costUsd = costUsd;
+    llmTrace.endTime = endTime;
+    llmTrace.durationMs = endTime.getTime() - llmTrace.startTime.getTime();
+    traceBuffer.llmTraces.push(llmTrace);
 
     return {
       assistant,

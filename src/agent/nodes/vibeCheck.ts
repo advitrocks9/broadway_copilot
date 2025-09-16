@@ -4,7 +4,7 @@ import { prisma } from '../../lib/prisma';
 import { getVisionLLM, getTextLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
 import { queueWardrobeIndex } from '../../lib/tasks';
-import { numImagesInMessage } from '../../utils/conversation';
+import { numImagesInMessage } from '../../utils/context';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
 
@@ -33,7 +33,7 @@ const NoImageLLMOutputSchema = z.object({
   reply_text: z.string().describe("The text to send to the user explaining they need to send an image."),
 });
 
-export async function vibeCheckNode(state: GraphState): Promise<GraphState> {
+export async function vibeCheck(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
   try {
     const imageCount = numImagesInMessage(state.conversationHistoryWithImages);
@@ -46,7 +46,7 @@ export async function vibeCheckNode(state: GraphState): Promise<GraphState> {
         .run(
           systemPrompt,
           state.conversationHistoryTextOnly,
-          state.graphRunId,
+          state.traceBuffer,
           'vibeCheck',
         );
       logger.debug({ userId, reply_text: response.reply_text }, 'Invoking text LLM for no-image response');
@@ -62,7 +62,7 @@ export async function vibeCheckNode(state: GraphState): Promise<GraphState> {
       .run(
         systemPrompt,
         state.conversationHistoryWithImages,
-        state.graphRunId,
+        state.traceBuffer,
         'vibeCheck',
       );
 

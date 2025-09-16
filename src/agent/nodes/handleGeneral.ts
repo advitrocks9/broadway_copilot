@@ -24,7 +24,7 @@ const LLMOutputSchema = z.object({
  * Handles general conversation intents such as greeting, menu, or open chat.
  * @param state Agent state containing user, conversation history, and routing info.
  */
-export async function handleGeneralNode(state: GraphState): Promise<GraphState> {
+export async function handleGeneral(state: GraphState): Promise<GraphState> {
   const { user, conversationHistoryTextOnly, generalIntent, input } = state;
   const userId = user.id;
   const messageId = input.MessageSid;
@@ -41,7 +41,7 @@ export async function handleGeneralNode(state: GraphState): Promise<GraphState> 
         .run(
           systemPrompt,
           conversationHistoryTextOnly,
-          state.graphRunId,
+          state.traceBuffer,
           'handleGeneral',
         );
 
@@ -75,7 +75,7 @@ export async function handleGeneralNode(state: GraphState): Promise<GraphState> 
         systemPrompt,
         conversationHistoryTextOnly,
         { tools, outputSchema: LLMOutputSchema, nodeName: 'handleGeneral' },
-        state.graphRunId,
+        state.traceBuffer,
       );
 
       const replies: Replies = [

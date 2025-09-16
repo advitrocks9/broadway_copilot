@@ -1,16 +1,18 @@
 import { PendingType } from '@prisma/client';
 import { END, START, StateGraph } from '../lib/graph';
-import { askUserInfoNode } from './nodes/askUserInfo';
-import { colorAnalysisNode } from './nodes/colorAnalysis';
-import { handleGeneralNode } from './nodes/handleGeneral';
-import { handleStylingNode } from './nodes/handleStyling';
-import { ingestMessageNode } from './nodes/ingestMessage';
-import { recordUserInfoNode } from './nodes/recordUserInfo';
-import { routeIntent } from './nodes/routeIntent';
-import { routeStyling } from './nodes/routeStyling';
-import { routeGeneralNode } from './nodes/routeGeneral';
-import { sendReplyNode } from './nodes/sendReply';
-import { vibeCheckNode } from './nodes/vibeCheck';
+import {
+  askUserInfo,
+  colorAnalysis,
+  handleGeneral,
+  handleStyling,
+  ingestMessage,
+  recordUserInfo,
+  routeIntent,
+  routeStyling,
+  routeGeneral,
+  sendReply,
+  vibeCheck,
+} from './nodes';
 import { GraphState } from './state';
 import { logger } from '../utils/logger';
 
@@ -23,73 +25,73 @@ import { logger } from '../utils/logger';
  */
 export function buildAgentGraph() {
   const graph = new StateGraph<GraphState>(null)
-    .addNode('ingest_message', ingestMessageNode)
-    .addNode('record_user_info', recordUserInfoNode)
-    .addNode('route_intent', routeIntent)
-    .addNode('route_general', routeGeneralNode)
-    .addNode('ask_user_info', askUserInfoNode)
-    .addNode('handle_styling', handleStylingNode)
-    .addNode('vibe_check', vibeCheckNode)
-    .addNode('color_analysis', colorAnalysisNode)
-    .addNode('handle_general', handleGeneralNode)
-    .addNode('send_reply', sendReplyNode)
-    .addNode('route_styling', routeStyling)
-    .addEdge(START, 'ingest_message')
+    .addNode('ingestMessage', ingestMessage)
+    .addNode('recordUserInfo', recordUserInfo)
+    .addNode('routeIntent', routeIntent)
+    .addNode('routeGeneral', routeGeneral)
+    .addNode('askUserInfo', askUserInfo)
+    .addNode('handleStyling', handleStyling)
+    .addNode('vibeCheck', vibeCheck)
+    .addNode('colorAnalysis', colorAnalysis)
+    .addNode('handleGeneral', handleGeneral)
+    .addNode('sendReply', sendReply)
+    .addNode('routeStyling', routeStyling)
+    .addEdge(START, 'ingestMessage')
     .addConditionalEdges(
-      'ingest_message',
+      'ingestMessage',
       (s: GraphState) => {
         if (s.pending === PendingType.ASK_USER_INFO) {
-          return 'record_user_info';
+          return 'recordUserInfo';
         }
-        return 'route_intent';
+        return 'routeIntent';
       },
       {
-        record_user_info: 'record_user_info',
-        route_intent: 'route_intent',
+        recordUserInfo: 'recordUserInfo',
+        routeIntent: 'routeIntent',
       },
     )
-    .addEdge('record_user_info', 'route_intent')
+    .addEdge('recordUserInfo', 'routeIntent')
     .addConditionalEdges(
-      'route_intent',
+      'routeIntent',
       (s: GraphState) => {
         if (s.missingProfileField) {
-          return 'ask_user_info';
+          return 'askUserInfo';
         }
         return s.intent || 'general';
       },
       {
-        ask_user_info: 'ask_user_info',
-        general: 'route_general',
-        vibe_check: 'vibe_check',
-        color_analysis: 'color_analysis',
-        styling: 'route_styling',
+        askUserInfo: 'askUserInfo',
+        general: 'routeGeneral',
+        vibe_check: 'vibeCheck',
+        color_analysis: 'colorAnalysis',
+        styling: 'routeStyling',
       },
     )
-    .addEdge('route_general', 'handle_general')
+    .addEdge('routeGeneral', 'handleGeneral')
     .addConditionalEdges(
-      'route_styling',
+      'routeStyling',
       (s: GraphState) => {
         if (s.assistantReply) {
-          return 'send_reply';
+          return 'sendReply';
         }
         if (s.stylingIntent) {
-          return 'handle_styling';
+          return 'handleStyling';
         }
         logger.warn({ userId: s.user.id }, 'Exiting styling flow unexpectedly, routing to general');
-        return 'route_general';
+        return 'routeGeneral';
       },
       {
-        handle_styling: 'handle_styling',
-        route_general: 'route_general',
-        send_reply: 'send_reply',
+        handleStyling: 'handleStyling',
+        routeGeneral: 'routeGeneral',
+        sendReply: 'sendReply',
       },
     )
-    .addEdge('vibe_check', 'send_reply')
-    .addEdge('ask_user_info', 'send_reply')
-    .addEdge('handle_styling', 'send_reply')
-    .addEdge('color_analysis', 'send_reply')
-    .addEdge('handle_general', 'send_reply')
-    .addEdge('send_reply', END);
+    .addEdge('vibeCheck', 'sendReply')
+    .addEdge('askUserInfo', 'sendReply')
+    .addEdge('handleStyling', 'sendReply')
+    .addEdge('colorAnalysis', 'sendReply')
+    .addEdge('handleGeneral', 'sendReply')
+    .addEdge('sendReply', END);
 
   return graph.compile();
 }

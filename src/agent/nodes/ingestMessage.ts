@@ -15,7 +15,7 @@ import { queueImageUpload } from '../../lib/tasks';
  * Handles message merging for multi-part messages, media download and storage,
  * and conversation history preparation with both image and text-only versions.
  */
-export async function ingestMessageNode(state: GraphState): Promise<GraphState> {
+export async function ingestMessage(state: GraphState): Promise<GraphState> {
   const { input, user, conversationId, graphRunId } = state;
   const {
     Body: text,

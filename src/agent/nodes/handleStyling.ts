@@ -31,7 +31,7 @@ const LLMOutputSchema = z.object({
  * @param state - Agent graph state containing user data, styling intent, and conversation history
  * @returns Updated state with assistant reply containing styling suggestions
  */
-export async function handleStylingNode(state: GraphState): Promise<GraphState> {
+export async function handleStyling(state: GraphState): Promise<GraphState> {
   const { user, stylingIntent, conversationHistoryTextOnly } = state;
   const userId = user.id;
   const lastMessage = conversationHistoryTextOnly.at(-1);
@@ -50,7 +50,7 @@ export async function handleStylingNode(state: GraphState): Promise<GraphState> 
       .run(
         systemPrompt,
         state.conversationHistoryTextOnly,
-        state.graphRunId,
+        state.traceBuffer,
         'handleStyling',
       );
     const reply_text = response.message1_text as string;
@@ -76,7 +76,7 @@ export async function handleStylingNode(state: GraphState): Promise<GraphState> 
         outputSchema: LLMOutputSchema,
         nodeName: 'handleStyling',
       },
-      state.graphRunId,
+      state.traceBuffer,
     );
 
 

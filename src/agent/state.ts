@@ -3,6 +3,7 @@ import { User, PendingType } from '@prisma/client';
 import { BaseMessage } from '../lib/ai';
 import { TwilioWebhookRequest } from '../lib/twilio/types';
 import { QuickReplyButton } from '../lib/twilio/types';
+import { TraceBuffer } from './tracing';
 
 // ============================================================================
 // AGENT STATE DEFINITION
@@ -18,6 +19,9 @@ export interface GraphState {
 
   /** Unique identifier for the current conversation */
   conversationId: string;
+
+  /** The buffer for storing execution traces in-memory */
+  traceBuffer: TraceBuffer;
 
   /** Raw Twilio webhook request that initiated the interaction */
   input: TwilioWebhookRequest;

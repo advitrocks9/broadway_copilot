@@ -22,7 +22,7 @@ const LLMOutputSchema = z.object({
  * Extracts and persists confirmed user profile fields inferred from recent conversation.
  * Resets pending state to NONE when complete.
  */
-export async function recordUserInfoNode(state: GraphState): Promise<GraphState> {
+export async function recordUserInfo(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
   try {
     const systemPromptText = await loadPrompt('data/record_user_info.txt');
@@ -33,7 +33,7 @@ export async function recordUserInfoNode(state: GraphState): Promise<GraphState>
       .run(
         systemPrompt,
         state.conversationHistoryTextOnly,
-        state.graphRunId,
+        state.traceBuffer,
         'recordUserInfo',
       );
 

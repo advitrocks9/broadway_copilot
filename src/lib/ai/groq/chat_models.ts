@@ -2,17 +2,17 @@ import Groq from 'groq-sdk';
 import OpenAI from 'openai';
 import { Prisma } from '@prisma/client';
 import { ChatCompletion } from 'openai/resources/chat/completions';
+import { createId } from '@paralleldrive/cuid2';
 
-import { traceLLMCall } from '../core/base_chat_model';
 import { GroqChatModelParams, RunOutcome } from '../core/runnables';
 import {
   BaseMessage,
   SystemMessage,
   TextPart,
 } from '../core/messages';
-import { prisma } from '../../../lib/prisma';
 import { BaseChatCompletionsModel } from '../core/base_chat_completions_model';
 import { MODEL_COSTS } from '../config/costs';
+import { TraceBuffer } from '../../../agent/tracing';
 
 /**
  * A chat model that interacts with the Groq API.
@@ -56,7 +56,7 @@ export class ChatGroq extends BaseChatCompletionsModel {
   async run(
     systemPrompt: SystemMessage,
     msgs: BaseMessage[],
-    graphRunId: string,
+    traceBuffer: TraceBuffer,
     nodeName?: string,
   ): Promise<RunOutcome> {
     const params = this._buildChatCompletionsParams(systemPrompt, msgs);
@@ -69,49 +69,63 @@ export class ChatGroq extends BaseChatCompletionsModel {
       requestOptions.timeout = this.params.timeout;
     }
 
-    const { response, llmTrace } = await traceLLMCall(
-      graphRunId,
-      this.params,
-      msgs,
-      params,
-      () =>
-        this.client.chat.completions.create(
-          params as any,
-          requestOptions,
-        ),
-      nodeName,
+    const nodeRun = traceBuffer.nodeRuns.find(
+      ne => ne.nodeName === nodeName && !ne.endTime,
     );
+    if (!nodeRun) {
+      throw new Error(
+        `Could not find an active node execution for nodeName: ${nodeName}`,
+      );
+    }
 
-    const typedResponse = response as ChatCompletion;
+    const llmTrace: any = {
+      id: createId(),
+      nodeRunId: nodeRun.id,
+      model: this.params.model,
+      inputMessages: params.messages as unknown as Prisma.JsonArray,
+      rawRequest: params as unknown as Prisma.JsonObject,
+      startTime: new Date(),
+    };
+
+    let response: ChatCompletion;
+    try {
+      response = (await this.client.chat.completions.create(
+        params as any,
+        requestOptions,
+      )) as ChatCompletion;
+    } catch (err) {
+      const endTime = new Date();
+      llmTrace.errorTrace = err instanceof Error ? err.stack : String(err);
+      llmTrace.endTime = endTime;
+      llmTrace.durationMs = endTime.getTime() - llmTrace.startTime.getTime();
+      traceBuffer.llmTraces.push(llmTrace);
+      throw err;
+    }
 
     const { assistant, toolCalls } =
-      this._processChatCompletionsResponse(typedResponse);
+      this._processChatCompletionsResponse(response);
 
     const endTime = new Date();
 
     let costUsd: number | null = null;
     const modelCosts = MODEL_COSTS[this.params.model];
     if (modelCosts) {
-      const promptTokens = typedResponse.usage?.prompt_tokens ?? 0;
-      const completionTokens = typedResponse.usage?.completion_tokens ?? 0;
+      const promptTokens = response.usage?.prompt_tokens ?? 0;
+      const completionTokens = response.usage?.completion_tokens ?? 0;
       const inputCost = (promptTokens / 1_000_000) * modelCosts.input;
       const outputCost = (completionTokens / 1_000_000) * modelCosts.output;
       costUsd = inputCost + outputCost;
     }
 
-    await prisma.lLMTrace.update({
-      where: { id: llmTrace.id },
-      data: {
-        rawResponse: response as any,
-        outputMessage: assistant.toJSON() as Prisma.JsonObject,
-        promptTokens: typedResponse.usage?.prompt_tokens,
-        completionTokens: typedResponse.usage?.completion_tokens,
-        totalTokens: typedResponse.usage?.total_tokens,
-        costUsd,
-        endTime,
-        durationMs: endTime.getTime() - llmTrace.startTime.getTime(),
-      },
-    });
+    llmTrace.rawResponse = response as unknown as Prisma.JsonObject;
+    llmTrace.outputMessage = assistant.toJSON() as Prisma.JsonObject;
+    llmTrace.promptTokens = response.usage?.prompt_tokens;
+    llmTrace.completionTokens = response.usage?.completion_tokens;
+    llmTrace.totalTokens = response.usage?.total_tokens;
+    llmTrace.costUsd = costUsd;
+    llmTrace.endTime = endTime;
+    llmTrace.durationMs = endTime.getTime() - llmTrace.startTime.getTime();
+    traceBuffer.llmTraces.push(llmTrace);
 
     return {
       assistant,

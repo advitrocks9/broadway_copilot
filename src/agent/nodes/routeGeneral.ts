@@ -22,7 +22,7 @@ const LLMOutputSchema = z.object({
 /**
  * Routes general messages (greeting/menu/chat) via regex shortcuts, else LLM.
  */
-export async function routeGeneralNode(state: GraphState): Promise<GraphState> {
+export async function routeGeneral(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
   const messageId = state.input.MessageSid;
   const lastMessageContent = state.conversationHistoryTextOnly.at(-1)?.content;
@@ -50,7 +50,7 @@ export async function routeGeneralNode(state: GraphState): Promise<GraphState> {
       .run(
         systemPrompt,
         state.conversationHistoryTextOnly,
-        state.graphRunId,
+        state.traceBuffer,
         'routeGeneral',
       );
 

@@ -1,6 +1,7 @@
 import { z, ZodType } from 'zod';
 import { BaseMessage, SystemMessage, TextPart } from './messages';
 import { BaseChatModel } from './base_chat_model';
+import { TraceBuffer } from '../../../agent/tracing';
 
 /**
  * A runnable that wraps a chat model and forces it to produce a JSON object
@@ -123,13 +124,13 @@ export class StructuredOutputRunnable<T extends ZodType> {
   async run(
     systemPrompt: SystemMessage,
     messages: BaseMessage[],
-    graphRunId: string,
+    traceBuffer: TraceBuffer,
     nodeName?: string,
   ): Promise<T['_output']> {
     const response = await this.runner.run(
       systemPrompt,
       messages,
-      graphRunId,
+      traceBuffer,
       nodeName,
     );
     const { toolCalls } = response;

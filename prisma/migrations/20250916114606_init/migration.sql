@@ -169,8 +169,7 @@ CREATE TABLE "public"."GraphRun" (
 -- CreateTable
 CREATE TABLE "public"."LLMTrace" (
     "id" TEXT NOT NULL,
-    "graphRunId" TEXT NOT NULL,
-    "nodeName" TEXT,
+    "nodeRunId" TEXT NOT NULL,
     "model" TEXT NOT NULL,
     "promptTokens" INTEGER,
     "completionTokens" INTEGER,
@@ -186,6 +185,20 @@ CREATE TABLE "public"."LLMTrace" (
     "durationMs" INTEGER,
 
     CONSTRAINT "LLMTrace_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."NodeRun" (
+    "id" TEXT NOT NULL,
+    "graphRunId" TEXT NOT NULL,
+    "nodeName" TEXT NOT NULL,
+    "startTime" TIMESTAMP(3) NOT NULL,
+    "endTime" TIMESTAMP(3),
+    "durationMs" INTEGER,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "NodeRun_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -333,7 +346,10 @@ CREATE INDEX "GraphRun_conversationId_startTime_idx" ON "public"."GraphRun"("con
 CREATE INDEX "GraphRun_userId_startTime_idx" ON "public"."GraphRun"("userId", "startTime");
 
 -- CreateIndex
-CREATE INDEX "LLMTrace_graphRunId_idx" ON "public"."LLMTrace"("graphRunId");
+CREATE INDEX "LLMTrace_nodeRunId_idx" ON "public"."LLMTrace"("nodeRunId");
+
+-- CreateIndex
+CREATE INDEX "NodeRun_graphRunId_idx" ON "public"."NodeRun"("graphRunId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Feedback_conversationId_key" ON "public"."Feedback"("conversationId");
@@ -405,7 +421,10 @@ ALTER TABLE "public"."GraphRun" ADD CONSTRAINT "GraphRun_userId_fkey" FOREIGN KE
 ALTER TABLE "public"."GraphRun" ADD CONSTRAINT "GraphRun_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "public"."Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."LLMTrace" ADD CONSTRAINT "LLMTrace_graphRunId_fkey" FOREIGN KEY ("graphRunId") REFERENCES "public"."GraphRun"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."LLMTrace" ADD CONSTRAINT "LLMTrace_nodeRunId_fkey" FOREIGN KEY ("nodeRunId") REFERENCES "public"."NodeRun"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."NodeRun" ADD CONSTRAINT "NodeRun_graphRunId_fkey" FOREIGN KEY ("graphRunId") REFERENCES "public"."GraphRun"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."Feedback" ADD CONSTRAINT "Feedback_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "public"."Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;

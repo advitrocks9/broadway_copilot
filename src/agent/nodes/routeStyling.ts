@@ -55,7 +55,7 @@ export async function routeStyling(state: GraphState): Promise<GraphState> {
       .run(
         systemPrompt,
         state.conversationHistoryTextOnly,
-        state.graphRunId,
+        state.traceBuffer,
         'routeStyling',
       );
 

@@ -22,7 +22,7 @@ const LLMOutputSchema = z.object({
  * Generates a contextual response requesting the missing profile field (gender or age group)
  * and sets the conversation to pending state for the next user response.
  */
-export async function askUserInfoNode(state: GraphState): Promise<GraphState> {
+export async function askUserInfo(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
   const messageId = state.input.MessageSid;
 
@@ -41,7 +41,7 @@ export async function askUserInfoNode(state: GraphState): Promise<GraphState> {
       .run(
         systemPrompt,
         state.conversationHistoryTextOnly,
-        state.graphRunId,
+        state.traceBuffer,
         'askUserInfo',
       );
 

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../lib/prisma';
 import { getVisionLLM, getTextLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
-import { numImagesInMessage } from '../../utils/conversation';
+import { numImagesInMessage } from '../../utils/context';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
 import { InternalServerError } from '../../utils/errors';
@@ -45,7 +45,7 @@ const NoImageLLMOutputSchema = z.object({
  * Performs color analysis from a portrait and returns a text reply; logs and persists results.
  * @param state The current agent state.
  */
-export async function colorAnalysisNode(state: GraphState): Promise<GraphState> {
+export async function colorAnalysis(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
   const messageId = state.input.MessageSid;
 
@@ -59,7 +59,7 @@ export async function colorAnalysisNode(state: GraphState): Promise<GraphState> 
       .run(
         systemPrompt,
         state.conversationHistoryTextOnly,
-        state.graphRunId,
+        state.traceBuffer,
         'colorAnalysis',
       );
     logger.debug({ userId: state.user.id, reply_text: response.reply_text }, 'Invoking text LLM for no-image response');
@@ -76,7 +76,7 @@ export async function colorAnalysisNode(state: GraphState): Promise<GraphState> 
       .run(
         systemPrompt,
         state.conversationHistoryWithImages,
-        state.graphRunId,
+        state.traceBuffer,
         'colorAnalysis',
       );
 

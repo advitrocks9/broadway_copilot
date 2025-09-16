@@ -6,8 +6,7 @@ import { GraphState } from './state';
 import { logError } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { TwilioWebhookRequest } from '../lib/twilio/types';
-import { getUser } from '../utils/user';
-import { getConversation } from '../utils/conversation';
+import { getOrCreateUserAndConversation } from '../utils/context';
 import { sendText } from '../lib/twilio';
 import { prisma } from '../lib/prisma';
 import { buildAgentGraph } from './graph';
@@ -55,6 +54,26 @@ async function handleGraphRun(
   const endTime = new Date();
   const durationMs = endTime.getTime() - graphRun.startTime.getTime();
 
+  if (finalState?.traceBuffer) {
+    const { nodeRuns, llmTraces } = finalState.traceBuffer;
+    if (nodeRuns.length > 0) {
+      await prisma.nodeRun.createMany({
+        data: nodeRuns.map(ne => ({
+          ...ne,
+          graphRunId,
+        })),
+      });
+    }
+    if (llmTraces.length > 0) {
+      await prisma.lLMTrace.createMany({
+        data: llmTraces.map(lt => ({
+          ...lt,
+        })),
+      });
+    }
+    delete finalState.traceBuffer;
+  }
+
   await prisma.graphRun.update({
     where: { id: graphRunId },
     data: {
@@ -90,8 +109,8 @@ export async function runAgent(input: TwilioWebhookRequest, options?: { signal?:
 
   let conversation: Conversation | undefined;
   try {
-    const user = await getUser(whatsappId, profileName);
-    conversation = await getConversation(user.id);
+    const { user, conversation: _conversation } = await getOrCreateUserAndConversation(whatsappId, profileName);
+    conversation = _conversation;
 
     const graphRun = await prisma.graphRun.create({
       data: {
@@ -109,8 +128,9 @@ export async function runAgent(input: TwilioWebhookRequest, options?: { signal?:
           user,
           graphRunId: graphRun.id,
           conversationId: conversation!.id,
+          traceBuffer: { nodeRuns: [], llmTraces: [] },
         },
-        { signal: options?.signal },
+        { signal: options?.signal, runId: graphRun.id },
       ),
     );
   } catch (err: unknown) {

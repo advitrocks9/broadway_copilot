@@ -4,7 +4,7 @@ import { PendingType } from '@prisma/client';
 
 import { getTextLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
-import { numImagesInMessage } from '../../utils/conversation';
+import { numImagesInMessage } from '../../utils/context';
 import { loadPrompt } from '../../utils/prompts';
 import { logger } from '../../utils/logger';
 import { GraphState } from '../state';
@@ -28,7 +28,7 @@ const LLMOutputSchema = z.object({
  * @returns The determined intent and any new missing profile field that needs to be collected
  */
 export async function routeIntent(state: GraphState): Promise<GraphState> {
-  const { user, input, conversationHistoryWithImages, pending, conversationHistoryTextOnly } = state;
+  const { user, input, conversationHistoryWithImages, pending } = state;
   const userId = user.id;
   const buttonPayload = input.ButtonPayload;
 
@@ -84,8 +84,8 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
       .withStructuredOutput(LLMOutputSchema)
       .run(
         systemPrompt,
-        conversationHistoryTextOnly,
-        state.graphRunId,
+        state.conversationHistoryTextOnly,
+        state.traceBuffer,
         'routeIntent',
       );
 

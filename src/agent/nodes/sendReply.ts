@@ -19,7 +19,7 @@ import { ConversationStatus } from '@prisma/client';
  * @param state The current agent state containing reply and user info.
  * @returns An empty object as no state updates are needed.
  */
-export async function sendReplyNode(state: GraphState): Promise<GraphState> {
+export async function sendReply(state: GraphState): Promise<GraphState> {
   const { input, user } = state;
   const messageId = input.MessageSid;
   const messageKey = `message:${messageId}`;
