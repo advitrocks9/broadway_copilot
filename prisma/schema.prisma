@@ -64,6 +64,16 @@ enum ConversationStatus {
   CLOSED
 }
 
+enum WardrobeItemCategory {
+  TOP
+  BOTTOM
+  ONE_PIECE
+  OUTERWEAR
+  SHOES
+  BAG
+  ACCESSORY
+}
+
 // --- CORE ---
 
 model User {
@@ -212,14 +222,17 @@ model WardrobeItem {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  name        String
-  nameLower   String
-  category    String
-  type        String
-  subtype     String?
-  description String?
-  colors      Json
-  attributes  Json?
+  name           String
+  description    String
+  category       WardrobeItemCategory
+  type           String
+  subtype        String?
+  mainColor      String
+  secondaryColor String?
+  attributes     Json
+
+  searchDoc String
+  keywords  String[]
 
   embedding      Unsupported("vector")?
   embeddingModel String?
@@ -227,8 +240,13 @@ model WardrobeItem {
   embeddingAt    DateTime?
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@index([userId, nameLower, category])
+  @@index([userId, category])
+  @@index([userId, type])
+  @@index([userId, mainColor])
+  @@index([userId, createdAt])
+  @@index([userId, keywords])
 }
 
 // --- AGENT & LOGGING ---
@@ -257,7 +275,7 @@ model GraphRun {
 }
 
 model LLMTrace {
-  id        String        @id @default(cuid())
+  id        String  @id @default(cuid())
   nodeRunId String
   nodeRun   NodeRun @relation(fields: [nodeRunId], references: [id], onDelete: Cascade)
 

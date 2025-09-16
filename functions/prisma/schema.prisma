@@ -1,11 +1,11 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  extensions = [ vector(version: "0.8.0") ]
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector(version: "0.8.0")]
 }
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]
 }
 
@@ -54,7 +54,7 @@ enum TaskStatus {
 
 enum GraphRunStatus {
   RUNNING
-  SUCCESSFUL
+  COMPLETED
   ERROR
   ABORTED
 }
@@ -64,13 +64,32 @@ enum ConversationStatus {
   CLOSED
 }
 
+enum WardrobeItemCategory {
+  TOP
+  BOTTOM
+  ONE_PIECE
+  OUTERWEAR
+  SHOES
+  BAG
+  ACCESSORY
+}
 
 // --- CORE ---
 
 model User {
-  id          String   @id @default(cuid())
-  whatsappId  String   @unique
-  createdAt   DateTime @default(now())
+  id          String @id @default(cuid())
+  whatsappId  String @unique
+  profileName String @default("")
+
+  inferredGender    Gender?
+  inferredAgeGroup  AgeGroup?
+  confirmedGender   Gender?
+  confirmedAgeGroup AgeGroup?
+
+  lastVibeCheckAt     DateTime?
+  lastColorAnalysisAt DateTime?
+
+  createdAt DateTime @default(now())
 
   conversations Conversation[]
   wardrobe      WardrobeItem[]
@@ -78,26 +97,20 @@ model User {
   vibeChecks    VibeCheck[]
   colorAnalyses ColorAnalysis[]
   tasks         Task[]
-
-  inferredGender    Gender?
-  inferredAgeGroup  AgeGroup?
-
-  confirmedGender   Gender?
-  confirmedAgeGroup AgeGroup?
-
-  lastVibeCheckAt      DateTime?
-  lastColorAnalysisAt  DateTime?
+  graphRuns     GraphRun[]
 
   @@index([createdAt])
 }
 
 model Conversation {
-  id        String    @id @default(cuid())
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  status    ConversationStatus @default(OPEN)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status ConversationStatus @default(OPEN)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   messages  Message[]
   graphRuns GraphRun[]
@@ -108,107 +121,70 @@ model Conversation {
 }
 
 model Message {
-  id               String       @id @default(cuid())
-  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  conversationId   String
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  role             MessageRole
-  content          Json[]       @default([])
-  additionalKwargs Json? 
-  createdAt        DateTime     @default(now())
+  role          MessageRole
+  intent        String?
+  buttonPayload String?
+  pending       PendingType? @default(NONE)
 
-  intent           String?
-  buttonPayload    String?
-  pending          PendingType? @default(NONE)
+  content          Json[] @default([])
+  additionalKwargs Json?
 
-  media             Media[]
   memoriesProcessed Boolean @default(false)
   wardrobeProcessed Boolean @default(false)
 
+  createdAt DateTime @default(now())
+
+  media Media[]
 
   @@index([conversationId, createdAt])
   @@index([role, createdAt])
   @@index([buttonPayload])
 }
 
-
 // --- MEDIA ---
 
 model Media {
-  id          String   @id @default(cuid())
-  message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  messageId   String
-  
-  twilioUrl   String
-  serverUrl   String
-  gcsUri      String?
-  
-  mimeType    String
-  isUploaded  Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id        String  @id @default(cuid())
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  twilioUrl  String
+  serverUrl  String
+  gcsUri     String?
+  mimeType   String
+  isUploaded Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
   @@index([messageId])
-}
-
-// --- AGENT & LOGGING ---
-
-model GraphRun {
-  id             String       @id @default(cuid())
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  conversationId String
-  
-  initialState   Json
-  finalState     Json
-  status         GraphRunStatus @default(RUNNING)
-  errorTrace     String?
-  
-  createdAt      DateTime     @default(now())
-
-  traces         LLMTrace[]
-
-  @@index([conversationId, createdAt])
-}
-
-model LLMTrace {
-  id          String   @id @default(cuid())
-  graphRun    GraphRun @relation(fields: [graphRunId], references: [id], onDelete: Cascade)
-  graphRunId  String
-
-  model           String?
-  rawRequest      Json
-  rawResponse     Json
-  
-  promptTokens     Int?
-  completionTokens Int?
-  costUsd          Decimal? @db.Decimal(10, 6)
-  
-  createdAt       DateTime @default(now())
-
-  @@index([graphRunId])
 }
 
 // --- USER PROFILE & ANALYSIS ---
 
 model Memory {
-  id        String   @id @default(cuid())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  memory    String
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  embedding       Unsupported("vector")?
-  embeddingModel  String?
-  embeddingDim    Int?
-  embeddingAt     DateTime?
-  
+  memory String
+
+  embedding      Unsupported("vector")?
+  embeddingModel String?
+  embeddingDim   Int?
+  embeddingAt    DateTime?
+
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
 }
 
 model VibeCheck {
-  id                  String  @id @default(cuid())
-  user                User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId              String
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   fit_silhouette      Float?
   color_harmony       Float?
@@ -216,85 +192,237 @@ model VibeCheck {
   accessories_texture Float?
   context_confidence  Float?
   overall_score       Float?
-
   comment             String?
 
-  createdAt           DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
 }
 
 model ColorAnalysis {
-  id            String   @id @default(cuid())
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId        String
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   skin_tone     String?
   eye_color     String?
   hair_color    String?
   undertone     String?
   palette_name  String?
-
   top3_colors   Json?
   avoid3_colors Json?
 
-  createdAt     DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
 }
 
 model WardrobeItem {
-  id          String   @id @default(cuid())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId      String
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  name        String
-  nameLower   String
-  category    String
-  colors      Json
-  type        String
-  subtype     String?
-  description String?
-  attributes  Json?
-  createdAt   DateTime @default(now())
+  name           String
+  description    String
+  category       WardrobeItemCategory
+  type           String
+  subtype        String?
+  mainColor      String
+  secondaryColor String?
+  attributes     Json
 
-  embedding       Unsupported("vector")?
-  embeddingModel  String?
-  embeddingDim    Int?
-  embeddingAt     DateTime?
+  searchDoc String
+  keywords  String[]
 
-  @@index([userId, nameLower, category])
+  embedding      Unsupported("vector")?
+  embeddingModel String?
+  embeddingDim   Int?
+  embeddingAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, category])
+  @@index([userId, type])
+  @@index([userId, mainColor])
+  @@index([userId, createdAt])
+  @@index([userId, keywords])
+}
+
+// --- AGENT & LOGGING ---
+
+model GraphRun {
+  id             String       @id
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  status     GraphRunStatus @default(RUNNING)
+  errorTrace String?
+
+  initialState Json
+  finalState   Json?
+
+  startTime  DateTime  @default(now())
+  endTime    DateTime?
+  durationMs Int?
+
+  nodeRuns NodeRun[]
+
+  @@index([conversationId, startTime])
+  @@index([userId, startTime])
+}
+
+model LLMTrace {
+  id        String  @id @default(cuid())
+  nodeRunId String
+  nodeRun   NodeRun @relation(fields: [nodeRunId], references: [id], onDelete: Cascade)
+
+  model            String
+  promptTokens     Int?
+  completionTokens Int?
+  totalTokens      Int?
+  costUsd          Decimal? @db.Decimal(10, 6)
+  errorTrace       String?
+
+  inputMessages Json
+  outputMessage Json?
+  rawRequest    Json
+  rawResponse   Json?
+
+  startTime  DateTime  @default(now())
+  endTime    DateTime?
+  durationMs Int?
+
+  @@index([nodeRunId])
+}
+
+model NodeRun {
+  id         String     @id @default(cuid())
+  graphRunId String
+  graphRun   GraphRun   @relation(fields: [graphRunId], references: [id], onDelete: Cascade)
+  nodeName   String
+  startTime  DateTime
+  endTime    DateTime?
+  durationMs Int?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  llmTraces  LLMTrace[]
+
+  @@index([graphRunId])
 }
 
 // --- FEEDBACK ---
 
 model Feedback {
   id             String       @id @default(cuid())
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   conversationId String       @unique
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  rating         Int?
-  comment        String?
-  createdAt      DateTime     @default(now())
+  rating  Int?
+  comment String?
+
+  createdAt DateTime @default(now())
 }
 
 // --- BACKGROUND PROCESSING ---
 
 model Task {
-  id        String     @id @default(cuid())
-  taskId    String     @unique
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  
-  type      TaskType
-  status    TaskStatus @default(QUEUED)
-  payload   Json?
-  
-  runAt     DateTime
-  
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id     String @id @default(cuid())
+  taskId String @unique
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type    TaskType
+  status  TaskStatus @default(QUEUED)
+  payload Json?
+  runAt   DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId, runAt])
   @@index([status, runAt])
+}
+
+// --- ADMIN MANAGEMENT ---
+
+model AdminWhitelist {
+  id    String @id @default(cuid())
+  email String @unique
+}
+
+model UserWhitelist {
+  id   String @id @default(cuid())
+  waId String @unique
+}
+
+// --- AUTH FOR ADMINS ---
+
+model Admins {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  image         String?
+  emailVerified DateTime?
+
+  accounts       AdminAccount[]
+  sessions       AdminSession[]
+  authenticators AdminAuthenticator[]
+}
+
+model AdminAccount {
+  id                String @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+
+  refresh_token String?
+  access_token  String?
+  expires_at    Int?
+  token_type    String?
+  scope         String?
+  id_token      String?
+  session_state String?
+
+  admin Admins @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId], name: "provider_providerAccountId")
+  @@index([userId])
+}
+
+model AdminSession {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  admin Admins @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AdminVerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token], name: "identifier_token")
+}
+
+model AdminAuthenticator {
+  credentialID         String  @unique
+  userId               String
+  providerAccountId    String
+  credentialPublicKey  String
+  counter              Int
+  credentialDeviceType String
+  credentialBackedUp   Boolean
+  transports           String?
+
+  admin Admins @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, credentialID])
 }
