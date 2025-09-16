@@ -316,13 +316,6 @@ model Task {
 
 // --- ADMIN MANAGEMENT ---
 
-model Admins {
-  id    String  @id @default(cuid())
-  email String  @unique
-  name  String?
-  image String?
-}
-
 model AdminWhitelist {
   id    String @id @default(cuid())
   email String @unique
@@ -331,4 +324,73 @@ model AdminWhitelist {
 model UserWhitelist {
   id   String @id @default(cuid())
   waId String @unique
+}
+
+// --- AUTH FOR ADMINS ---
+
+model Admins {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  image         String?
+  emailVerified DateTime?
+
+  accounts AdminAccount[]
+  sessions AdminSession[]
+  authenticators AdminAuthenticator[]
+}
+
+model AdminAccount {
+  id                String @id @default(cuid())
+  userId           String
+  type              String
+  provider          String
+  providerAccountId String
+
+  refresh_token String?
+  access_token  String?
+  expires_at    Int?
+  token_type    String?
+  scope         String?
+  id_token      String?
+  session_state String?
+
+  admin Admins @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId], name: "provider_providerAccountId")
+  @@index([userId])
+}
+
+model AdminSession {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId      String
+  expires      DateTime
+
+  admin Admins @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AdminVerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token], name: "identifier_token")
+}
+
+model AdminAuthenticator {
+  credentialID         String  @unique
+  userId               String
+  providerAccountId    String
+  credentialPublicKey  String
+  counter              Int
+  credentialDeviceType String
+  credentialBackedUp   Boolean
+  transports           String?
+
+  admin Admins @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, credentialID])
 }

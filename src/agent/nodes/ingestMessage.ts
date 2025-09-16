@@ -23,8 +23,12 @@ export async function ingestMessageNode(state: GraphState): Promise<GraphState> 
     NumMedia: numMedia,
     MediaUrl0: mediaUrl0,
     MediaContentType0: mediaContentType0,
-    From: whatsappId,
+    WaId: whatsappId,
   } = input;
+
+  if (!whatsappId) {
+    throw new Error('Whatsapp ID not found in webhook payload');
+  }
 
 
   let media: { serverUrl: string; twilioUrl: string; mimeType: string } | undefined;

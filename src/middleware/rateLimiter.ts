@@ -17,7 +17,7 @@ import { TwilioWebhookRequest } from '../lib/twilio/types';
 export const rateLimiter = async (req: Request, _res: Response, next: NextFunction) => {
 
   const webhook = req.body as TwilioWebhookRequest;
-  const whatsappId = webhook.From;
+  const whatsappId = webhook.WaId;
   const messageId = req.body.MessageSid;
 
   if (!whatsappId) {

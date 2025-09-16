@@ -215,16 +215,6 @@ CREATE TABLE "public"."Task" (
 );
 
 -- CreateTable
-CREATE TABLE "public"."Admins" (
-    "id" TEXT NOT NULL,
-    "email" TEXT NOT NULL,
-    "name" TEXT,
-    "image" TEXT,
-
-    CONSTRAINT "Admins_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "public"."AdminWhitelist" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,
@@ -238,6 +228,66 @@ CREATE TABLE "public"."UserWhitelist" (
     "waId" TEXT NOT NULL,
 
     CONSTRAINT "UserWhitelist_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."Admins" (
+    "id" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "name" TEXT,
+    "image" TEXT,
+    "emailVerified" TIMESTAMP(3),
+
+    CONSTRAINT "Admins_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."AdminAccount" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "provider" TEXT NOT NULL,
+    "providerAccountId" TEXT NOT NULL,
+    "refresh_token" TEXT,
+    "access_token" TEXT,
+    "expires_at" INTEGER,
+    "token_type" TEXT,
+    "scope" TEXT,
+    "id_token" TEXT,
+    "session_state" TEXT,
+
+    CONSTRAINT "AdminAccount_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."AdminSession" (
+    "id" TEXT NOT NULL,
+    "sessionToken" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "expires" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "AdminSession_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."AdminVerificationToken" (
+    "identifier" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
+    "expires" TIMESTAMP(3) NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "public"."AdminAuthenticator" (
+    "credentialID" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "providerAccountId" TEXT NOT NULL,
+    "credentialPublicKey" TEXT NOT NULL,
+    "counter" INTEGER NOT NULL,
+    "credentialDeviceType" TEXT NOT NULL,
+    "credentialBackedUp" BOOLEAN NOT NULL,
+    "transports" TEXT,
+
+    CONSTRAINT "AdminAuthenticator_pkey" PRIMARY KEY ("userId","credentialID")
 );
 
 -- CreateIndex
@@ -298,13 +348,34 @@ CREATE INDEX "Task_userId_runAt_idx" ON "public"."Task"("userId", "runAt");
 CREATE INDEX "Task_status_runAt_idx" ON "public"."Task"("status", "runAt");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Admins_email_key" ON "public"."Admins"("email");
-
--- CreateIndex
 CREATE UNIQUE INDEX "AdminWhitelist_email_key" ON "public"."AdminWhitelist"("email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "UserWhitelist_waId_key" ON "public"."UserWhitelist"("waId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Admins_email_key" ON "public"."Admins"("email");
+
+-- CreateIndex
+CREATE INDEX "AdminAccount_userId_idx" ON "public"."AdminAccount"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "AdminAccount_provider_providerAccountId_key" ON "public"."AdminAccount"("provider", "providerAccountId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "AdminSession_sessionToken_key" ON "public"."AdminSession"("sessionToken");
+
+-- CreateIndex
+CREATE INDEX "AdminSession_userId_idx" ON "public"."AdminSession"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "AdminVerificationToken_token_key" ON "public"."AdminVerificationToken"("token");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "AdminVerificationToken_identifier_token_key" ON "public"."AdminVerificationToken"("identifier", "token");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "AdminAuthenticator_credentialID_key" ON "public"."AdminAuthenticator"("credentialID");
 
 -- AddForeignKey
 ALTER TABLE "public"."Conversation" ADD CONSTRAINT "Conversation_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -341,3 +412,12 @@ ALTER TABLE "public"."Feedback" ADD CONSTRAINT "Feedback_conversationId_fkey" FO
 
 -- AddForeignKey
 ALTER TABLE "public"."Task" ADD CONSTRAINT "Task_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."AdminAccount" ADD CONSTRAINT "AdminAccount_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."Admins"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."AdminSession" ADD CONSTRAINT "AdminSession_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."Admins"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."AdminAuthenticator" ADD CONSTRAINT "AdminAuthenticator_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."Admins"("id") ON DELETE CASCADE ON UPDATE CASCADE;

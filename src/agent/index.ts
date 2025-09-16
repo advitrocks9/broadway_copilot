@@ -78,7 +78,11 @@ async function handleGraphRun(
  * @param options - Optional configuration including abort signal
  */
 export async function runAgent(input: TwilioWebhookRequest, options?: { signal?: AbortSignal }): Promise<void> {
-  const { From: whatsappId, MessageSid: messageId, ProfileName: profileName } = input;
+  const { WaId: whatsappId, MessageSid: messageId, ProfileName: profileName } = input;
+
+  if (!whatsappId) {
+    throw new Error('Whatsapp ID not found in webhook payload');
+  }
 
   if (!compiledApp) {
     throw new Error('Agent not initialized. Call initializeAgent() on startup.');
