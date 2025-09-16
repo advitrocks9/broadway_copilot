@@ -118,9 +118,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     });
   }
 
-  if (media && process.env.NODE_ENV === "production") {
-    await queueImageUpload(user.id, savedMessage.id);
-  }
+  await queueImageUpload(user.id, savedMessage.id);
 
   const messages = await prisma.message.findMany({
     where: {

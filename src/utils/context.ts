@@ -79,13 +79,11 @@ export async function getOrCreateUserAndConversation(
           }),
         ]);
 
-        if (process.env.NODE_ENV === "production") {
-          await queueMemoryExtraction(user.id, lastOpenConversation.id);
-          logger.debug(
-            { userId: user.id, conversationId: lastOpenConversation.id },
-            "Queued memory extraction for closed conversation.",
-          );
-        }
+        await queueMemoryExtraction(user.id, lastOpenConversation.id);
+        logger.debug(
+          { userId: user.id, conversationId: lastOpenConversation.id },
+          "Queued memory extraction for closed conversation.",
+        );
 
         return { user, conversation: newConversation };
       }

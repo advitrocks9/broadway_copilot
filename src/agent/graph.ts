@@ -24,7 +24,7 @@ import { logger } from "../utils/logger";
  * @returns Compiled StateGraph instance ready for execution
  */
 export function buildAgentGraph() {
-  const graph = new StateGraph<GraphState>(null)
+  const graph = new StateGraph<GraphState>()
     .addNode("ingestMessage", ingestMessage)
     .addNode("recordUserInfo", recordUserInfo)
     .addNode("routeIntent", routeIntent)

@@ -2,9 +2,15 @@ import "dotenv/config";
 
 import { CloudTasksClient } from "@google-cloud/tasks";
 import { TaskType } from "@prisma/client";
+import { createId as cuid } from "@paralleldrive/cuid2";
 import { InternalServerError } from "../utils/errors";
 import { logger } from "../utils/logger";
 import { prisma } from "./prisma";
+
+type TaskPayload = {
+  userId: string;
+  [key: string]: string;
+};
 
 const client = new CloudTasksClient();
 
@@ -20,6 +26,70 @@ const IMAGE_UPLOAD_FUNCTION_URL = `https://${CLOUD_FUNCTION_REGION}-${PROJECT_ID
 const SERVICE_ACCOUNT_EMAIL = process.env.CLOUD_TASKS_SERVICE_ACCOUNT;
 
 /**
+ * A generic task queuing function.
+ * @param queueName The name of the Cloud Tasks queue.
+ * @param functionUrl The URL of the Cloud Function to invoke.
+ * @param payload The payload to send to the Cloud Function.
+ * @param taskType The type of the task to record in the database.
+ */
+async function queueTask(
+  queueName: string,
+  functionUrl: string,
+  payload: TaskPayload,
+  taskType: TaskType,
+): Promise<void> {
+  if (!PROJECT_ID || !functionUrl) {
+    throw new InternalServerError(
+      "Missing required environment variables for Cloud Tasks",
+    );
+  }
+
+  const parent = client.queuePath(PROJECT_ID, CLOUD_TASKS_REGION, queueName);
+  const taskId = cuid();
+  const taskName = `${parent}/tasks/${taskId}`;
+
+  const task = {
+    httpRequest: {
+      httpMethod: "POST" as const,
+      url: functionUrl,
+      body: Buffer.from(JSON.stringify(payload)),
+      headers: { "Content-Type": "application/json" },
+      ...(SERVICE_ACCOUNT_EMAIL && {
+        oidcToken: {
+          serviceAccountEmail: SERVICE_ACCOUNT_EMAIL,
+          audience: functionUrl,
+        },
+      }),
+    },
+    name: taskName,
+  };
+
+  try {
+    const [response] = await client.createTask({ parent, task });
+    logger.info(
+      { taskName: response.name, type: taskType },
+      `Queued ${taskType} task`,
+    );
+
+    await prisma.task.create({
+      data: {
+        taskId: taskId,
+        userId: payload.userId,
+        type: taskType,
+        payload,
+        runAt: new Date(),
+      },
+    });
+  } catch (err: any) {
+    logger.error(
+      { err: err.message, type: taskType },
+      `Failed to queue ${taskType} task`,
+    );
+    throw new InternalServerError("Failed to queue task");
+  }
+}
+
+/**
  * Queues a task to index wardrobe from a message by calling the cloud function.
  * @param messageId The ID of the message to process.
  */
@@ -27,49 +97,12 @@ export async function queueWardrobeIndex(
   userId: string,
   messageId: string,
 ): Promise<void> {
-  if (!PROJECT_ID || !WARDROBE_FUNCTION_URL) {
-    throw new InternalServerError(
-      "Missing required environment variables for Cloud Tasks",
-    );
-  }
-
-  const parent = client.queuePath(
-    PROJECT_ID,
-    CLOUD_TASKS_REGION,
+  await queueTask(
     "wardrobe-index",
+    WARDROBE_FUNCTION_URL,
+    { userId, messageId },
+    TaskType.SCHEDULE_WARDROBE_INDEX,
   );
-
-  const task = {
-    httpRequest: {
-      httpMethod: "POST" as const,
-      url: WARDROBE_FUNCTION_URL,
-      body: Buffer.from(JSON.stringify({})).toString("base64"),
-      headers: { "Content-Type": "application/json" },
-      ...(SERVICE_ACCOUNT_EMAIL && {
-        oidcToken: {
-          serviceAccountEmail: SERVICE_ACCOUNT_EMAIL,
-        },
-      }),
-    },
-  };
-
-  try {
-    const [response] = await client.createTask({ parent, task });
-    logger.info({ taskName: response.name }, "Queued wardrobe index task");
-
-    await prisma.task.create({
-      data: {
-        taskId: response.name!,
-        userId,
-        type: TaskType.SCHEDULE_WARDROBE_INDEX,
-        payload: { userId, messageId },
-        runAt: new Date(),
-      },
-    });
-  } catch (err: any) {
-    logger.error({ err: err.message }, "Failed to queue wardrobe index task");
-    throw new InternalServerError("Failed to queue task");
-  }
 }
 
 /**
@@ -80,52 +113,12 @@ export async function queueMemoryExtraction(
   userId: string,
   conversationId: string,
 ): Promise<void> {
-  if (!PROJECT_ID || !MEMORY_FUNCTION_URL) {
-    throw new InternalServerError(
-      "Missing required environment variables for Cloud Tasks",
-    );
-  }
-
-  const parent = client.queuePath(
-    PROJECT_ID,
-    CLOUD_TASKS_REGION,
+  await queueTask(
     "memory-extraction",
+    MEMORY_FUNCTION_URL,
+    { userId, conversationId },
+    TaskType.PROCESS_MEMORIES,
   );
-
-  const task = {
-    httpRequest: {
-      httpMethod: "POST" as const,
-      url: MEMORY_FUNCTION_URL,
-      body: Buffer.from(JSON.stringify({})).toString("base64"),
-      headers: { "Content-Type": "application/json" },
-      ...(SERVICE_ACCOUNT_EMAIL && {
-        oidcToken: {
-          serviceAccountEmail: SERVICE_ACCOUNT_EMAIL,
-        },
-      }),
-    },
-  };
-
-  try {
-    const [response] = await client.createTask({ parent, task });
-    logger.info({ taskName: response.name }, "Queued memory extraction task");
-
-    await prisma.task.create({
-      data: {
-        taskId: response.name!,
-        userId,
-        type: TaskType.PROCESS_MEMORIES,
-        payload: { userId, conversationId },
-        runAt: new Date(),
-      },
-    });
-  } catch (err: any) {
-    logger.error(
-      { err: err.message },
-      "Failed to queue memory extraction task",
-    );
-    throw new InternalServerError("Failed to queue task");
-  }
 }
 
 /**
@@ -137,47 +130,10 @@ export async function queueImageUpload(
   userId: string,
   messageId: string,
 ): Promise<void> {
-  if (!PROJECT_ID || !IMAGE_UPLOAD_FUNCTION_URL) {
-    throw new InternalServerError(
-      "Missing required environment variables for Cloud Tasks",
-    );
-  }
-
-  const parent = client.queuePath(
-    PROJECT_ID,
-    CLOUD_TASKS_REGION,
+  await queueTask(
     "image-upload",
+    IMAGE_UPLOAD_FUNCTION_URL,
+    { userId, messageId },
+    TaskType.UPLOAD_IMAGES,
   );
-
-  const task = {
-    httpRequest: {
-      httpMethod: "POST" as const,
-      url: IMAGE_UPLOAD_FUNCTION_URL,
-      body: Buffer.from(JSON.stringify({})).toString("base64"),
-      headers: { "Content-Type": "application/json" },
-      ...(SERVICE_ACCOUNT_EMAIL && {
-        oidcToken: {
-          serviceAccountEmail: SERVICE_ACCOUNT_EMAIL,
-        },
-      }),
-    },
-  };
-
-  try {
-    const [response] = await client.createTask({ parent, task });
-    logger.info({ taskName: response.name }, "Queued image upload task");
-
-    await prisma.task.create({
-      data: {
-        taskId: response.name!,
-        userId,
-        type: TaskType.UPLOAD_IMAGES,
-        payload: { userId, messageId },
-        runAt: new Date(),
-      },
-    });
-  } catch (err: any) {
-    logger.error({ err: err.message }, "Failed to queue image upload task");
-    throw new InternalServerError("Failed to queue task");
-  }
 }
