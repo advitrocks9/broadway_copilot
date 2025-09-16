@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import OpenAI from "openai";
 
 /**
  * A utility class for creating embeddings using OpenAI's API.
@@ -14,7 +14,7 @@ export class OpenAIEmbeddings {
    */
   constructor(options: { model?: string } = {}) {
     this.client = new OpenAI();
-    this.model = options.model || 'text-embedding-3-small';
+    this.model = options.model || "text-embedding-3-small";
   }
 
   /**
@@ -40,6 +40,6 @@ export class OpenAIEmbeddings {
       model: this.model,
       input: documents,
     });
-    return response.data.map(item => item.embedding);
+    return response.data.map((item) => item.embedding);
   }
 }

@@ -1,12 +1,12 @@
-import { AssistantMessage, UserMessage, MessageContent } from '../../lib/ai';
-import { MessageRole, PendingType } from '@prisma/client';
+import { AssistantMessage, UserMessage, MessageContent } from "../../lib/ai";
+import { MessageRole, PendingType } from "@prisma/client";
 
-import { prisma } from '../../lib/prisma';
-import { downloadTwilioMedia } from '../../utils/media';
-import { extractTextContent } from '../../utils/text';
-import { logger } from '../../utils/logger';
-import { GraphState } from '../state';
-import { queueImageUpload } from '../../lib/tasks';
+import { prisma } from "../../lib/prisma";
+import { downloadTwilioMedia } from "../../utils/media";
+import { extractTextContent } from "../../utils/text";
+import { logger } from "../../utils/logger";
+import { GraphState } from "../state";
+import { queueImageUpload } from "../../lib/tasks";
 
 /**
  * Ingests incoming Twilio messages, processes media attachments, manages conversation history,
@@ -27,33 +27,52 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
   } = input;
 
   if (!whatsappId) {
-    throw new Error('Whatsapp ID not found in webhook payload');
+    throw new Error("Whatsapp ID not found in webhook payload");
   }
 
-
-  let media: { serverUrl: string; twilioUrl: string; mimeType: string } | undefined;
-  let content: MessageContent = [{ type: 'text', text }];
-  if (numMedia === '1' && mediaUrl0 && mediaContentType0?.startsWith('image/')) {
+  let media:
+    | { serverUrl: string; twilioUrl: string; mimeType: string }
+    | undefined;
+  let content: MessageContent = [{ type: "text", text }];
+  if (
+    numMedia === "1" &&
+    mediaUrl0 &&
+    mediaContentType0?.startsWith("image/")
+  ) {
     try {
-      const serverUrl = await downloadTwilioMedia(mediaUrl0, whatsappId, mediaContentType0);
-      content.push({ type: 'image_url', image_url: { url: serverUrl } });
+      const serverUrl = await downloadTwilioMedia(
+        mediaUrl0,
+        whatsappId,
+        mediaContentType0,
+      );
+      content.push({ type: "image_url", image_url: { url: serverUrl } });
       media = { serverUrl, twilioUrl: mediaUrl0, mimeType: mediaContentType0 };
     } catch (error) {
-      logger.warn({ error: error instanceof Error ? error.message : String(error), whatsappId, mediaUrl0 }, 'Failed to download image, proceeding without it.');
+      logger.warn(
+        {
+          error: error instanceof Error ? error.message : String(error),
+          whatsappId,
+          mediaUrl0,
+        },
+        "Failed to download image, proceeding without it.",
+      );
     }
   }
 
   const [lastMessage, latestAssistantMessage] = await Promise.all([
     prisma.message.findFirst({
       where: { conversationId },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, role: true, content: true }
+      orderBy: { createdAt: "desc" },
+      select: { id: true, role: true, content: true },
     }),
     prisma.message.findFirst({
-      where: { conversation: { id: conversationId, userId: user.id }, role: MessageRole.AI },
-      orderBy: { createdAt: 'desc' },
-      select: { pending: true }
-    })
+      where: {
+        conversation: { id: conversationId, userId: user.id },
+        role: MessageRole.AI,
+      },
+      orderBy: { createdAt: "desc" },
+      select: { pending: true },
+    }),
   ]);
 
   const pending = latestAssistantMessage?.pending ?? PendingType.NONE;
@@ -77,7 +96,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
             },
           },
         }),
-      }
+      },
     });
   } else {
     savedMessage = await prisma.message.create({
@@ -95,11 +114,11 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
             },
           },
         }),
-      }
+      },
     });
   }
 
-  if (media && process.env.NODE_ENV === 'production') {
+  if (media && process.env.NODE_ENV === "production") {
     await queueImageUpload(user.id, savedMessage.id);
   }
 
@@ -107,7 +126,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     where: {
       conversationId,
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: "desc" },
     take: 10,
     select: {
       id: true,
@@ -121,31 +140,37 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
   const conversationHistoryWithImages = messages.reverse().map((msg) => {
     if (msg.role === MessageRole.USER) {
       const message = new UserMessage(msg.content as MessageContent);
-      message.meta = { createdAt: msg.createdAt, buttonPayload: msg.buttonPayload, messageId: msg.id };
+      message.meta = {
+        createdAt: msg.createdAt,
+        buttonPayload: msg.buttonPayload,
+        messageId: msg.id,
+      };
       return message;
     } else {
-      const message = new AssistantMessage('');
+      const message = new AssistantMessage("");
       message.content = msg.content as MessageContent;
       message.meta = { createdAt: msg.createdAt, messageId: msg.id };
       return message;
     }
   });
 
-  const conversationHistoryTextOnly = conversationHistoryWithImages.map((msg) => {
-    const textContent = extractTextContent(msg.content as MessageContent);
+  const conversationHistoryTextOnly = conversationHistoryWithImages.map(
+    (msg) => {
+      const textContent = extractTextContent(msg.content as MessageContent);
 
-    if (msg instanceof UserMessage) {
-      const message = new UserMessage(textContent);
-      message.meta = msg.meta;
-      return message;
-    } else {
-      const message = new AssistantMessage(textContent);
-      message.meta = msg.meta;
-      return message;
-    }
-  });
+      if (msg instanceof UserMessage) {
+        const message = new UserMessage(textContent);
+        message.meta = msg.meta;
+        return message;
+      } else {
+        const message = new AssistantMessage(textContent);
+        message.meta = msg.meta;
+        return message;
+      }
+    },
+  );
 
-  logger.debug({ whatsappId, graphRunId }, 'Message ingested successfully');
+  logger.debug({ whatsappId, graphRunId }, "Message ingested successfully");
 
   return {
     ...state,

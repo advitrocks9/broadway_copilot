@@ -1,4 +1,4 @@
-import { ZodType } from 'zod';
+import { ZodType } from "zod";
 import {
   BaseMessage,
   ToolMessage,
@@ -6,10 +6,10 @@ import {
   AssistantMessage,
   UserMessage,
   TextPart,
-} from '../core/messages';
-import { Tool } from '../core/tools';
-import { BaseChatModel } from '../core/base_chat_model';
-import { TraceBuffer } from '../../../agent/tracing';
+} from "../core/messages";
+import { Tool } from "../core/tools";
+import { BaseChatModel } from "../core/base_chat_model";
+import { TraceBuffer } from "../../../agent/tracing";
 
 const MAX_ITERATIONS = 5;
 
@@ -29,21 +29,21 @@ async function getFinalStructuredOutput<T extends ZodType>(
   outputSchema: T,
   traceBuffer: TraceBuffer,
   nodeName?: string,
-): Promise<T['_output']> {
+): Promise<T["_output"]> {
   const lastMessage = conversation[conversation.length - 1];
 
   // If the last message is an assistant's message, use it for parsing.
   if (lastMessage instanceof AssistantMessage) {
     const customPrompt = new SystemMessage(
-      'Parse the user message which contains the output from a previous step into a JSON object ' +
-      'that strictly adheres to the provided schema. ' +
-      'Do not add any extra commentary or change any of the values.',
+      "Parse the user message which contains the output from a previous step into a JSON object " +
+        "that strictly adheres to the provided schema. " +
+        "Do not add any extra commentary or change any of the values.",
     );
 
     const textContent = lastMessage.content
-      .filter((p): p is TextPart => p.type === 'text')
-      .map(p => p.text)
-      .join('');
+      .filter((p): p is TextPart => p.type === "text")
+      .map((p) => p.text)
+      .join("");
 
     const parsingConversation: BaseMessage[] = [new UserMessage(textContent)];
 
@@ -54,9 +54,8 @@ async function getFinalStructuredOutput<T extends ZodType>(
       traceBuffer,
       nodeName,
     );
-  }
-  else {
-    throw new Error('Last message is not an assistant message');
+  } else {
+    throw new Error("Last message is not an assistant message");
   }
 }
 
@@ -111,7 +110,7 @@ export async function agentExecutor<T extends ZodType>(
   },
   traceBuffer: TraceBuffer,
   maxLoops: number = MAX_ITERATIONS,
-): Promise<T['_output']> {
+): Promise<T["_output"]> {
   const runnerWithTools = runner.bind(options.tools);
 
   const conversation: BaseMessage[] = [...history];
@@ -140,11 +139,11 @@ export async function agentExecutor<T extends ZodType>(
 
     // Filter out tool calls that have already been executed
     const newToolCalls = toolCalls.filter(
-      toolCall => !seenToolCallIds.has(toolCall.id),
+      (toolCall) => !seenToolCallIds.has(toolCall.id),
     );
 
     // Mark new tool calls as seen
-    newToolCalls.forEach(toolCall => seenToolCallIds.add(toolCall.id));
+    newToolCalls.forEach((toolCall) => seenToolCallIds.add(toolCall.id));
 
     if (newToolCalls.length === 0) {
       return await getFinalStructuredOutput(
@@ -157,8 +156,8 @@ export async function agentExecutor<T extends ZodType>(
     }
 
     const toolResults = await Promise.all(
-      newToolCalls.map(async toolCall => {
-        const toolDef = options.tools.find(t => t.name === toolCall.name);
+      newToolCalls.map(async (toolCall) => {
+        const toolDef = options.tools.find((t) => t.name === toolCall.name);
         if (!toolDef) {
           return {
             id: toolCall.id,
@@ -186,10 +185,10 @@ export async function agentExecutor<T extends ZodType>(
             isError: true,
           };
         }
-      })
+      }),
     );
 
-    toolResults.forEach(toolResult => {
+    toolResults.forEach((toolResult) => {
       conversation.push(
         new ToolMessage(
           JSON.stringify(toolResult.result, null, 2),

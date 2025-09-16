@@ -1,16 +1,13 @@
-import 'dotenv/config';
+import "dotenv/config";
 
-import Groq from 'groq-sdk';
-import OpenAI from 'openai';
-import { ZodType } from 'zod';
-import { ModelRunner, ChatModelParams, RunOutcome } from './runnables';
-import {
-  BaseMessage,
-  SystemMessage,
-} from './messages';
-import { Tool } from './tools';
-import { StructuredOutputRunnable } from './structured_output_runnable';
-import { TraceBuffer } from '../../../agent/tracing';
+import Groq from "groq-sdk";
+import OpenAI from "openai";
+import { ZodType } from "zod";
+import { ModelRunner, ChatModelParams, RunOutcome } from "./runnables";
+import { BaseMessage, SystemMessage } from "./messages";
+import { Tool } from "./tools";
+import { StructuredOutputRunnable } from "./structured_output_runnable";
+import { TraceBuffer } from "../../../agent/tracing";
 
 /**
  * Abstract base class for chat models, providing a common interface for
@@ -22,7 +19,7 @@ export abstract class BaseChatModel implements ModelRunner {
   public params: ChatModelParams;
   protected boundTools?: Tool<any>[];
   protected structuredOutputSchema?: ZodType;
-  public structuredOutputToolName: string = 'structured_output';
+  public structuredOutputToolName: string = "structured_output";
 
   constructor(params: ChatModelParams) {
     this.params = {
@@ -40,7 +37,7 @@ export abstract class BaseChatModel implements ModelRunner {
    */
   bind(tools: Tool<any>[]): this {
     const newInstance = new (this.constructor as new (
-      params: ChatModelParams
+      params: ChatModelParams,
     ) => this)(this.params);
     newInstance.boundTools = tools;
     return newInstance;
@@ -53,7 +50,7 @@ export abstract class BaseChatModel implements ModelRunner {
    * @returns A `StructuredOutputRunnable` instance that will return a typed object.
    */
   withStructuredOutput<T extends ZodType>(
-    schema: T
+    schema: T,
   ): StructuredOutputRunnable<T> {
     const newInstance = this._clone();
     newInstance.structuredOutputSchema = schema;
@@ -80,7 +77,7 @@ export abstract class BaseChatModel implements ModelRunner {
 
   protected _clone(): this {
     const newInstance = new (this.constructor as new (
-      params: ChatModelParams
+      params: ChatModelParams,
     ) => this)(this.params);
     newInstance.boundTools = this.boundTools;
     newInstance.structuredOutputSchema = this.structuredOutputSchema;

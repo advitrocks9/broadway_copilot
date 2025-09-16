@@ -1,21 +1,29 @@
-import { z } from 'zod';
+import { z } from "zod";
 
-import { Gender, AgeGroup, PendingType } from '@prisma/client';
+import { Gender, AgeGroup, PendingType } from "@prisma/client";
 
-import { prisma } from '../../lib/prisma';
-import { getTextLLM } from '../../lib/ai';
-import { SystemMessage } from '../../lib/ai/core/messages';
-import { loadPrompt } from '../../utils/prompts';
-import { GraphState } from '../state';
-import { logger } from '../../utils/logger';
-import { InternalServerError } from '../../utils/errors';
+import { prisma } from "../../lib/prisma";
+import { getTextLLM } from "../../lib/ai";
+import { SystemMessage } from "../../lib/ai/core/messages";
+import { loadPrompt } from "../../utils/prompts";
+import { GraphState } from "../state";
+import { logger } from "../../utils/logger";
+import { InternalServerError } from "../../utils/errors";
 
 /**
  * Structured output schema for confirming user profile fields.
  */
 const LLMOutputSchema = z.object({
-  confirmed_gender: z.enum(Gender).describe("The user's inferred gender, which must be one of the values from the Gender enum."),
-  confirmed_age_group: z.enum(AgeGroup).describe("The user's inferred age group, which must be one of the values from the AgeGroup enum."),
+  confirmed_gender: z
+    .enum(Gender)
+    .describe(
+      "The user's inferred gender, which must be one of the values from the Gender enum.",
+    ),
+  confirmed_age_group: z
+    .enum(AgeGroup)
+    .describe(
+      "The user's inferred age group, which must be one of the values from the AgeGroup enum.",
+    ),
 });
 
 /**
@@ -25,7 +33,7 @@ const LLMOutputSchema = z.object({
 export async function recordUserInfo(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
   try {
-    const systemPromptText = await loadPrompt('data/record_user_info.txt');
+    const systemPromptText = await loadPrompt("data/record_user_info.txt");
     const systemPrompt = new SystemMessage(systemPromptText);
 
     const response = await getTextLLM()
@@ -34,16 +42,19 @@ export async function recordUserInfo(state: GraphState): Promise<GraphState> {
         systemPrompt,
         state.conversationHistoryTextOnly,
         state.traceBuffer,
-        'recordUserInfo',
+        "recordUserInfo",
       );
 
     const user = await prisma.user.update({
       where: { id: state.user.id },
-      data: { confirmedGender: response.confirmed_gender, confirmedAgeGroup: response.confirmed_age_group }
+      data: {
+        confirmedGender: response.confirmed_gender,
+        confirmedAgeGroup: response.confirmed_age_group,
+      },
     });
-    logger.debug({ userId }, 'User info recorded successfully');
+    logger.debug({ userId }, "User info recorded successfully");
     return { ...state, user, pending: PendingType.NONE };
   } catch (err: unknown) {
-    throw new InternalServerError('Failed to record user info', { cause: err });
+    throw new InternalServerError("Failed to record user info", { cause: err });
   }
 }

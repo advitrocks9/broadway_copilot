@@ -1,24 +1,32 @@
-import { z } from 'zod';
+import { z } from "zod";
 
-import { PendingType } from '@prisma/client';
+import { PendingType } from "@prisma/client";
 
-import { getTextLLM } from '../../lib/ai';
-import { SystemMessage } from '../../lib/ai/core/messages';
-import { numImagesInMessage } from '../../utils/context';
-import { loadPrompt } from '../../utils/prompts';
-import { logger } from '../../utils/logger';
-import { GraphState } from '../state';
-import { InternalServerError } from '../../utils/errors';
+import { getTextLLM } from "../../lib/ai";
+import { SystemMessage } from "../../lib/ai/core/messages";
+import { numImagesInMessage } from "../../utils/context";
+import { loadPrompt } from "../../utils/prompts";
+import { logger } from "../../utils/logger";
+import { GraphState } from "../state";
+import { InternalServerError } from "../../utils/errors";
 
 /**
  * Schema for LLM output defining the routing decision.
  * Determines the primary intent and any missing profile requirements.
  */
 const LLMOutputSchema = z.object({
-  intent: z.enum(['general', 'vibe_check', 'color_analysis', 'styling']).describe("The primary intent of the user's message, used to route to the appropriate handler."),
-  missingProfileField: z.enum(['gender', 'age_group']).nullable().describe("The profile field that is missing and required to fulfill the user's intent. Null if no field is missing."),
+  intent: z
+    .enum(["general", "vibe_check", "color_analysis", "styling"])
+    .describe(
+      "The primary intent of the user's message, used to route to the appropriate handler.",
+    ),
+  missingProfileField: z
+    .enum(["gender", "age_group"])
+    .nullable()
+    .describe(
+      "The profile field that is missing and required to fulfill the user's intent. Null if no field is missing.",
+    ),
 });
-
 
 /**
  * Routes the user's message to the appropriate handler based on intent analysis.
@@ -34,18 +42,37 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
 
   // Priority 1: Handle explicit button payload routing
   if (buttonPayload) {
-    const stylingRelated = ['styling', 'occasion', 'vacation', 'pairing', 'suggest'] as const;
-    const otherValid = ['general', 'vibe_check', 'color_analysis'] as const;
+    const stylingRelated = [
+      "styling",
+      "occasion",
+      "vacation",
+      "pairing",
+      "suggest",
+    ] as const;
+    const otherValid = ["general", "vibe_check", "color_analysis"] as const;
 
     if (stylingRelated.includes(buttonPayload as any)) {
-      logger.debug({ userId, routedIntent: 'styling' }, 'Routed to styling intent from button payload');
-      return { ...state, intent: 'styling', missingProfileField: null };
+      logger.debug(
+        { userId, routedIntent: "styling" },
+        "Routed to styling intent from button payload",
+      );
+      return { ...state, intent: "styling", missingProfileField: null };
     } else if (otherValid.includes(buttonPayload as any)) {
-      logger.debug({ userId, routedIntent: buttonPayload }, 'Routed to specific intent from button payload');
-      return { ...state, intent: buttonPayload as typeof otherValid[number], missingProfileField: null };
+      logger.debug(
+        { userId, routedIntent: buttonPayload },
+        "Routed to specific intent from button payload",
+      );
+      return {
+        ...state,
+        intent: buttonPayload as (typeof otherValid)[number],
+        missingProfileField: null,
+      };
     } else {
-      logger.debug({ userId, routedIntent: 'general' }, 'Routing unknown button payload to general intent');
-      return { ...state, intent: 'general', missingProfileField: null };
+      logger.debug(
+        { userId, routedIntent: "general" },
+        "Routing unknown button payload to general intent",
+      );
+      return { ...state, intent: "general", missingProfileField: null };
     }
   }
 
@@ -53,30 +80,40 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
   const imageCount = numImagesInMessage(conversationHistoryWithImages);
   if (imageCount > 0) {
     if (pending === PendingType.VIBE_CHECK_IMAGE) {
-      logger.debug({ userId }, 'Routing to vibe_check due to pending intent and image presence');
-      return { ...state, intent: 'vibe_check', missingProfileField: null };
+      logger.debug(
+        { userId },
+        "Routing to vibe_check due to pending intent and image presence",
+      );
+      return { ...state, intent: "vibe_check", missingProfileField: null };
     } else if (pending === PendingType.COLOR_ANALYSIS_IMAGE) {
-      logger.debug({ userId }, 'Routing to color_analysis due to pending intent and image presence');
-      return { ...state, intent: 'color_analysis', missingProfileField: null };
+      logger.debug(
+        { userId },
+        "Routing to color_analysis due to pending intent and image presence",
+      );
+      return { ...state, intent: "color_analysis", missingProfileField: null };
     }
   }
 
   // Calculate cooldown periods for premium services (30-minute cooldown)
   const now = Date.now();
   const lastVibeCheckAt = user.lastVibeCheckAt?.getTime() ?? null;
-  const vibeMinutesAgo = lastVibeCheckAt ? Math.floor((now - lastVibeCheckAt) / (1000 * 60)) : -1;
+  const vibeMinutesAgo = lastVibeCheckAt
+    ? Math.floor((now - lastVibeCheckAt) / (1000 * 60))
+    : -1;
   const canDoVibeCheck = vibeMinutesAgo === -1 || vibeMinutesAgo >= 30;
 
   const lastColorAnalysisAt = user.lastColorAnalysisAt?.getTime() ?? null;
-  const colorMinutesAgo = lastColorAnalysisAt ? Math.floor((now - lastColorAnalysisAt) / (1000 * 60)) : -1;
+  const colorMinutesAgo = lastColorAnalysisAt
+    ? Math.floor((now - lastColorAnalysisAt) / (1000 * 60))
+    : -1;
   const canDoColorAnalysis = colorMinutesAgo === -1 || colorMinutesAgo >= 30;
 
   // Priority 3: Use LLM for intelligent intent classification
   try {
-    const systemPromptText = await loadPrompt('routing/route_intent.txt');
+    const systemPromptText = await loadPrompt("routing/route_intent.txt");
     const formattedSystemPrompt = systemPromptText
-      .replace('{can_do_vibe_check}', canDoVibeCheck.toString())
-      .replace('{can_do_color_analysis}', canDoColorAnalysis.toString());
+      .replace("{can_do_vibe_check}", canDoVibeCheck.toString())
+      .replace("{can_do_color_analysis}", canDoColorAnalysis.toString());
 
     const systemPrompt = new SystemMessage(formattedSystemPrompt);
 
@@ -86,23 +123,32 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
         systemPrompt,
         state.conversationHistoryTextOnly,
         state.traceBuffer,
-        'routeIntent',
+        "routeIntent",
       );
 
     let { intent, missingProfileField } = response;
 
     if (missingProfileField) {
-      if (missingProfileField === 'gender' && (user.inferredGender || user.confirmedGender)) {
+      if (
+        missingProfileField === "gender" &&
+        (user.inferredGender || user.confirmedGender)
+      ) {
         missingProfileField = null;
-      } else if (missingProfileField === 'age_group' && (user.inferredAgeGroup || user.confirmedAgeGroup)) {
+      } else if (
+        missingProfileField === "age_group" &&
+        (user.inferredAgeGroup || user.confirmedAgeGroup)
+      ) {
         missingProfileField = null;
       }
     }
 
-    logger.debug({ userId, intent, missingProfileField }, 'Intent routed via LLM');
+    logger.debug(
+      { userId, intent, missingProfileField },
+      "Intent routed via LLM",
+    );
 
     return { ...state, intent, missingProfileField };
   } catch (err: unknown) {
-    throw new InternalServerError('Failed to route intent', { cause: err });
+    throw new InternalServerError("Failed to route intent", { cause: err });
   }
 }

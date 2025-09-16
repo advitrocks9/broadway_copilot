@@ -1,18 +1,14 @@
-import Groq from 'groq-sdk';
-import OpenAI from 'openai';
-import { Prisma } from '@prisma/client';
-import { ChatCompletion } from 'openai/resources/chat/completions';
-import { createId } from '@paralleldrive/cuid2';
+import Groq from "groq-sdk";
+import OpenAI from "openai";
+import { Prisma } from "@prisma/client";
+import { ChatCompletion } from "openai/resources/chat/completions";
+import { createId } from "@paralleldrive/cuid2";
 
-import { GroqChatModelParams, RunOutcome } from '../core/runnables';
-import {
-  BaseMessage,
-  SystemMessage,
-  TextPart,
-} from '../core/messages';
-import { BaseChatCompletionsModel } from '../core/base_chat_completions_model';
-import { MODEL_COSTS } from '../config/costs';
-import { TraceBuffer } from '../../../agent/tracing';
+import { GroqChatModelParams, RunOutcome } from "../core/runnables";
+import { BaseMessage, SystemMessage, TextPart } from "../core/messages";
+import { BaseChatCompletionsModel } from "../core/base_chat_completions_model";
+import { MODEL_COSTS } from "../config/costs";
+import { TraceBuffer } from "../../../agent/tracing";
 
 /**
  * A chat model that interacts with the Groq API.
@@ -40,7 +36,7 @@ export class ChatGroq extends BaseChatCompletionsModel {
    */
   constructor(params: Partial<GroqChatModelParams> = {}, client?: Groq) {
     const combinedParams: GroqChatModelParams = {
-      model: 'llama3-70b-8192',
+      model: "llama3-70b-8192",
       ...params,
     };
     super(combinedParams);
@@ -49,7 +45,7 @@ export class ChatGroq extends BaseChatCompletionsModel {
       new Groq({
         apiKey: process.env.GROQ_API_KEY,
       });
-    this.structuredOutputToolName = 'json';
+    this.structuredOutputToolName = "json";
     this.params = combinedParams;
   }
 
@@ -70,7 +66,7 @@ export class ChatGroq extends BaseChatCompletionsModel {
     }
 
     const nodeRun = traceBuffer.nodeRuns.find(
-      ne => ne.nodeName === nodeName && !ne.endTime,
+      (ne) => ne.nodeName === nodeName && !ne.endTime,
     );
     if (!nodeRun) {
       throw new Error(
@@ -141,14 +137,14 @@ export class ChatGroq extends BaseChatCompletionsModel {
     const params = super._buildChatCompletionsParams(systemPrompt, msgs);
 
     // Groq doesn't support image inputs, so we need to filter them out
-    params.messages = params.messages.map(m => {
-      if (m.role === 'user' && Array.isArray(m.content)) {
+    params.messages = params.messages.map((m) => {
+      if (m.role === "user" && Array.isArray(m.content)) {
         return {
           ...m,
           content: m.content
-            .filter((c): c is TextPart => c.type === 'text')
-            .map(c => c.text)
-            .join(''),
+            .filter((c): c is TextPart => c.type === "text")
+            .map((c) => c.text)
+            .join(""),
         };
       }
       return m;

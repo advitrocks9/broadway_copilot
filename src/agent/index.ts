@@ -1,15 +1,15 @@
-import 'dotenv/config';
+import "dotenv/config";
 
-import { Conversation, PendingType, MessageRole } from '@prisma/client';
-import { StateGraph } from '../lib/graph';
-import { GraphState } from './state';
-import { logError } from '../utils/errors';
-import { logger } from '../utils/logger';
-import { TwilioWebhookRequest } from '../lib/twilio/types';
-import { getOrCreateUserAndConversation } from '../utils/context';
-import { sendText } from '../lib/twilio';
-import { prisma } from '../lib/prisma';
-import { buildAgentGraph } from './graph';
+import { Conversation, PendingType, MessageRole } from "@prisma/client";
+import { StateGraph } from "../lib/graph";
+import { GraphState } from "./state";
+import { logError } from "../utils/errors";
+import { logger } from "../utils/logger";
+import { TwilioWebhookRequest } from "../lib/twilio/types";
+import { getOrCreateUserAndConversation } from "../utils/context";
+import { sendText } from "../lib/twilio";
+import { prisma } from "../lib/prisma";
+import { buildAgentGraph } from "./graph";
 
 let compiledApp: ReturnType<typeof StateGraph.prototype.compile> | null = null;
 
@@ -18,13 +18,16 @@ let compiledApp: ReturnType<typeof StateGraph.prototype.compile> | null = null;
  * once at application startup.
  */
 export async function initializeAgent(): Promise<void> {
-  logger.info('Compiling agent graph...');
+  logger.info("Compiling agent graph...");
   try {
     compiledApp = buildAgentGraph();
-    logger.info('Agent graph compiled successfully.');
+    logger.info("Agent graph compiled successfully.");
   } catch (err: unknown) {
     const error = err instanceof Error ? err : new Error(String(err));
-    logger.error({ err: error.message, stack: error.stack }, 'Agent graph compilation failed');
+    logger.error(
+      { err: error.message, stack: error.stack },
+      "Agent graph compilation failed",
+    );
     process.exit(1);
   }
 }
@@ -34,21 +37,23 @@ async function handleGraphRun(
   fn: () => Promise<Partial<GraphState> | null>,
 ): Promise<void> {
   let finalState: Partial<GraphState> | null = null;
-  let status: 'COMPLETED' | 'ABORTED' | 'ERROR' = 'COMPLETED';
+  let status: "COMPLETED" | "ABORTED" | "ERROR" = "COMPLETED";
   let error: unknown;
 
   try {
     finalState = await fn();
   } catch (err) {
     error = err;
-    if (err instanceof Error && err.name === 'AbortError') {
-      status = 'ABORTED';
+    if (err instanceof Error && err.name === "AbortError") {
+      status = "ABORTED";
     } else {
-      status = 'ERROR';
+      status = "ERROR";
     }
   }
 
-  const graphRun = await prisma.graphRun.findUnique({ where: { id: graphRunId } });
+  const graphRun = await prisma.graphRun.findUnique({
+    where: { id: graphRunId },
+  });
   if (!graphRun) return;
 
   const endTime = new Date();
@@ -58,7 +63,7 @@ async function handleGraphRun(
     const { nodeRuns, llmTraces } = finalState.traceBuffer;
     if (nodeRuns.length > 0) {
       await prisma.nodeRun.createMany({
-        data: nodeRuns.map(ne => ({
+        data: nodeRuns.map((ne) => ({
           ...ne,
           graphRunId,
         })),
@@ -66,7 +71,7 @@ async function handleGraphRun(
     }
     if (llmTraces.length > 0) {
       await prisma.lLMTrace.createMany({
-        data: llmTraces.map(lt => ({
+        data: llmTraces.map((lt) => ({
           ...lt,
         })),
       });
@@ -79,13 +84,17 @@ async function handleGraphRun(
     data: {
       finalState: finalState as any,
       status,
-      errorTrace: error ? (error instanceof Error ? error.stack : String(error)) : undefined,
+      errorTrace: error
+        ? error instanceof Error
+          ? error.stack
+          : String(error)
+        : undefined,
       endTime,
       durationMs,
     },
   });
 
-  if (status === 'ERROR' || status === 'ABORTED') {
+  if (status === "ERROR" || status === "ABORTED") {
     throw error;
   }
 }
@@ -96,20 +105,30 @@ async function handleGraphRun(
  * @param input - Raw Twilio webhook payload containing message data
  * @param options - Optional configuration including abort signal
  */
-export async function runAgent(input: TwilioWebhookRequest, options?: { signal?: AbortSignal }): Promise<void> {
-  const { WaId: whatsappId, MessageSid: messageId, ProfileName: profileName } = input;
+export async function runAgent(
+  input: TwilioWebhookRequest,
+  options?: { signal?: AbortSignal },
+): Promise<void> {
+  const {
+    WaId: whatsappId,
+    MessageSid: messageId,
+    ProfileName: profileName,
+  } = input;
 
   if (!whatsappId) {
-    throw new Error('Whatsapp ID not found in webhook payload');
+    throw new Error("Whatsapp ID not found in webhook payload");
   }
 
   if (!compiledApp) {
-    throw new Error('Agent not initialized. Call initializeAgent() on startup.');
+    throw new Error(
+      "Agent not initialized. Call initializeAgent() on startup.",
+    );
   }
 
   let conversation: Conversation | undefined;
   try {
-    const { user, conversation: _conversation } = await getOrCreateUserAndConversation(whatsappId, profileName);
+    const { user, conversation: _conversation } =
+      await getOrCreateUserAndConversation(whatsappId, profileName);
     conversation = _conversation;
 
     const graphRun = await prisma.graphRun.create({
@@ -134,18 +153,30 @@ export async function runAgent(input: TwilioWebhookRequest, options?: { signal?:
       ),
     );
   } catch (err: unknown) {
-    if (err instanceof Error && err.name === 'AbortError') {
+    if (err instanceof Error && err.name === "AbortError") {
       throw err;
     }
-    const error = logError(err, { whatsappId, messageId, location: 'runAgent' });
+    const error = logError(err, {
+      whatsappId,
+      messageId,
+      location: "runAgent",
+    });
     try {
-      await sendText(whatsappId, 'Sorry, something went wrong. Please try again later.');
+      await sendText(
+        whatsappId,
+        "Sorry, something went wrong. Please try again later.",
+      );
       if (conversation) {
         await prisma.message.create({
           data: {
             conversationId: conversation.id,
             role: MessageRole.AI,
-            content: [{ type: 'text', text: 'Sorry, something went wrong. Please try again later.' }],
+            content: [
+              {
+                type: "text",
+                text: "Sorry, something went wrong. Please try again later.",
+              },
+            ],
             pending: PendingType.NONE,
           },
         });
@@ -154,7 +185,7 @@ export async function runAgent(input: TwilioWebhookRequest, options?: { signal?:
       logError(sendErr, {
         whatsappId,
         messageId,
-        location: 'runAgent.sendTextFallback',
+        location: "runAgent.sendTextFallback",
         originalError: error.message,
       });
     }

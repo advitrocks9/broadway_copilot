@@ -1,19 +1,19 @@
-import { NextFunction, Request, Response } from 'express';
-import { prisma } from '../lib/prisma';
-import { sendText } from '../lib/twilio';
-import { TwilioWebhookRequest } from '../lib/twilio/types';
-import { ForbiddenError, InternalServerError } from '../utils/errors';
-import { logger } from '../utils/logger';
+import { NextFunction, Request, Response } from "express";
+import { prisma } from "../lib/prisma";
+import { sendText } from "../lib/twilio";
+import { TwilioWebhookRequest } from "../lib/twilio/types";
+import { ForbiddenError, InternalServerError } from "../utils/errors";
+import { logger } from "../utils/logger";
 
 export const whitelist = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   const { WaId } = req.body as TwilioWebhookRequest;
 
   if (!WaId) {
-    return next(new ForbiddenError('Unauthorized'));
+    return next(new ForbiddenError("Unauthorized"));
   }
 
   try {
@@ -27,13 +27,14 @@ export const whitelist = async (
       logger.info(`Unauthorized access attempt by ${WaId}`);
       await sendText(
         WaId,
-        "Hey! Thanks for your interest in Broadway. We're currently in a private beta. We'll let you know when we're ready for you!"
+        "Hey! Thanks for your interest in Broadway. We're currently in a private beta. We'll let you know when we're ready for you!",
       );
-      return res.status(403).send('Forbidden');
+      return res.status(403).send("Forbidden");
     }
 
     next();
-  } catch (error) {
-    next(new InternalServerError('Internal Server Error'));
+  } catch (error: unknown) {
+    logger.error({ error }, "Error in whitelist middleware");
+    next(new InternalServerError("Internal Server Error"));
   }
 };

@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import "dotenv/config";
 
 import { CloudTasksClient } from "@google-cloud/tasks";
 import { TaskType } from "@prisma/client";
@@ -8,8 +8,9 @@ import { prisma } from "./prisma";
 
 const client = new CloudTasksClient();
 
-const PROJECT_ID =  process.env.PROJECT_ID || "broadway-chatbot";
-const CLOUD_FUNCTION_REGION = process.env.CLOUD_FUNCTION_REGION || "asia-south2";
+const PROJECT_ID = process.env.PROJECT_ID || "broadway-chatbot";
+const CLOUD_FUNCTION_REGION =
+  process.env.CLOUD_FUNCTION_REGION || "asia-south2";
 const CLOUD_TASKS_REGION = process.env.CLOUD_TASKS_REGION || "asia-south1";
 
 const WARDROBE_FUNCTION_URL = `https://${CLOUD_FUNCTION_REGION}-${PROJECT_ID}.cloudfunctions.net/indexWardrobe`;
@@ -22,12 +23,21 @@ const SERVICE_ACCOUNT_EMAIL = process.env.CLOUD_TASKS_SERVICE_ACCOUNT;
  * Queues a task to index wardrobe from a message by calling the cloud function.
  * @param messageId The ID of the message to process.
  */
-export async function queueWardrobeIndex(userId: string, messageId: string): Promise<void> {
+export async function queueWardrobeIndex(
+  userId: string,
+  messageId: string,
+): Promise<void> {
   if (!PROJECT_ID || !WARDROBE_FUNCTION_URL) {
-    throw new InternalServerError("Missing required environment variables for Cloud Tasks");
+    throw new InternalServerError(
+      "Missing required environment variables for Cloud Tasks",
+    );
   }
 
-  const parent = client.queuePath(PROJECT_ID, CLOUD_TASKS_REGION, "wardrobe-index");
+  const parent = client.queuePath(
+    PROJECT_ID,
+    CLOUD_TASKS_REGION,
+    "wardrobe-index",
+  );
 
   const task = {
     httpRequest: {
@@ -66,12 +76,21 @@ export async function queueWardrobeIndex(userId: string, messageId: string): Pro
  * Queues a task to extract and save memories for a user by calling the cloud function.
  * @param userId The ID of the user to process.
  */
-export async function queueMemoryExtraction(userId: string, conversationId: string): Promise<void> {
+export async function queueMemoryExtraction(
+  userId: string,
+  conversationId: string,
+): Promise<void> {
   if (!PROJECT_ID || !MEMORY_FUNCTION_URL) {
-    throw new InternalServerError("Missing required environment variables for Cloud Tasks");
+    throw new InternalServerError(
+      "Missing required environment variables for Cloud Tasks",
+    );
   }
 
-  const parent = client.queuePath(PROJECT_ID, CLOUD_TASKS_REGION, "memory-extraction");
+  const parent = client.queuePath(
+    PROJECT_ID,
+    CLOUD_TASKS_REGION,
+    "memory-extraction",
+  );
 
   const task = {
     httpRequest: {
@@ -101,7 +120,10 @@ export async function queueMemoryExtraction(userId: string, conversationId: stri
       },
     });
   } catch (err: any) {
-    logger.error({ err: err.message }, "Failed to queue memory extraction task");
+    logger.error(
+      { err: err.message },
+      "Failed to queue memory extraction task",
+    );
     throw new InternalServerError("Failed to queue task");
   }
 }
@@ -111,12 +133,21 @@ export async function queueMemoryExtraction(userId: string, conversationId: stri
  * @param userId The ID of the user to process.
  * @param messageId The ID of the message containing the images.
  */
-export async function queueImageUpload(userId: string, messageId: string): Promise<void> {
+export async function queueImageUpload(
+  userId: string,
+  messageId: string,
+): Promise<void> {
   if (!PROJECT_ID || !IMAGE_UPLOAD_FUNCTION_URL) {
-    throw new InternalServerError("Missing required environment variables for Cloud Tasks");
+    throw new InternalServerError(
+      "Missing required environment variables for Cloud Tasks",
+    );
   }
 
-  const parent = client.queuePath(PROJECT_ID, CLOUD_TASKS_REGION, "image-upload");
+  const parent = client.queuePath(
+    PROJECT_ID,
+    CLOUD_TASKS_REGION,
+    "image-upload",
+  );
 
   const task = {
     httpRequest: {

@@ -1,13 +1,10 @@
-import { Prisma } from '@prisma/client';
+import { Prisma } from "@prisma/client";
 
-export type BufferedNodeRun = Omit<
-  Prisma.NodeRunCreateInput,
-  'graphRun'
-> & {
+export type BufferedNodeRun = Omit<Prisma.NodeRunCreateInput, "graphRun"> & {
   id: string;
 };
 
-export type BufferedLlmTrace = Omit<Prisma.LLMTraceCreateInput, 'nodeRun'> & {
+export type BufferedLlmTrace = Omit<Prisma.LLMTraceCreateInput, "nodeRun"> & {
   nodeRunId: string;
   id: string;
 };

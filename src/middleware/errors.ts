@@ -1,6 +1,6 @@
-import { NextFunction, Request, Response } from 'express';
+import { NextFunction, Request, Response } from "express";
 
-import { createErrorResponse, logError } from '../utils/errors';
+import { createErrorResponse, logError } from "../utils/errors";
 
 /**
  * Express error handling middleware that normalizes, logs, and responds to errors.
@@ -11,11 +11,16 @@ import { createErrorResponse, logError } from '../utils/errors';
  * @param res - Express response object
  * @param _next - Express next function (unused as this is the final handler)
  */
-export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
+export function errorHandler(
+  err: unknown,
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): void {
   const context = {
     method: req.method,
     url: req.url,
-    userAgent: req.get('User-Agent'),
+    userAgent: req.get("User-Agent"),
     ip: req.ip,
   };
 

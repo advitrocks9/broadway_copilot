@@ -1,9 +1,9 @@
-import { User, PendingType } from '@prisma/client';
+import { User, PendingType } from "@prisma/client";
 
-import { BaseMessage } from '../lib/ai';
-import { TwilioWebhookRequest } from '../lib/twilio/types';
-import { QuickReplyButton } from '../lib/twilio/types';
-import { TraceBuffer } from './tracing';
+import { BaseMessage } from "../lib/ai";
+import { TwilioWebhookRequest } from "../lib/twilio/types";
+import { QuickReplyButton } from "../lib/twilio/types";
+import { TraceBuffer } from "./tracing";
 
 // ============================================================================
 // AGENT STATE DEFINITION
@@ -66,29 +66,33 @@ export interface GraphState {
  * These define the main categories of user interactions the agent can handle.
  */
 export type IntentLabel =
-  | 'general'
-  | 'vibe_check'
-  | 'color_analysis'
-  | 'styling';
+  | "general"
+  | "vibe_check"
+  | "color_analysis"
+  | "styling";
 
 /**
  * Specific styling intents for fashion/styling related requests.
  * These are sub-categories under the main 'styling' intent.
  */
-export type StylingIntent = 'occasion' | 'vacation' | 'pairing' | 'suggest';
+export type StylingIntent = "occasion" | "vacation" | "pairing" | "suggest";
 
 /**
  * General conversation intents for non-styling related interactions.
  * These handle basic conversational flows like greetings and menu navigation.
  */
-export type GeneralIntent = 'greeting' | 'menu' | 'chat';
+export type GeneralIntent = "greeting" | "menu" | "chat";
 
 /**
  * Available services that can be offered to users.
  * Used for determining which features are accessible based on user state and cooldowns.
  */
-export type AvailableService = 'vibe_check' | 'occasion' | 'vacation' | 'color_analysis' | 'suggest';
-
+export type AvailableService =
+  | "vibe_check"
+  | "occasion"
+  | "vacation"
+  | "color_analysis"
+  | "suggest";
 
 /**
  * Standard reply structure for agent responses.
@@ -96,16 +100,16 @@ export type AvailableService = 'vibe_check' | 'occasion' | 'vacation' | 'color_a
  */
 type Reply =
   | {
-      reply_type: 'text';
+      reply_type: "text";
       reply_text: string;
     }
   | {
-      reply_type: 'quick_reply';
+      reply_type: "quick_reply";
       reply_text: string;
       buttons: QuickReplyButton[];
     }
   | {
-      reply_type: 'image';
+      reply_type: "image";
       media_url: string;
       reply_text?: string;
     };
@@ -116,9 +120,8 @@ type Reply =
  */
 export type Replies = Reply[];
 
-
 /**
  * Missing profile fields that need to be collected from the user.
  * Used to determine if the user needs to provide more information to fulfill the request.
  */
-export type MissingProfileField = 'gender' | 'age_group';
+export type MissingProfileField = "gender" | "age_group";

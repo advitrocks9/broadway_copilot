@@ -8,7 +8,9 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "graph": "ts-node-dev --transpile-only scripts/visualizeGraph.ts",
-    "prune": "ts-prune"
+    "prune": "ts-prune",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "lint": "eslint \"src/**/*.ts\""
   },
   "keywords": [],
   "author": "",
@@ -36,6 +38,11 @@
     "@types/express": "^5.0.3",
     "@types/mime-types": "^3.0.1",
     "@types/node": "^24.3.1",
+    "@typescript-eslint/eslint-plugin": "^8.44.0",
+    "@typescript-eslint/parser": "^8.44.0",
+    "eslint": "^9.35.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
     "pino-pretty": "^13.1.1",
     "prettier": "^3.6.2",
     "prisma": "^6.15.0",

@@ -1,6 +1,6 @@
-import { BaseMessage, SystemMessage } from './messages';
-import { ToolCall } from './tools';
-import { TraceBuffer } from '../../../agent/tracing';
+import { BaseMessage, SystemMessage } from "./messages";
+import { ToolCall } from "./tools";
+import { TraceBuffer } from "../../../agent/tracing";
 
 /**
  * Defines the core parameters for configuring a chat model instance.
@@ -35,7 +35,7 @@ export interface OpenAIChatModelParams extends ChatModelParams {
    * which can improve performance on complex tasks.
    * Only applicable when `useResponsesApi` is `true`.
    */
-  reasoning?: { effort: 'minimal' | 'low' | 'medium' | 'high' };
+  reasoning?: { effort: "minimal" | "low" | "medium" | "high" };
   /**
    * (OpenAI-specific) Toggles between the Responses API and the Chat Completions API.
    * Defaults to `false` (Chat Completions API).
@@ -46,7 +46,7 @@ export interface OpenAIChatModelParams extends ChatModelParams {
    * Setting to `{ type: "json_object" }` enables JSON mode.
    * Only applicable for Chat Completions API.
    */
-  responseFormat?: { type: 'text' | 'json_object' };
+  responseFormat?: { type: "text" | "json_object" };
 }
 
 export interface GroqChatModelParams extends ChatModelParams {

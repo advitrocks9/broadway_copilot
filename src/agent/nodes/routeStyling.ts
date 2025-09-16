@@ -1,18 +1,22 @@
-import { z } from 'zod';
+import { z } from "zod";
 
-import { getTextLLM } from '../../lib/ai';
-import { SystemMessage } from '../../lib/ai/core/messages';
-import { loadPrompt } from '../../utils/prompts';
-import { logger } from '../../utils/logger';
+import { getTextLLM } from "../../lib/ai";
+import { SystemMessage } from "../../lib/ai/core/messages";
+import { loadPrompt } from "../../utils/prompts";
+import { logger } from "../../utils/logger";
 
-import { StylingIntent, Replies } from '../state';
-import { GraphState } from '../state';
-import { InternalServerError } from '../../utils/errors';
+import { StylingIntent, Replies } from "../state";
+import { GraphState } from "../state";
+import { InternalServerError } from "../../utils/errors";
 /**
  * Routes the input to the appropriate styling handler based on the sub-router prompt.
  */
 const LLMOutputSchema = z.object({
-  stylingIntent: z.enum(['occasion', 'vacation', 'pairing', 'suggest']).describe("The specific styling intent of the user's message, used to route to the appropriate styling handler."),
+  stylingIntent: z
+    .enum(["occasion", "vacation", "pairing", "suggest"])
+    .describe(
+      "The specific styling intent of the user's message, used to route to the appropriate styling handler.",
+    ),
 });
 
 /**
@@ -23,31 +27,36 @@ export async function routeStyling(state: GraphState): Promise<GraphState> {
   const messageId = state.input.MessageSid;
   const buttonPayload = state.input.ButtonPayload;
 
-  logger.debug({ userId, messageId, buttonPayload }, 'Routing styling intent');
+  logger.debug({ userId, messageId, buttonPayload }, "Routing styling intent");
 
   try {
-    if (buttonPayload === 'styling') {
+    if (buttonPayload === "styling") {
       const stylingButtons = [
-        { text: 'Occasion', id: 'occasion' },
-        { text: 'Pairing', id: 'pairing' },
-        { text: 'Vacation', id: 'vacation' },
+        { text: "Occasion", id: "occasion" },
+        { text: "Pairing", id: "pairing" },
+        { text: "Vacation", id: "vacation" },
       ];
 
-      const replies: Replies = [{
-        reply_type: 'quick_reply',
-        reply_text: 'Please select which styling service you need',
-        buttons: stylingButtons
-      }];
-      logger.debug({ userId }, 'Returning styling menu for flow continuation');
+      const replies: Replies = [
+        {
+          reply_type: "quick_reply",
+          reply_text: "Please select which styling service you need",
+          buttons: stylingButtons,
+        },
+      ];
+      logger.debug({ userId }, "Returning styling menu for flow continuation");
       return { ...state, assistantReply: replies };
     }
 
-    if (buttonPayload && ['occasion', 'vacation', 'pairing', 'suggest'].includes(buttonPayload)) {
-      logger.debug({ userId }, 'Styling intent routed using button payload');
+    if (
+      buttonPayload &&
+      ["occasion", "vacation", "pairing", "suggest"].includes(buttonPayload)
+    ) {
+      logger.debug({ userId }, "Styling intent routed using button payload");
       return { ...state, stylingIntent: buttonPayload as StylingIntent };
     }
 
-    const systemPromptText = await loadPrompt('routing/route_styling.txt');
+    const systemPromptText = await loadPrompt("routing/route_styling.txt");
     const systemPrompt = new SystemMessage(systemPromptText);
 
     const response = await getTextLLM()
@@ -56,16 +65,18 @@ export async function routeStyling(state: GraphState): Promise<GraphState> {
         systemPrompt,
         state.conversationHistoryTextOnly,
         state.traceBuffer,
-        'routeStyling',
+        "routeStyling",
       );
 
     logger.debug(
       { userId, stylingIntent: response.stylingIntent },
-      'Styling intent routed using LLM',
+      "Styling intent routed using LLM",
     );
 
     return { ...state, ...response };
   } catch (err: unknown) {
-    throw new InternalServerError('Failed to route styling intent', { cause: err });
+    throw new InternalServerError("Failed to route styling intent", {
+      cause: err,
+    });
   }
 }

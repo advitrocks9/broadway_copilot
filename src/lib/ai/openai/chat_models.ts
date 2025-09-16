@@ -1,6 +1,6 @@
-import OpenAI from 'openai';
-import z from 'zod';
-import { createId } from '@paralleldrive/cuid2';
+import OpenAI from "openai";
+import z from "zod";
+import { createId } from "@paralleldrive/cuid2";
 import type {
   Response,
   ResponseCreateParamsNonStreaming,
@@ -8,20 +8,20 @@ import type {
   ResponseFunctionToolCall,
   ResponseOutputItem,
   FunctionTool,
-} from 'openai/resources/responses/responses';
+} from "openai/resources/responses/responses";
 
-import { OpenAIChatModelParams, RunOutcome } from '../core/runnables';
+import { OpenAIChatModelParams, RunOutcome } from "../core/runnables";
 import {
   AssistantMessage,
   BaseMessage,
   SystemMessage,
   TextPart,
-} from '../core/messages';
-import { ToolCall, toOpenAIToolSpec } from '../core/tools';
-import { Prisma } from '@prisma/client';
-import { BaseChatCompletionsModel } from '../core/base_chat_completions_model';
-import { MODEL_COSTS } from '../config/costs';
-import { TraceBuffer } from '../../../agent/tracing';
+} from "../core/messages";
+import { ToolCall, toOpenAIToolSpec } from "../core/tools";
+import { Prisma } from "@prisma/client";
+import { BaseChatCompletionsModel } from "../core/base_chat_completions_model";
+import { MODEL_COSTS } from "../config/costs";
+import { TraceBuffer } from "../../../agent/tracing";
 
 /**
  * A chat model that interacts with the OpenAI API.
@@ -47,12 +47,9 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
    * @param params - Optional parameters to override the model defaults.
    * @param client - An optional OpenAI client instance, useful for testing or custom configurations.
    */
-  constructor(
-    params: Partial<OpenAIChatModelParams> = {},
-    client?: OpenAI,
-  ) {
+  constructor(params: Partial<OpenAIChatModelParams> = {}, client?: OpenAI) {
     const combinedParams: OpenAIChatModelParams = {
-      model: 'gpt-4.1',
+      model: "gpt-4.1",
       useResponsesApi: false,
       ...params,
     };
@@ -68,19 +65,9 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
     nodeName?: string,
   ): Promise<RunOutcome> {
     if (this.params.useResponsesApi) {
-      return this._runResponses(
-        systemPrompt,
-        msgs,
-        traceBuffer,
-        nodeName,
-      );
+      return this._runResponses(systemPrompt, msgs, traceBuffer, nodeName);
     }
-    return this._runChatCompletions(
-      systemPrompt,
-      msgs,
-      traceBuffer,
-      nodeName,
-    );
+    return this._runChatCompletions(systemPrompt, msgs, traceBuffer, nodeName);
   }
 
   private async _runResponses(
@@ -92,7 +79,7 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
     const params = this._buildResponsesParams(systemPrompt, msgs);
 
     const nodeRun = traceBuffer.nodeRuns.find(
-      ne => ne.nodeName === nodeName && !ne.endTime,
+      (ne) => ne.nodeName === nodeName && !ne.endTime,
     );
     if (!nodeRun) {
       throw new Error(
@@ -159,7 +146,7 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
     const params = this._buildChatCompletionsParams(systemPrompt, msgs);
 
     const nodeRun = traceBuffer.nodeRuns.find(
-      ne => ne.nodeName === nodeName && !ne.endTime,
+      (ne) => ne.nodeName === nodeName && !ne.endTime,
     );
     if (!nodeRun) {
       throw new Error(
@@ -225,33 +212,33 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
     msgs: BaseMessage[],
   ): ResponseCreateParamsNonStreaming {
     const instructions = systemPrompt.content
-      .filter((p): p is TextPart => p.type === 'text')
-      .map(p => p.text)
-      .join('');
+      .filter((p): p is TextPart => p.type === "text")
+      .map((p) => p.text)
+      .join("");
 
-    const input: ResponseInputItem[] = msgs.flatMap(m => {
-      if (m.role === 'tool') {
+    const input: ResponseInputItem[] = msgs.flatMap((m) => {
+      if (m.role === "tool") {
         return {
-          type: 'function_call_output',
+          type: "function_call_output",
           call_id: m.tool_call_id!,
           output: m.content
-            .filter((p): p is TextPart => p.type === 'text')
-            .map(p => p.text)
-            .join(''),
+            .filter((p): p is TextPart => p.type === "text")
+            .map((p) => p.text)
+            .join(""),
         };
       }
 
-      if (m.role === 'assistant') {
+      if (m.role === "assistant") {
         const items: ResponseInputItem[] = [];
         const textContent = m.content
-          .filter((p): p is TextPart => p.type === 'text')
-          .map(p => p.text)
-          .join('')
+          .filter((p): p is TextPart => p.type === "text")
+          .map((p) => p.text)
+          .join("")
           .trim();
 
         if (textContent) {
           items.push({
-            role: 'assistant',
+            role: "assistant",
             content: textContent,
           });
         }
@@ -267,16 +254,16 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
 
       // User messages
       return {
-        role: 'user',
-        content: m.content.map(c => {
-          if (c.type === 'text') {
-            return { type: 'input_text' as const, text: c.text };
+        role: "user",
+        content: m.content.map((c) => {
+          if (c.type === "text") {
+            return { type: "input_text" as const, text: c.text };
           }
           // ImagePart
           return {
-            type: 'input_image' as const,
+            type: "input_image" as const,
             image_url: c.image_url.url,
-            detail: c.image_url.detail || 'auto',
+            detail: c.image_url.detail || "auto",
           };
         }),
       };
@@ -303,21 +290,21 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
 
     if (tools && tools.length > 0) {
       params.tools = tools;
-      params.tool_choice = 'auto';
+      params.tool_choice = "auto";
     }
 
     if (this.structuredOutputSchema) {
       const toolName = this.structuredOutputToolName;
       const tool: FunctionTool = {
-        type: 'function',
+        type: "function",
         name: toolName,
-        description: 'Structured output formatter',
+        description: "Structured output formatter",
         parameters: z.toJSONSchema(this.structuredOutputSchema),
         strict: true,
       };
       params.tools = [...(params.tools || []), tool];
       params.tool_choice = {
-        type: 'function',
+        type: "function",
         name: toolName,
       };
     }
@@ -341,15 +328,15 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
     toolCalls?: ToolCall[];
     rawToolCalls?: ResponseFunctionToolCall[];
   } {
-    const assistantContent: string = response.output_text ?? '';
+    const assistantContent: string = response.output_text ?? "";
     const output: ResponseOutputItem[] = response.output ?? [];
 
     const rawToolCalls = output.filter(
       (item): item is ResponseFunctionToolCall =>
-        item?.type === 'function_call',
+        item?.type === "function_call",
     );
 
-    const toolCalls: ToolCall[] = rawToolCalls.map(item => {
+    const toolCalls: ToolCall[] = rawToolCalls.map((item) => {
       try {
         return {
           id: item.call_id,

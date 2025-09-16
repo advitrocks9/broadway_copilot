@@ -1,9 +1,9 @@
-import { User, Conversation, ConversationStatus } from '@prisma/client';
+import { User, Conversation, ConversationStatus } from "@prisma/client";
 
-import { prisma } from '../lib/prisma';
-import { queueMemoryExtraction } from '../lib/tasks';
-import { logger } from './logger';
-import { BadRequestError, InternalServerError } from './errors';
+import { prisma } from "../lib/prisma";
+import { queueMemoryExtraction } from "../lib/tasks";
+import { logger } from "./logger";
+import { BadRequestError, InternalServerError } from "./errors";
 
 const CONVERSATION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -18,10 +18,10 @@ const CONVERSATION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
  */
 export async function getOrCreateUserAndConversation(
   whatsappId: string,
-  profileName?: string
+  profileName?: string,
 ): Promise<{ user: User; conversation: Conversation }> {
   if (!whatsappId) {
-    throw new BadRequestError('WhatsApp ID is required');
+    throw new BadRequestError("WhatsApp ID is required");
   }
 
   try {
@@ -30,14 +30,17 @@ export async function getOrCreateUserAndConversation(
       include: {
         conversations: {
           where: { status: ConversationStatus.OPEN },
-          orderBy: { updatedAt: 'desc' },
+          orderBy: { updatedAt: "desc" },
           take: 1,
         },
       },
     });
 
     if (!userWithConversation) {
-      logger.debug({ whatsappId }, 'User not found, creating new user and conversation.');
+      logger.debug(
+        { whatsappId },
+        "User not found, creating new user and conversation.",
+      );
       const newUser = await prisma.user.create({
         data: {
           whatsappId,
@@ -58,11 +61,12 @@ export async function getOrCreateUserAndConversation(
     const lastOpenConversation = conversations[0];
 
     if (lastOpenConversation) {
-      const timeSinceLastUpdate = Date.now() - new Date(lastOpenConversation.updatedAt).getTime();
+      const timeSinceLastUpdate =
+        Date.now() - new Date(lastOpenConversation.updatedAt).getTime();
       if (timeSinceLastUpdate > CONVERSATION_TIMEOUT_MS) {
         logger.debug(
           { userId: user.id, conversationId: lastOpenConversation.id },
-          'Stale conversation detected, closing and creating a new one.'
+          "Stale conversation detected, closing and creating a new one.",
         );
 
         const [, newConversation] = await prisma.$transaction([
@@ -75,11 +79,11 @@ export async function getOrCreateUserAndConversation(
           }),
         ]);
 
-        if (process.env.NODE_ENV === 'production') {
+        if (process.env.NODE_ENV === "production") {
           await queueMemoryExtraction(user.id, lastOpenConversation.id);
           logger.debug(
             { userId: user.id, conversationId: lastOpenConversation.id },
-            'Queued memory extraction for closed conversation.'
+            "Queued memory extraction for closed conversation.",
           );
         }
 
@@ -88,13 +92,19 @@ export async function getOrCreateUserAndConversation(
       return { user, conversation: lastOpenConversation };
     }
 
-    logger.debug({ userId: user.id }, 'No open conversation found, creating a new one.');
+    logger.debug(
+      { userId: user.id },
+      "No open conversation found, creating a new one.",
+    );
     const newConversation = await prisma.conversation.create({
       data: { userId: user.id },
     });
     return { user, conversation: newConversation };
   } catch (err: unknown) {
-    throw new InternalServerError('Failed to get or create user and conversation', { cause: err });
+    throw new InternalServerError(
+      "Failed to get or create user and conversation",
+      { cause: err },
+    );
   }
 }
 
@@ -105,8 +115,13 @@ export async function getOrCreateUserAndConversation(
  * @param conversationHistoryWithImages - Array of conversation messages with image data
  * @returns Number of image URLs in the latest message
  */
-export function numImagesInMessage(conversationHistoryWithImages: any[]): number {
-  if (!conversationHistoryWithImages || conversationHistoryWithImages.length === 0) {
+export function numImagesInMessage(
+  conversationHistoryWithImages: any[],
+): number {
+  if (
+    !conversationHistoryWithImages ||
+    conversationHistoryWithImages.length === 0
+  ) {
     return 0;
   }
 
@@ -119,5 +134,6 @@ export function numImagesInMessage(conversationHistoryWithImages: any[]): number
     return 0;
   }
 
-  return latestMessage.content.filter((item: any) => item.type === 'image_url').length;
+  return latestMessage.content.filter((item: any) => item.type === "image_url")
+    .length;
 }
