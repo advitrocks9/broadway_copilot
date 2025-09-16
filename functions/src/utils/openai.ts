@@ -1,8 +1,18 @@
 import OpenAI from "openai";
 
-export const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let openAIClient: OpenAI | null = null;
+
+const getOpenAIClient = (): OpenAI => {
+  if (openAIClient) return openAIClient;
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY environment variable not set");
+  }
+
+  openAIClient = new OpenAI({ apiKey });
+  return openAIClient;
+};
 
 const EMBEDDING_MODEL =
   process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
@@ -27,7 +37,7 @@ export const isTextContentPart = (part: unknown): part is TextContentPart =>
   typeof (part as any).text === "string";
 
 export async function getEmbedding(input: string): Promise<EmbeddingResult> {
-  const response = await openai.embeddings.create({
+  const response = await getOpenAIClient().embeddings.create({
     model: EMBEDDING_MODEL,
     input,
   });
@@ -49,7 +59,7 @@ export type ContentPart =
   | {
       type: "input_image";
       image_url: string;
-      detail?: "low" | "high" | "auto";
+      detail: "low" | "high" | "auto";
     };
 
 export type VisionMessage = {
@@ -62,7 +72,7 @@ export async function generateJson<T>(
   model: string,
   messages: VisionMessage[],
 ): Promise<T> {
-  const response = await (openai as any).responses.create({
+  const response = await getOpenAIClient().responses.create({
     model,
     input: messages,
   });

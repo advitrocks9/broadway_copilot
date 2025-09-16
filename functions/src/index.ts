@@ -83,7 +83,7 @@ const withTaskLifecycle =
     }
   };
 
-export const imageUpload = withTaskLifecycle<ImageUploadPayload>(
+const imageUploadFunction = withTaskLifecycle<ImageUploadPayload>(
   async (prisma, payload) => {
     const validated = validatePayload<ImageUploadPayload>(payload, [
       "userId",
@@ -93,7 +93,7 @@ export const imageUpload = withTaskLifecycle<ImageUploadPayload>(
   },
 );
 
-export const storeMemories = withTaskLifecycle<StoreMemoriesPayload>(
+const storeMemoriesFunction = withTaskLifecycle<StoreMemoriesPayload>(
   async (prisma, payload) => {
     const validated = validatePayload<StoreMemoriesPayload>(payload, [
       "userId",
@@ -103,7 +103,7 @@ export const storeMemories = withTaskLifecycle<StoreMemoriesPayload>(
   },
 );
 
-export const indexWardrobe = withTaskLifecycle<IndexWardrobePayload>(
+const indexWardrobeFunction = withTaskLifecycle<IndexWardrobePayload>(
   async (prisma, payload) => {
     const validated = validatePayload<IndexWardrobePayload>(payload, [
       "userId",
@@ -112,3 +112,7 @@ export const indexWardrobe = withTaskLifecycle<IndexWardrobePayload>(
     return indexWardrobeHandler(prisma, validated);
   },
 );
+
+export const imageUpload: HttpFunction = imageUploadFunction;
+export const storeMemories: HttpFunction = storeMemoriesFunction;
+export const indexWardrobe: HttpFunction = indexWardrobeFunction;

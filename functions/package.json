@@ -5,8 +5,11 @@
   "description": "Google Cloud Functions for Broadway Copilot",
   "main": "dist/index.js",
   "scripts": {
-    "start": "npm run build && functions-framework --source=dist --target=imageUpload --port=8080",
-    "build": "tsc",
+    "start": "functions-framework --source=dist --target=${FUNCTION_TARGET} --port=${PORT:-8080}",
+    "build": "npm run prisma:generate && tsc",
+    "prisma:generate": "prisma generate",
+    "postinstall": "npm run prisma:generate",
+    "prestart": "npm run build",
     "test:imageUpload": "npm run build && functions-framework --source=dist --target=imageUpload --port=8080",
     "test:storeMemories": "npm run build && functions-framework --source=dist --target=storeMemories --port=8081",
     "test:indexWardrobe": "npm run build && functions-framework --source=dist --target=indexWardrobe --port=8082"
