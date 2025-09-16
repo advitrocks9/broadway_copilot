@@ -45,14 +45,41 @@ const withTaskLifecycle =
     const taskId = req.headers["x-cloudtasks-taskname"] as string;
 
     if (!taskId) {
+      console.error({ message: "Missing task header" });
       res.status(400).send({ message: "Missing task header" });
       return;
     }
+    console.info({ message: "Received task request", taskId });
 
     try {
       const task = await prisma.task.findUnique({ where: { taskId } });
       if (!task) {
+        console.error({ message: "Task not found", taskId });
         res.status(404).send({ message: "Task not found" });
+        return;
+      }
+
+      if (task.status === "COMPLETED") {
+        console.warn({ message: "Task already completed", taskId });
+        res.status(200).send({ message: "Task already completed" });
+        return;
+      }
+
+      if (task.status === "IN_PROGRESS") {
+        console.warn({ message: "Task already in progress", taskId });
+        res.status(409).send({ message: "Task already in progress" });
+        return;
+      }
+
+      if (task.status !== "QUEUED") {
+        console.error({
+          message: "Task in invalid state",
+          taskId,
+          status: task.status,
+        });
+        res
+          .status(400)
+          .send({ message: `Task in invalid state: ${task.status}` });
         return;
       }
 
@@ -70,7 +97,12 @@ const withTaskLifecycle =
 
       res.status(200).send(result);
     } catch (error) {
-      console.error(`Task ${taskId} failed:`, error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error({
+        message: "Task failed",
+        taskId,
+        error: errorMessage,
+      });
 
       await prisma.task
         .update({

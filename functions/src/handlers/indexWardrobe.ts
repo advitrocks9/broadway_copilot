@@ -24,6 +24,7 @@ export const indexWardrobeHandler = async (
   payload: IndexWardrobePayload,
 ): Promise<IndexWardrobeResult> => {
   const { userId, messageId } = payload;
+  console.info({ message: "Starting wardrobe indexing", payload });
 
   const message = await prisma.message.findUnique({
     where: { id: messageId },
@@ -31,13 +32,27 @@ export const indexWardrobeHandler = async (
   });
 
   if (!message?.media?.length) {
+    console.debug({
+      message: "No media to process for wardrobe indexing",
+      payload,
+    });
     return { message: "No media to process" };
   }
 
+  console.debug({
+    message: "Processing media for wardrobe indexing",
+    mediaCount: message.media.length,
+    payload,
+  });
   let itemsCreated = 0;
 
   for (const media of message.media) {
     if (!media.mimeType.startsWith("image/")) continue;
+    console.debug({
+      message: "Processing media item",
+      mediaId: media.id,
+      payload,
+    });
 
     const result = await generateJson<{ items: Item[] }>(WARDROBE_MODEL, [
       {
@@ -75,6 +90,11 @@ export const indexWardrobeHandler = async (
 
       await prisma.$executeRaw`UPDATE "WardrobeItem" SET embedding = ${embedding}::vector WHERE id = ${createdItem.id}`;
       itemsCreated++;
+      console.debug({
+        message: "Created wardrobe item",
+        itemId: createdItem.id,
+        payload,
+      });
     }
   }
 
@@ -83,5 +103,11 @@ export const indexWardrobeHandler = async (
     data: { wardrobeProcessed: true },
   });
 
-  return { message: `Created ${itemsCreated} wardrobe items` };
+  const result: IndexWardrobeResult = { message: `Created ${itemsCreated} wardrobe items` };
+  console.info({
+    message: "Wardrobe indexing finished",
+    details: result.message,
+    payload,
+  });
+  return result;
 };

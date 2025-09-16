@@ -28,6 +28,8 @@ export const imageUploadHandler = async (
   const { userId, messageId } = payload;
   const bucketName = process.env.GCS_BUCKET_NAME;
 
+  console.debug({ message: "Starting image upload", payload });
+
   if (!bucketName) {
     throw new Error("GCS_BUCKET_NAME environment variable not set");
   }
@@ -41,6 +43,7 @@ export const imageUploadHandler = async (
     });
 
     if (images.length === 0) {
+      console.debug({ message: "No new images to upload", payload });
       return {
         message: "No new images to upload",
         successCount: 0,
@@ -48,6 +51,11 @@ export const imageUploadHandler = async (
       };
     }
 
+    console.debug({
+      message: "Uploading images",
+      count: images.length,
+      payload,
+    });
     let successCount = 0;
     let errorCount = 0;
 
@@ -80,7 +88,14 @@ export const imageUploadHandler = async (
 
           successCount++;
         } catch (error) {
-          console.error(`Failed to upload image ${image.id}:`, error);
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          console.error({
+            message: "Failed to upload image",
+            imageId: image.id,
+            error: errorMessage,
+            payload,
+          });
           errorCount++;
         } finally {
           if (tempFilePath) {
@@ -90,11 +105,13 @@ export const imageUploadHandler = async (
       }),
     );
 
-    return {
+    const result: ImageUploadResult = {
       message: `Upload completed`,
       successCount,
       errorCount,
     };
+    console.info({ message: "Image upload finished", result, payload });
+    return result;
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }

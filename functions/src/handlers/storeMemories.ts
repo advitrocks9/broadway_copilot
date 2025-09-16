@@ -8,7 +8,7 @@ const MEMORY_EXTRACTION_PROMPT = fs.readFileSync(
   "utf-8",
 );
 const MEMORY_EXTRACTION_MODEL =
-  process.env.OPENAI_MEMORY_EXTRACTION_MODEL || "gpt-4.1";
+  process.env.OPENAI_MEMORY_EXTRACTION_MODEL || "gpt-5-mini";
 
 export type StoreMemoriesPayload = {
   userId: string;
@@ -101,6 +101,7 @@ export const storeMemoriesHandler = async (
   payload: StoreMemoriesPayload,
 ): Promise<StoreMemoriesResult> => {
   const { userId, conversationId } = payload;
+  console.debug({ message: "Starting memory storage", payload });
 
   const messages = await prisma.message.findMany({
     where: { conversationId, memoriesProcessed: false },
@@ -108,13 +109,29 @@ export const storeMemoriesHandler = async (
   });
 
   if (messages.length === 0) {
+    console.debug({
+      message: "No new messages to process for memories",
+      payload,
+    });
     return { message: "No new messages to process" };
   }
 
+  console.debug({
+    message: "Processing messages for memories",
+    count: messages.length,
+    payload,
+  });
   const memories = await extractMemories(messages);
 
   if (memories.length > 0) {
+    console.debug({
+      message: "Extracted memories",
+      count: memories.length,
+      payload,
+    });
     await saveMemories(prisma, userId, memories);
+  } else {
+    console.debug({ message: "No memories extracted", payload });
   }
 
   await markProcessed(
@@ -122,7 +139,13 @@ export const storeMemoriesHandler = async (
     messages.map((m) => m.id),
   );
 
-  return {
+  const result: StoreMemoriesResult = {
     message: `Processed ${messages.length} messages, extracted ${memories.length} memories`,
   };
+  console.info({
+    message: "Memory storage finished",
+    details: result.message,
+    payload,
+  });
+  return result;
 };

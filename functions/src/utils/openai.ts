@@ -75,6 +75,7 @@ export async function generateJson<T>(
   const response = await getOpenAIClient().responses.create({
     model,
     input: messages,
+    reasoning: { effort: "minimal" },
   });
 
   const text = response.output_text;
