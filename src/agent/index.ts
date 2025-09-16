@@ -61,29 +61,24 @@ async function logGraphResult(
 
     if (finalState?.traceBuffer) {
       const { nodeRuns, llmTraces } = finalState.traceBuffer;
-      const promises: Promise<any>[] = [];
+      
       if (nodeRuns.length > 0) {
-        promises.push(
-          prisma.nodeRun.createMany({
-            data: nodeRuns.map((ne) => ({
-              ...ne,
-              graphRunId,
-            })),
-          }),
-        );
+        await prisma.nodeRun.createMany({
+          data: nodeRuns.map((ne) => ({
+            ...ne,
+            graphRunId,
+          })),
+        });
       }
+      
       if (llmTraces.length > 0) {
-        promises.push(
-          prisma.lLMTrace.createMany({
-            data: llmTraces.map((lt) => ({
-              ...lt,
-            })),
-          }),
-        );
+        await prisma.lLMTrace.createMany({
+          data: llmTraces.map((lt) => ({
+            ...lt,
+          })),
+        });
       }
-      if (promises.length > 0) {
-        await Promise.all(promises);
-      }
+      
       delete finalState.traceBuffer;
     }
 

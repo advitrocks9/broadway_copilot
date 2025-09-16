@@ -124,7 +124,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
         where: {
           conversationId,
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: "desc" },
         take: 10,
         select: {
           id: true,
@@ -133,7 +133,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
           buttonPayload: true,
           createdAt: true,
         },
-      });
+      }).then(msgs => msgs.reverse());
 
       return { savedMessage, messages, pending: pendingState };
     },
