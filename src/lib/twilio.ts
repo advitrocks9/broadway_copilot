@@ -6,7 +6,6 @@ import { Request } from "express";
 import RequestClient from "twilio/lib/base/RequestClient";
 import { redis } from "./redis";
 import {
-  TWILIO_WHATSAPP_FROM,
   TWILIO_QUICKREPLY2_SID,
   TWILIO_QUICKREPLY3_SID,
 } from "../utils/constants";
@@ -76,7 +75,7 @@ export async function sendText(
   imageUrl?: string,
 ): Promise<void> {
   const client = getTwilioClient();
-  const fromNumber = TWILIO_WHATSAPP_FROM;
+  const fromNumber = process.env.TWILIO_WHATSAPP_FROM || "whatsapp:+14155238886";
   try {
     const messageOptions: TwilioMessageOptions = {
       body,
@@ -126,7 +125,7 @@ export async function sendMenu(
 
   const contentSid =
     buttons.length === 2 ? TWILIO_QUICKREPLY2_SID : TWILIO_QUICKREPLY3_SID;
-  const fromNumber = TWILIO_WHATSAPP_FROM;
+  const fromNumber = process.env.TWILIO_WHATSAPP_FROM || "whatsapp:+14155238886";
 
   const contentVariables: Record<string, string> = {
     "1": replyText,
