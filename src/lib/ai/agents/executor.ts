@@ -1,15 +1,15 @@
-import { ZodType } from "zod";
+import { ZodType } from 'zod';
+import { TraceBuffer } from '../../../agent/tracing';
+import { BaseChatModel } from '../core/base_chat_model';
 import {
-  BaseMessage,
-  ToolMessage,
-  SystemMessage,
   AssistantMessage,
-  UserMessage,
+  BaseMessage,
+  SystemMessage,
   TextPart,
-} from "../core/messages";
-import { Tool } from "../core/tools";
-import { BaseChatModel } from "../core/base_chat_model";
-import { TraceBuffer } from "../../../agent/tracing";
+  ToolMessage,
+  UserMessage,
+} from '../core/messages';
+import { Tool } from '../core/tools';
 
 const MAX_ITERATIONS = 5;
 
@@ -28,34 +28,29 @@ async function getFinalStructuredOutput<T extends ZodType>(
   conversation: BaseMessage[],
   outputSchema: T,
   traceBuffer: TraceBuffer,
-  nodeName?: string,
-): Promise<T["_output"]> {
+  nodeName: string,
+): Promise<T['_output']> {
   const lastMessage = conversation[conversation.length - 1];
 
   // If the last message is an assistant's message, use it for parsing.
   if (lastMessage instanceof AssistantMessage) {
     const customPrompt = new SystemMessage(
-      "Parse the user message which contains the output from a previous step into a JSON object " +
-        "that strictly adheres to the provided schema. " +
-        "Do not add any extra commentary or change any of the values.",
+      'Parse the user message which contains the output from a previous step into a JSON object ' +
+        'that strictly adheres to the provided schema. ' +
+        'Do not add any extra commentary or change any of the values.',
     );
 
     const textContent = lastMessage.content
-      .filter((p): p is TextPart => p.type === "text")
+      .filter((p): p is TextPart => p.type === 'text')
       .map((p) => p.text)
-      .join("");
+      .join('');
 
     const parsingConversation: BaseMessage[] = [new UserMessage(textContent)];
 
     const structuredRunner = runner.withStructuredOutput(outputSchema);
-    return await structuredRunner.run(
-      customPrompt,
-      parsingConversation,
-      traceBuffer,
-      nodeName,
-    );
+    return await structuredRunner.run(customPrompt, parsingConversation, traceBuffer, nodeName);
   } else {
-    throw new Error("Last message is not an assistant message");
+    throw new Error('Last message is not an assistant message');
   }
 }
 
@@ -91,9 +86,10 @@ async function getFinalStructuredOutput<T extends ZodType>(
  *   [new UserMessage('What is the weather in New York?')],
  *   {
  *     tools: [weatherTool],
- *     outputSchema: z.object({ weather: z.string() })
+ *     outputSchema: z.object({ weather: z.string() }),
+ *     nodeName: 'weatherAgent',
  *   },
- *   'some-graph-run-id'
+ *   traceBuffer,
  * );
  *
  * // output.weather might be: "The weather in New York is sunny."
@@ -104,13 +100,13 @@ export async function agentExecutor<T extends ZodType>(
   systemPrompt: SystemMessage,
   history: BaseMessage[],
   options: {
-    tools: Tool<any>[];
+    tools: Tool[];
     outputSchema: T;
-    nodeName?: string;
+    nodeName: string;
   },
   traceBuffer: TraceBuffer,
   maxLoops: number = MAX_ITERATIONS,
-): Promise<T["_output"]> {
+): Promise<T['_output']> {
   const runnerWithTools = runner.bind(options.tools);
 
   const conversation: BaseMessage[] = [...history];
@@ -127,7 +123,7 @@ export async function agentExecutor<T extends ZodType>(
 
     conversation.push(assistant);
 
-    if (!toolCalls || toolCalls.length === 0) {
+    if (toolCalls.length === 0) {
       break;
     }
 

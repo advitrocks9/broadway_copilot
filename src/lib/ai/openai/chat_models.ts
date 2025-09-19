@@ -1,27 +1,22 @@
-import OpenAI from "openai";
-import z from "zod";
-import { createId } from "@paralleldrive/cuid2";
+import { createId } from '@paralleldrive/cuid2';
+import OpenAI from 'openai';
 import type {
+  FunctionTool,
   Response,
   ResponseCreateParamsNonStreaming,
-  ResponseInputItem,
   ResponseFunctionToolCall,
+  ResponseInputItem,
   ResponseOutputItem,
-  FunctionTool,
-} from "openai/resources/responses/responses";
+} from 'openai/resources/responses/responses';
+import z from 'zod';
 
-import { OpenAIChatModelParams, RunOutcome } from "../core/runnables";
-import {
-  AssistantMessage,
-  BaseMessage,
-  SystemMessage,
-  TextPart,
-} from "../core/messages";
-import { ToolCall, toOpenAIToolSpec } from "../core/tools";
-import { Prisma } from "@prisma/client";
-import { BaseChatCompletionsModel } from "../core/base_chat_completions_model";
-import { MODEL_COSTS } from "../config/costs";
-import { TraceBuffer } from "../../../agent/tracing";
+import { Prisma } from '@prisma/client';
+import { BufferedLlmTrace, TraceBuffer } from '../../../agent/tracing';
+import { MODEL_COSTS } from '../config/costs';
+import { BaseChatCompletionsModel } from '../core/base_chat_completions_model';
+import { AssistantMessage, BaseMessage, SystemMessage, TextPart } from '../core/messages';
+import { OpenAIChatModelParams, RunOutcome } from '../core/runnables';
+import { ToolCall, toOpenAIToolSpec } from '../core/tools';
 
 /**
  * A chat model that interacts with the OpenAI API.
@@ -47,14 +42,14 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
    * @param params - Optional parameters to override the model defaults.
    * @param client - An optional OpenAI client instance, useful for testing or custom configurations.
    */
-  constructor(params: Partial<OpenAIChatModelParams> = {}, client?: OpenAI) {
+  constructor(params: Partial<OpenAIChatModelParams> = {}) {
     const combinedParams: OpenAIChatModelParams = {
-      model: "gpt-4.1",
+      model: 'gpt-4.1',
       useResponsesApi: false,
       ...params,
     };
     super(combinedParams);
-    this.client = client || new OpenAI();
+    this.client = new OpenAI();
     this.params = combinedParams;
   }
 
@@ -62,7 +57,7 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
     systemPrompt: SystemMessage,
     msgs: BaseMessage[],
     traceBuffer: TraceBuffer,
-    nodeName?: string,
+    nodeName: string,
   ): Promise<RunOutcome> {
     if (this.params.useResponsesApi) {
       return this._runResponses(systemPrompt, msgs, traceBuffer, nodeName);
@@ -74,60 +69,59 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
     systemPrompt: SystemMessage,
     msgs: BaseMessage[],
     traceBuffer: TraceBuffer,
-    nodeName?: string,
+    nodeName: string,
   ): Promise<RunOutcome> {
     const params = this._buildResponsesParams(systemPrompt, msgs);
 
-    const nodeRun = traceBuffer.nodeRuns.find(
-      (ne) => ne.nodeName === nodeName && !ne.endTime,
-    );
+    const nodeRun = traceBuffer.nodeRuns.find((ne) => ne.nodeName === nodeName && !ne.endTime);
     if (!nodeRun) {
-      throw new Error(
-        `Could not find an active node execution for nodeName: ${nodeName}`,
-      );
+      throw new Error(`Could not find an active node execution for nodeName: ${nodeName}`);
     }
 
-    const llmTrace: any = {
+    const startTime = new Date();
+
+    const llmTrace: BufferedLlmTrace = {
       id: createId(),
       nodeRunId: nodeRun.id,
       model: this.params.model,
       inputMessages: params.input as unknown as Prisma.JsonArray,
       rawRequest: params as unknown as Prisma.JsonObject,
-      startTime: new Date(),
+      startTime,
     };
 
     let response: Response;
     try {
-      response = await this.client.responses.create(
-        params as ResponseCreateParamsNonStreaming,
-      );
+      response = await this.client.responses.create(params);
     } catch (err) {
       const endTime = new Date();
-      llmTrace.errorTrace = err instanceof Error ? err.stack : String(err);
+      const message = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? err.stack : undefined;
+      llmTrace.errorTrace = stack ?? message;
       llmTrace.endTime = endTime;
-      llmTrace.durationMs = endTime.getTime() - llmTrace.startTime.getTime();
+      llmTrace.durationMs = endTime.getTime() - startTime.getTime();
       traceBuffer.llmTraces.push(llmTrace);
       throw err;
     }
 
-    const { assistantContent, toolCalls, rawToolCalls } =
-      this._processResponsesResponse(response);
+    const { assistantContent, toolCalls, rawToolCalls } = this._processResponsesResponse(response);
 
     const assistant = new AssistantMessage(assistantContent);
-    assistant.meta = {
-      raw: response,
-      tool_calls: toolCalls,
-      raw_tool_calls: rawToolCalls,
-    };
+    assistant.meta = { raw: response };
+    if (toolCalls.length > 0) {
+      assistant.meta.tool_calls = toolCalls;
+    }
+    if (rawToolCalls.length > 0) {
+      assistant.meta.raw_tool_calls = rawToolCalls;
+    }
 
     const endTime = new Date();
     llmTrace.rawResponse = response as unknown as Prisma.JsonObject;
     llmTrace.outputMessage = assistant.toJSON() as Prisma.JsonObject;
-    llmTrace.promptTokens = response.usage?.total_tokens; // Note: Responses API only provides total_tokens
-    llmTrace.completionTokens = 0; // Note: Responses API only provides total_tokens
-    llmTrace.totalTokens = response.usage?.total_tokens;
+    llmTrace.promptTokens = response.usage?.total_tokens ?? null;
+    llmTrace.completionTokens = 0;
+    llmTrace.totalTokens = response.usage?.total_tokens ?? null;
     llmTrace.endTime = endTime;
-    llmTrace.durationMs = endTime.getTime() - llmTrace.startTime.getTime();
+    llmTrace.durationMs = endTime.getTime() - startTime.getTime();
     traceBuffer.llmTraces.push(llmTrace);
 
     return {
@@ -141,26 +135,24 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
     systemPrompt: SystemMessage,
     msgs: BaseMessage[],
     traceBuffer: TraceBuffer,
-    nodeName?: string,
+    nodeName: string,
   ): Promise<RunOutcome> {
     const params = this._buildChatCompletionsParams(systemPrompt, msgs);
 
-    const nodeRun = traceBuffer.nodeRuns.find(
-      (ne) => ne.nodeName === nodeName && !ne.endTime,
-    );
+    const nodeRun = traceBuffer.nodeRuns.find((ne) => ne.nodeName === nodeName && !ne.endTime);
     if (!nodeRun) {
-      throw new Error(
-        `Could not find an active node execution for nodeName: ${nodeName}`,
-      );
+      throw new Error(`Could not find an active node execution for nodeName: ${nodeName}`);
     }
 
-    const llmTrace: any = {
+    const startTime = new Date();
+
+    const llmTrace: BufferedLlmTrace = {
       id: createId(),
       nodeRunId: nodeRun.id,
       model: this.params.model,
       inputMessages: params.messages as unknown as Prisma.JsonArray,
       rawRequest: params as unknown as Prisma.JsonObject,
-      startTime: new Date(),
+      startTime,
     };
 
     let response: OpenAI.Chat.Completions.ChatCompletion;
@@ -168,15 +160,16 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
       response = await this.client.chat.completions.create(params);
     } catch (err) {
       const endTime = new Date();
-      llmTrace.errorTrace = err instanceof Error ? err.stack : String(err);
+      const message = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? err.stack : undefined;
+      llmTrace.errorTrace = stack ?? message;
       llmTrace.endTime = endTime;
-      llmTrace.durationMs = endTime.getTime() - llmTrace.startTime.getTime();
+      llmTrace.durationMs = endTime.getTime() - startTime.getTime();
       traceBuffer.llmTraces.push(llmTrace);
       throw err;
     }
 
-    const { assistant, toolCalls } =
-      this._processChatCompletionsResponse(response);
+    const { assistant, toolCalls } = this._processChatCompletionsResponse(response);
 
     const endTime = new Date();
 
@@ -192,12 +185,12 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
 
     llmTrace.rawResponse = response as unknown as Prisma.JsonObject;
     llmTrace.outputMessage = assistant.toJSON() as Prisma.JsonObject;
-    llmTrace.promptTokens = response.usage?.prompt_tokens;
-    llmTrace.completionTokens = response.usage?.completion_tokens;
-    llmTrace.totalTokens = response.usage?.total_tokens;
-    llmTrace.costUsd = costUsd;
+    llmTrace.promptTokens = response.usage?.prompt_tokens ?? null;
+    llmTrace.completionTokens = response.usage?.completion_tokens ?? null;
+    llmTrace.totalTokens = response.usage?.total_tokens ?? null;
+    llmTrace.costUsd = costUsd ?? null;
     llmTrace.endTime = endTime;
-    llmTrace.durationMs = endTime.getTime() - llmTrace.startTime.getTime();
+    llmTrace.durationMs = endTime.getTime() - startTime.getTime();
     traceBuffer.llmTraces.push(llmTrace);
 
     return {
@@ -212,40 +205,38 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
     msgs: BaseMessage[],
   ): ResponseCreateParamsNonStreaming {
     const instructions = systemPrompt.content
-      .filter((p): p is TextPart => p.type === "text")
+      .filter((p): p is TextPart => p.type === 'text')
       .map((p) => p.text)
-      .join("");
+      .join('');
 
     const input: ResponseInputItem[] = msgs.flatMap((m) => {
-      if (m.role === "tool") {
+      if (m.role === 'tool') {
         return {
-          type: "function_call_output",
+          type: 'function_call_output',
           call_id: m.tool_call_id!,
           output: m.content
-            .filter((p): p is TextPart => p.type === "text")
+            .filter((p): p is TextPart => p.type === 'text')
             .map((p) => p.text)
-            .join(""),
+            .join(''),
         };
       }
 
-      if (m.role === "assistant") {
+      if (m.role === 'assistant') {
         const items: ResponseInputItem[] = [];
         const textContent = m.content
-          .filter((p): p is TextPart => p.type === "text")
+          .filter((p): p is TextPart => p.type === 'text')
           .map((p) => p.text)
-          .join("")
+          .join('')
           .trim();
 
         if (textContent) {
           items.push({
-            role: "assistant",
+            role: 'assistant',
             content: textContent,
           });
         }
 
-        const rawToolCalls = m.meta?.raw_tool_calls as
-          | ResponseFunctionToolCall[]
-          | undefined;
+        const rawToolCalls = m.meta?.raw_tool_calls as ResponseFunctionToolCall[] | undefined;
         if (rawToolCalls?.length) {
           items.push(...rawToolCalls);
         }
@@ -254,57 +245,62 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
 
       // User messages
       return {
-        role: "user",
+        role: 'user',
         content: m.content.map((c) => {
-          if (c.type === "text") {
-            return { type: "input_text" as const, text: c.text };
+          if (c.type === 'text') {
+            return { type: 'input_text' as const, text: c.text };
           }
           // ImagePart
           return {
-            type: "input_image" as const,
+            type: 'input_image' as const,
             image_url: c.image_url.url,
-            detail: c.image_url.detail || "auto",
+            detail: c.image_url.detail ?? 'auto',
           };
         }),
       };
     });
 
-    const tools = this.boundTools?.map(toOpenAIToolSpec);
+    const tools = this.boundTools.map(toOpenAIToolSpec);
 
     const params: ResponseCreateParamsNonStreaming = {
       model: this.params.model,
       input,
-      temperature: this.params.temperature,
-      max_output_tokens: this.params.maxTokens,
-      top_p: this.params.topP,
       stream: false,
     };
 
+    if (this.params.temperature !== undefined) {
+      params.temperature = this.params.temperature;
+    }
+    if (this.params.maxTokens !== undefined) {
+      params.max_output_tokens = this.params.maxTokens;
+    }
+    if (this.params.topP !== undefined) {
+      params.top_p = this.params.topP;
+    }
     if (instructions) {
       params.instructions = instructions;
     }
-
     if (this.params.reasoning) {
       params.reasoning = this.params.reasoning;
     }
 
-    if (tools && tools.length > 0) {
+    if (tools.length > 0) {
       params.tools = tools;
-      params.tool_choice = "auto";
+      params.tool_choice = 'auto';
     }
 
     if (this.structuredOutputSchema) {
       const toolName = this.structuredOutputToolName;
       const tool: FunctionTool = {
-        type: "function",
+        type: 'function',
         name: toolName,
-        description: "Structured output formatter",
-        parameters: z.toJSONSchema(this.structuredOutputSchema),
+        description: 'Structured output formatter',
+        parameters: z.toJSONSchema(this.structuredOutputSchema) as Record<string, unknown>,
         strict: true,
       };
-      params.tools = [...(params.tools || []), tool];
+      params.tools = [...(params.tools ?? []), tool];
       params.tool_choice = {
-        type: "function",
+        type: 'function',
         name: toolName,
       };
     }
@@ -325,18 +321,17 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
 
   protected _processResponsesResponse(response: Response): {
     assistantContent: string;
-    toolCalls?: ToolCall[];
-    rawToolCalls?: ResponseFunctionToolCall[];
+    toolCalls: ToolCall[];
+    rawToolCalls: ResponseFunctionToolCall[];
   } {
-    const assistantContent: string = response.output_text ?? "";
+    const assistantContent = response.output_text ?? '';
     const output: ResponseOutputItem[] = response.output ?? [];
 
     const rawToolCalls = output.filter(
-      (item): item is ResponseFunctionToolCall =>
-        item?.type === "function_call",
+      (item): item is ResponseFunctionToolCall => item?.type === 'function_call',
     );
 
-    const toolCalls: ToolCall[] = rawToolCalls.map((item) => {
+    const toolCalls = rawToolCalls.map((item) => {
       try {
         return {
           id: item.call_id,
@@ -350,8 +345,8 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
 
     return {
       assistantContent,
-      toolCalls: toolCalls.length ? toolCalls : undefined,
-      rawToolCalls: rawToolCalls.length ? rawToolCalls : undefined,
+      toolCalls,
+      rawToolCalls,
     };
   }
 }

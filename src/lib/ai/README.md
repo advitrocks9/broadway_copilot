@@ -520,10 +520,7 @@ complexStructuredOutput();
 import { OpenAIChatModelParams } from '@ai';
 
 class ChatOpenAI extends BaseChatCompletionsModel {
-  constructor(
-    params?: Partial<OpenAIChatModelParams>,
-    client?: OpenAI
-  );
+  constructor(params?: Partial<OpenAIChatModelParams>);
 }
 ```
 
@@ -535,10 +532,7 @@ class ChatOpenAI extends BaseChatCompletionsModel {
 import { GroqChatModelParams } from '@ai';
 
 class ChatGroq extends BaseChatCompletionsModel {
-  constructor(
-    params?: Partial<GroqChatModelParams>,
-    client?: Groq
-  );
+  constructor(params?: Partial<GroqChatModelParams>);
 }
 ```
 

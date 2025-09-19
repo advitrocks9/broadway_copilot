@@ -1,7 +1,7 @@
-import fs from "fs/promises";
-import path from "path";
+import fs from 'fs/promises';
+import path from 'path';
 
-import { BadRequestError, InternalServerError } from "./errors";
+import { BadRequestError, HttpError, InternalServerError } from './errors';
 
 /**
  * Filesystem helpers for uploads directory handling.
@@ -16,15 +16,15 @@ import { BadRequestError, InternalServerError } from "./errors";
  */
 export async function ensureDir(dirPath: string): Promise<void> {
   if (!dirPath) {
-    throw new BadRequestError("Directory path is required");
+    throw new BadRequestError('Directory path is required');
   }
   try {
     await fs.mkdir(dirPath, { recursive: true });
-  } catch (err: any) {
-    if (err.statusCode) {
-      throw err; // Re-throw HTTP errors as-is
+  } catch (err: unknown) {
+    if (err instanceof HttpError) {
+      throw err;
     }
-    throw new InternalServerError("Failed to create directory");
+    throw new InternalServerError('Failed to create directory');
   }
 }
 
@@ -34,7 +34,7 @@ export async function ensureDir(dirPath: string): Promise<void> {
  * @returns Absolute path to the uploads directory
  */
 function uploadsDir(): string {
-  return path.resolve(process.cwd(), "uploads");
+  return path.resolve(process.cwd(), 'uploads');
 }
 
 /**
@@ -46,10 +46,10 @@ function uploadsDir(): string {
  */
 export function userUploadDir(whatsappId: string): string {
   if (!whatsappId) {
-    throw new BadRequestError("WhatsApp ID is required");
+    throw new BadRequestError('WhatsApp ID is required');
   }
-  const sanitizedId = whatsappId.replace(/[^a-zA-Z0-9_+]/g, "_");
-  return path.join(process.cwd(), "uploads", sanitizedId);
+  const sanitizedId = whatsappId.replace(/[^a-zA-Z0-9_+]/g, '_');
+  return path.join(process.cwd(), 'uploads', sanitizedId);
 }
 
 /**

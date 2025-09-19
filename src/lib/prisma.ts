@@ -1,37 +1,41 @@
-import { PrismaClient, Prisma } from "@prisma/client";
+import { Prisma, PrismaClient } from '@prisma/client';
 
-import { logger } from "../utils/logger";
+import { logger } from '../utils/logger';
 
 /**
  * Global Prisma client instance for database operations.
  * Uses singleton pattern to prevent connection leaks in development.
  */
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
+const globalForPrisma = globalThis as typeof globalThis & { prisma?: PrismaClient };
 
 /**
  * Prisma database client configured with error and warning event logging.
  * Singleton pattern prevents multiple connections during hot reloading in development.
  */
 export const prisma =
-  globalForPrisma.prisma ||
+  globalForPrisma.prisma ??
   new PrismaClient({
     log: [
-      { emit: "event", level: "error" },
-      { emit: "event", level: "warn" },
+      { emit: 'event', level: 'error' },
+      { emit: 'event', level: 'warn' },
     ],
   });
 
-if (process.env.NODE_ENV !== "production") {
+if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }
 
-// Log Prisma events
-(prisma as any).$on("error", (e: Prisma.LogEvent) => {
-  logger.error({ target: e.target, message: e.message }, "Database error");
+const registerLogHandler = prisma.$on.bind(prisma) as (
+  eventType: 'warn' | 'error',
+  callback: (event: Prisma.LogEvent) => void,
+) => PrismaClient;
+
+registerLogHandler('error', (e: Prisma.LogEvent) => {
+  logger.error({ target: e.target, message: e.message }, 'Database error');
 });
 
-(prisma as any).$on("warn", (e: Prisma.LogEvent) => {
-  logger.warn({ message: e.message }, "Database warning");
+registerLogHandler('warn', (e: Prisma.LogEvent) => {
+  logger.warn({ message: e.message }, 'Database warning');
 });
 
 /**
@@ -42,11 +46,14 @@ if (process.env.NODE_ENV !== "production") {
 export async function connectPrisma() {
   try {
     await prisma.$connect();
-    logger.info("Successfully connected to the database");
-  } catch (err: any) {
+    logger.info('Successfully connected to the database');
+  } catch (err: unknown) {
     logger.error(
-      { err: err.message, stack: err.stack },
-      "Failed to connect to the database",
+      {
+        err: err instanceof Error ? err.message : 'Unknown error',
+        stack: err instanceof Error ? err.stack : undefined,
+      },
+      'Failed to connect to the database',
     );
     throw err;
   }

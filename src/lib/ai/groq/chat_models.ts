@@ -1,14 +1,15 @@
-import Groq from "groq-sdk";
-import OpenAI from "openai";
-import { Prisma } from "@prisma/client";
-import { ChatCompletion } from "openai/resources/chat/completions";
-import { createId } from "@paralleldrive/cuid2";
+import { createId } from '@paralleldrive/cuid2';
+import { Prisma } from '@prisma/client';
+import Groq from 'groq-sdk';
+import OpenAI from 'openai';
+import { ChatCompletion } from 'openai/resources/chat/completions';
 
-import { GroqChatModelParams, RunOutcome } from "../core/runnables";
-import { BaseMessage, SystemMessage, TextPart } from "../core/messages";
-import { BaseChatCompletionsModel } from "../core/base_chat_completions_model";
-import { MODEL_COSTS } from "../config/costs";
-import { TraceBuffer } from "../../../agent/tracing";
+import type { ChatCompletionCreateParamsNonStreaming as GroqChatCompletionParams } from 'groq-sdk/resources/chat/completions';
+import { BufferedLlmTrace, TraceBuffer } from '../../../agent/tracing';
+import { MODEL_COSTS } from '../config/costs';
+import { BaseChatCompletionsModel } from '../core/base_chat_completions_model';
+import { BaseMessage, SystemMessage, TextPart } from '../core/messages';
+import { GroqChatModelParams, RunOutcome } from '../core/runnables';
 
 /**
  * A chat model that interacts with the Groq API.
@@ -34,18 +35,16 @@ export class ChatGroq extends BaseChatCompletionsModel {
    * @param params - Optional parameters to override the model defaults.
    * @param client - An optional Groq client instance, useful for testing or custom configurations.
    */
-  constructor(params: Partial<GroqChatModelParams> = {}, client?: Groq) {
+  constructor(params: Partial<GroqChatModelParams> = {}) {
     const combinedParams: GroqChatModelParams = {
-      model: "llama3-70b-8192",
+      model: 'llama3-70b-8192',
       ...params,
     };
     super(combinedParams);
-    this.client =
-      client ||
-      new Groq({
-        apiKey: process.env.GROQ_API_KEY,
-      });
-    this.structuredOutputToolName = "json";
+    this.client = new Groq({
+      apiKey: process.env.GROQ_API_KEY,
+    });
+    this.structuredOutputToolName = 'json';
     this.params = combinedParams;
   }
 
@@ -53,7 +52,7 @@ export class ChatGroq extends BaseChatCompletionsModel {
     systemPrompt: SystemMessage,
     msgs: BaseMessage[],
     traceBuffer: TraceBuffer,
-    nodeName?: string,
+    nodeName: string,
   ): Promise<RunOutcome> {
     const params = this._buildChatCompletionsParams(systemPrompt, msgs);
 
@@ -65,41 +64,40 @@ export class ChatGroq extends BaseChatCompletionsModel {
       requestOptions.timeout = this.params.timeout;
     }
 
-    const nodeRun = traceBuffer.nodeRuns.find(
-      (ne) => ne.nodeName === nodeName && !ne.endTime,
-    );
+    const nodeRun = traceBuffer.nodeRuns.find((ne) => ne.nodeName === nodeName && !ne.endTime);
     if (!nodeRun) {
-      throw new Error(
-        `Could not find an active node execution for nodeName: ${nodeName}`,
-      );
+      throw new Error(`Could not find an active node execution for nodeName: ${nodeName}`);
     }
 
-    const llmTrace: any = {
+    const startTime = new Date();
+
+    const llmTrace: BufferedLlmTrace = {
       id: createId(),
       nodeRunId: nodeRun.id,
       model: this.params.model,
       inputMessages: params.messages as unknown as Prisma.JsonArray,
       rawRequest: params as unknown as Prisma.JsonObject,
-      startTime: new Date(),
+      startTime,
     };
 
     let response: ChatCompletion;
     try {
       response = (await this.client.chat.completions.create(
-        params as any,
+        params as unknown as GroqChatCompletionParams,
         requestOptions,
       )) as ChatCompletion;
     } catch (err) {
       const endTime = new Date();
-      llmTrace.errorTrace = err instanceof Error ? err.stack : String(err);
+      const message = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? err.stack : undefined;
+      llmTrace.errorTrace = stack ?? message;
       llmTrace.endTime = endTime;
-      llmTrace.durationMs = endTime.getTime() - llmTrace.startTime.getTime();
+      llmTrace.durationMs = endTime.getTime() - startTime.getTime();
       traceBuffer.llmTraces.push(llmTrace);
       throw err;
     }
 
-    const { assistant, toolCalls } =
-      this._processChatCompletionsResponse(response);
+    const { assistant, toolCalls } = this._processChatCompletionsResponse(response);
 
     const endTime = new Date();
 
@@ -115,12 +113,12 @@ export class ChatGroq extends BaseChatCompletionsModel {
 
     llmTrace.rawResponse = response as unknown as Prisma.JsonObject;
     llmTrace.outputMessage = assistant.toJSON() as Prisma.JsonObject;
-    llmTrace.promptTokens = response.usage?.prompt_tokens;
-    llmTrace.completionTokens = response.usage?.completion_tokens;
-    llmTrace.totalTokens = response.usage?.total_tokens;
-    llmTrace.costUsd = costUsd;
+    llmTrace.promptTokens = response.usage?.prompt_tokens ?? null;
+    llmTrace.completionTokens = response.usage?.completion_tokens ?? null;
+    llmTrace.totalTokens = response.usage?.total_tokens ?? null;
+    llmTrace.costUsd = costUsd ?? null;
     llmTrace.endTime = endTime;
-    llmTrace.durationMs = endTime.getTime() - llmTrace.startTime.getTime();
+    llmTrace.durationMs = endTime.getTime() - startTime.getTime();
     traceBuffer.llmTraces.push(llmTrace);
 
     return {
@@ -138,13 +136,13 @@ export class ChatGroq extends BaseChatCompletionsModel {
 
     // Groq doesn't support image inputs, so we need to filter them out
     params.messages = params.messages.map((m) => {
-      if (m.role === "user" && Array.isArray(m.content)) {
+      if (m.role === 'user' && Array.isArray(m.content)) {
         return {
           ...m,
           content: m.content
-            .filter((c): c is TextPart => c.type === "text")
+            .filter((c): c is TextPart => c.type === 'text')
             .map((c) => c.text)
-            .join(""),
+            .join(''),
         };
       }
       return m;

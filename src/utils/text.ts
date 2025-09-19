@@ -2,7 +2,7 @@
  * Text utilities for normalization and comparison.
  */
 
-import type { MessageContent, MessageContentPart } from "../lib/ai";
+import type { MessageContent, MessageContentPart } from '../lib/ai';
 
 /**
  * Extracts text content from message content array, replacing images with [IMAGE] placeholders.
@@ -15,14 +15,14 @@ export function extractTextContent(content: MessageContent | string): string {
   if (Array.isArray(content)) {
     return content
       .map((part: MessageContentPart) => {
-        if (part.type === "image_url") {
-          return "[IMAGE]";
-        } else if (part.type === "text") {
+        if (part.type === 'image_url') {
+          return '[IMAGE]';
+        } else if (part.type === 'text') {
           return part.text;
         }
-        return "";
+        return '';
       })
-      .join(" ");
+      .join(' ');
   }
   return content as string;
 }

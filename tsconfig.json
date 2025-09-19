@@ -5,12 +5,20 @@
     "moduleResolution": "Node",
     "rootDir": "src",
     "outDir": "dist",
+
     "strict": true,
+    "strictNullChecks": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "useUnknownInCatchVariables": true,
+
     "noImplicitAny": true,
     "removeComments": true,
     "forceConsistentCasingInFileNames": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+
     "esModuleInterop": true,
     "skipLibCheck": true,
     "lib": ["ES2022"],

@@ -1,16 +1,15 @@
-import { z } from "zod";
+import { z } from 'zod';
 
-import { prisma } from "../../lib/prisma";
-import { getVisionLLM, getTextLLM } from "../../lib/ai";
-import { SystemMessage } from "../../lib/ai/core/messages";
-import { numImagesInMessage } from "../../utils/context";
-import { loadPrompt } from "../../utils/prompts";
-import { logger } from "../../utils/logger";
-import { InternalServerError } from "../../utils/errors";
+import { getTextLLM, getVisionLLM } from '../../lib/ai';
+import { SystemMessage } from '../../lib/ai/core/messages';
+import { prisma } from '../../lib/prisma';
+import { numImagesInMessage } from '../../utils/context';
+import { InternalServerError } from '../../utils/errors';
+import { logger } from '../../utils/logger';
+import { loadPrompt } from '../../utils/prompts';
 
-import { Replies } from "../state";
-import { GraphState } from "../state";
-import { PendingType } from "@prisma/client";
+import { PendingType } from '@prisma/client';
+import { GraphState, Replies } from '../state';
 
 /**
  * Schema for a color object with name and hex code.
@@ -18,22 +17,18 @@ import { PendingType } from "@prisma/client";
 const ColorObjectSchema = z.object({
   name: z
     .string()
-    .describe(
-      "A concise, shopper-friendly color name (e.g., 'Warm Ivory', 'Deep Espresso').",
-    ),
+    .describe("A concise, shopper-friendly color name (e.g., 'Warm Ivory', 'Deep Espresso')."),
   hex: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
-    .describe("The representative hex color code (#RRGGBB)."),
+    .describe('The representative hex color code (#RRGGBB).'),
 });
 
 /**
  * Schema for the LLM output in color analysis.
  */
 const LLMOutputSchema = z.object({
-  message1_text: z
-    .string()
-    .describe("The primary analysis result message to be sent to the user."),
+  message1_text: z.string().describe('The primary analysis result message to be sent to the user.'),
   message2_text: z
     .string()
     .nullable()
@@ -49,36 +44,27 @@ const LLMOutputSchema = z.object({
   hair_color: ColorObjectSchema.nullable().describe(
     "The user's hair color, including a friendly name and a representative hex code.",
   ),
-  undertone: z
-    .enum(["Warm", "Cool", "Neutral"])
-    .nullable()
-    .describe("The user's skin undertone."),
+  undertone: z.enum(['Warm', 'Cool', 'Neutral']).nullable().describe("The user's skin undertone."),
   palette_name: z
     .string()
     .nullable()
-    .describe(
-      "The name of the 12-season color palette that best fits the user.",
-    ),
+    .describe('The name of the 12-season color palette that best fits the user.'),
   palette_comment: z
     .string()
     .nullable()
-    .describe(
-      "A short, helpful comment on how to style within the assigned palette.",
-    ),
+    .describe('A short, helpful comment on how to style within the assigned palette.'),
   top3_colors: z
     .array(ColorObjectSchema)
-    .describe("An array of the top 3 most flattering colors for the user."),
+    .describe('An array of the top 3 most flattering colors for the user.'),
   avoid3_colors: z
     .array(ColorObjectSchema)
-    .describe("An array of 3 colors the user might want to avoid."),
+    .describe('An array of 3 colors the user might want to avoid.'),
 });
 
 const NoImageLLMOutputSchema = z.object({
   reply_text: z
     .string()
-    .describe(
-      "The text to send to the user explaining they need to send an image.",
-    ),
+    .describe('The text to send to the user explaining they need to send an image.'),
 });
 
 /**
@@ -92,27 +78,18 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
   const imageCount = numImagesInMessage(state.conversationHistoryWithImages);
 
   if (imageCount === 0) {
-    const systemPromptText = await loadPrompt(
-      "handlers/analysis/no_image_request.txt",
-    );
+    const systemPromptText = await loadPrompt('handlers/analysis/no_image_request.txt');
     const systemPrompt = new SystemMessage(
-      systemPromptText.replace("{analysis_type}", "color analysis"),
+      systemPromptText.replace('{analysis_type}', 'color analysis'),
     );
     const response = await getTextLLM()
       .withStructuredOutput(NoImageLLMOutputSchema)
-      .run(
-        systemPrompt,
-        state.conversationHistoryTextOnly,
-        state.traceBuffer,
-        "colorAnalysis",
-      );
+      .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'colorAnalysis');
     logger.debug(
       { userId: state.user.id, reply_text: response.reply_text },
-      "Invoking text LLM for no-image response",
+      'Invoking text LLM for no-image response',
     );
-    const replies: Replies = [
-      { reply_type: "text", reply_text: response.reply_text },
-    ];
+    const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
     return {
       ...state,
       assistantReply: replies,
@@ -121,19 +98,12 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
   }
 
   try {
-    const systemPromptText = await loadPrompt(
-      "handlers/analysis/color_analysis.txt",
-    );
+    const systemPromptText = await loadPrompt('handlers/analysis/color_analysis.txt');
     const systemPrompt = new SystemMessage(systemPromptText);
 
     const output = await getVisionLLM()
       .withStructuredOutput(LLMOutputSchema)
-      .run(
-        systemPrompt,
-        state.conversationHistoryWithImages,
-        state.traceBuffer,
-        "colorAnalysis",
-      );
+      .run(systemPrompt, state.conversationHistoryWithImages, state.traceBuffer, 'colorAnalysis');
 
     const [, user] = await prisma.$transaction([
       prisma.colorAnalysis.create({
@@ -154,17 +124,12 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       }),
     ]);
 
-    const replies: Replies = [
-      { reply_type: "text", reply_text: output.message1_text },
-    ];
+    const replies: Replies = [{ reply_type: 'text', reply_text: output.message1_text }];
     if (output.message2_text) {
-      replies.push({ reply_type: "text", reply_text: output.message2_text });
+      replies.push({ reply_type: 'text', reply_text: output.message2_text });
     }
 
-    logger.debug(
-      { userId, messageId, replies },
-      "Color analysis completed successfully",
-    );
+    logger.debug({ userId, messageId, replies }, 'Color analysis completed successfully');
     return {
       ...state,
       user,
@@ -172,6 +137,6 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       pending: PendingType.NONE,
     };
   } catch (err: unknown) {
-    throw new InternalServerError("Color analysis failed", { cause: err });
+    throw new InternalServerError('Color analysis failed', { cause: err });
   }
 }

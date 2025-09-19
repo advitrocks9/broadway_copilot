@@ -1,11 +1,11 @@
-import "dotenv/config";
+import 'dotenv/config';
 
-import { CloudTasksClient } from "@google-cloud/tasks";
-import { TaskType } from "@prisma/client";
-import { createId as cuid } from "@paralleldrive/cuid2";
-import { InternalServerError } from "../utils/errors";
-import { logger } from "../utils/logger";
-import { prisma } from "./prisma";
+import { CloudTasksClient } from '@google-cloud/tasks';
+import { createId as cuid } from '@paralleldrive/cuid2';
+import { TaskType } from '@prisma/client';
+import { InternalServerError } from '../utils/errors';
+import { logger } from '../utils/logger';
+import { prisma } from './prisma';
 
 type TaskPayload = {
   userId: string;
@@ -14,10 +14,9 @@ type TaskPayload = {
 
 const client = new CloudTasksClient();
 
-const PROJECT_ID = process.env.PROJECT_ID || "broadway-chatbot";
-const CLOUD_FUNCTION_REGION =
-  process.env.CLOUD_FUNCTION_REGION || "asia-south2";
-const CLOUD_TASKS_REGION = process.env.CLOUD_TASKS_REGION || "asia-south1";
+const PROJECT_ID = process.env.PROJECT_ID || 'broadway-chatbot';
+const CLOUD_FUNCTION_REGION = process.env.CLOUD_FUNCTION_REGION || 'asia-south2';
+const CLOUD_TASKS_REGION = process.env.CLOUD_TASKS_REGION || 'asia-south1';
 
 const WARDROBE_FUNCTION_URL = `https://${CLOUD_FUNCTION_REGION}-${PROJECT_ID}.cloudfunctions.net/indexWardrobe`;
 const MEMORY_FUNCTION_URL = `https://${CLOUD_FUNCTION_REGION}-${PROJECT_ID}.cloudfunctions.net/storeMemories`;
@@ -39,9 +38,7 @@ async function queueTask(
   taskType: TaskType,
 ): Promise<void> {
   if (!PROJECT_ID || !functionUrl) {
-    throw new InternalServerError(
-      "Missing required environment variables for Cloud Tasks",
-    );
+    throw new InternalServerError('Missing required environment variables for Cloud Tasks');
   }
 
   const parent = client.queuePath(PROJECT_ID, CLOUD_TASKS_REGION, queueName);
@@ -50,10 +47,10 @@ async function queueTask(
 
   const task = {
     httpRequest: {
-      httpMethod: "POST" as const,
+      httpMethod: 'POST' as const,
       url: functionUrl,
       body: Buffer.from(JSON.stringify(payload)),
-      headers: { "Content-Type": "application/json" },
+      headers: { 'Content-Type': 'application/json' },
       ...(SERVICE_ACCOUNT_EMAIL && {
         oidcToken: {
           serviceAccountEmail: SERVICE_ACCOUNT_EMAIL,
@@ -66,10 +63,7 @@ async function queueTask(
 
   try {
     const [response] = await client.createTask({ parent, task });
-    logger.info(
-      { taskName: response.name, type: taskType },
-      `Queued ${taskType} task`,
-    );
+    logger.info({ taskName: response.name, type: taskType }, `Queued ${taskType} task`);
 
     await prisma.task.create({
       data: {
@@ -80,12 +74,12 @@ async function queueTask(
         runAt: new Date(),
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error(
-      { err: err.message, type: taskType },
+      { err: err instanceof Error ? err.message : String(err), type: taskType },
       `Failed to queue ${taskType} task`,
     );
-    throw new InternalServerError("Failed to queue task");
+    throw new InternalServerError('Failed to queue task');
   }
 }
 
@@ -93,12 +87,9 @@ async function queueTask(
  * Queues a task to index wardrobe from a message by calling the cloud function.
  * @param messageId The ID of the message to process.
  */
-export async function queueWardrobeIndex(
-  userId: string,
-  messageId: string,
-): Promise<void> {
+export async function queueWardrobeIndex(userId: string, messageId: string): Promise<void> {
   await queueTask(
-    "wardrobe-index",
+    'wardrobe-index',
     WARDROBE_FUNCTION_URL,
     { userId, messageId },
     TaskType.SCHEDULE_WARDROBE_INDEX,
@@ -109,12 +100,9 @@ export async function queueWardrobeIndex(
  * Queues a task to extract and save memories for a user by calling the cloud function.
  * @param userId The ID of the user to process.
  */
-export async function queueMemoryExtraction(
-  userId: string,
-  conversationId: string,
-): Promise<void> {
+export async function queueMemoryExtraction(userId: string, conversationId: string): Promise<void> {
   await queueTask(
-    "memory-extraction",
+    'memory-extraction',
     MEMORY_FUNCTION_URL,
     { userId, conversationId },
     TaskType.PROCESS_MEMORIES,
@@ -126,12 +114,9 @@ export async function queueMemoryExtraction(
  * @param userId The ID of the user to process.
  * @param messageId The ID of the message containing the images.
  */
-export async function queueImageUpload(
-  userId: string,
-  messageId: string,
-): Promise<void> {
+export async function queueImageUpload(userId: string, messageId: string): Promise<void> {
   await queueTask(
-    "image-upload",
+    'image-upload',
     IMAGE_UPLOAD_FUNCTION_URL,
     { userId, messageId },
     TaskType.UPLOAD_IMAGES,

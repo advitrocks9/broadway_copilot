@@ -1,16 +1,16 @@
-import "dotenv/config";
+import 'dotenv/config';
 
-import { Conversation, GraphRunStatus, PendingType, MessageRole } from "@prisma/client";
-import { StateGraph } from "../lib/graph";
-import { GraphState } from "./state";
-import { logError } from "../utils/errors";
-import { logger } from "../utils/logger";
-import { TwilioWebhookRequest } from "../lib/twilio/types";
-import { getOrCreateUserAndConversation } from "../utils/context";
-import { sendText } from "../lib/twilio";
-import { prisma } from "../lib/prisma";
-import { redis } from "../lib/redis";
-import { buildAgentGraph } from "./graph";
+import { Conversation, GraphRunStatus, MessageRole, PendingType, Prisma } from '@prisma/client';
+import { StateGraph } from '../lib/graph';
+import { prisma } from '../lib/prisma';
+import { redis } from '../lib/redis';
+import { sendText } from '../lib/twilio';
+import { TwilioWebhookRequest } from '../lib/twilio/types';
+import { getOrCreateUserAndConversation } from '../utils/context';
+import { logError } from '../utils/errors';
+import { logger } from '../utils/logger';
+import { buildAgentGraph } from './graph';
+import { GraphState } from './state';
 
 let compiledApp: ReturnType<typeof StateGraph.prototype.compile> | null = null;
 let subscriber: ReturnType<typeof redis.duplicate> | undefined;
@@ -30,16 +30,13 @@ async function getSubscriber() {
  * once at application startup.
  */
 export async function initializeAgent(): Promise<void> {
-  logger.info("Compiling agent graph...");
+  logger.info('Compiling agent graph...');
   try {
     compiledApp = buildAgentGraph();
-    logger.info("Agent graph compiled successfully.");
+    logger.info('Agent graph compiled successfully.');
   } catch (err: unknown) {
     const error = err instanceof Error ? err : new Error(String(err));
-    logger.error(
-      { err: error.message, stack: error.stack },
-      "Agent graph compilation failed",
-    );
+    logger.error({ err: error.message, stack: error.stack }, 'Agent graph compilation failed');
     throw error;
   }
 }
@@ -61,7 +58,7 @@ async function logGraphResult(
 
     if (finalState?.traceBuffer) {
       const { nodeRuns, llmTraces } = finalState.traceBuffer;
-      
+
       if (nodeRuns.length > 0) {
         await prisma.nodeRun.createMany({
           data: nodeRuns.map((ne) => ({
@@ -70,7 +67,7 @@ async function logGraphResult(
           })),
         });
       }
-      
+
       if (llmTraces.length > 0) {
         await prisma.lLMTrace.createMany({
           data: llmTraces.map((lt) => ({
@@ -78,20 +75,27 @@ async function logGraphResult(
           })),
         });
       }
-      
+
       delete finalState.traceBuffer;
     }
+
+    const getErrorTrace = (err: unknown): string => {
+      if (err instanceof Error) {
+        let trace = err.stack ?? err.message;
+        if (err.cause) {
+          trace += `\nCaused by: ${getErrorTrace(err.cause)}`;
+        }
+        return trace;
+      }
+      return String(err);
+    };
 
     await prisma.graphRun.update({
       where: { id: graphRunId },
       data: {
-        finalState: finalState as any,
+        finalState: finalState as Prisma.InputJsonValue,
         status,
-        errorTrace: error
-          ? error instanceof Error
-            ? error.stack
-            : String(error)
-          : undefined,
+        errorTrace: error ? getErrorTrace(error) : null,
         endTime,
         durationMs,
       },
@@ -102,7 +106,7 @@ async function logGraphResult(
         err: logErr instanceof Error ? logErr.message : String(logErr),
         graphRunId,
       },
-      "Failed to log graph result",
+      'Failed to log graph result',
     );
   }
 }
@@ -132,21 +136,21 @@ export async function runAgent(
   const { WaId: whatsappId, ProfileName: profileName } = input;
 
   if (!whatsappId) {
-    throw new Error("Whatsapp ID not found in webhook payload");
+    throw new Error('Whatsapp ID not found in webhook payload');
   }
 
   if (!compiledApp) {
-    throw new Error(
-      "Agent not initialized. Call initializeAgent() on startup.",
-    );
+    throw new Error('Agent not initialized. Call initializeAgent() on startup.');
   }
 
   let conversation: Conversation | undefined;
   let finalState: Partial<GraphState> | null = null;
   const graphRunId = messageId;
   try {
-    const { user, conversation: _conversation } =
-      await getOrCreateUserAndConversation(whatsappId, profileName);
+    const { user, conversation: _conversation } = await getOrCreateUserAndConversation(
+      whatsappId,
+      profileName ?? '',
+    );
     conversation = _conversation;
 
     await prisma.graphRun.create({
@@ -168,24 +172,21 @@ export async function runAgent(
       },
       { signal: controller.signal, runId: graphRunId },
     );
-    logGraphResult(graphRunId, "COMPLETED", finalState);
+    logGraphResult(graphRunId, 'COMPLETED', finalState);
   } catch (err: unknown) {
-    if (err instanceof Error && err.name === "AbortError") {
-      logGraphResult(graphRunId, "ABORTED", finalState, err);
+    if (err instanceof Error && err.name === 'AbortError') {
+      logGraphResult(graphRunId, 'ABORTED', finalState, err);
       throw err;
     }
-    logGraphResult(graphRunId, "ERROR", finalState, err);
+    logGraphResult(graphRunId, 'ERROR', finalState, err);
 
     const error = logError(err, {
       whatsappId,
       messageId,
-      location: "runAgent",
+      location: 'runAgent',
     });
     try {
-      await sendText(
-        whatsappId,
-        "Sorry, something went wrong. Please try again later.",
-      );
+      await sendText(whatsappId, 'Sorry, something went wrong. Please try again later.');
       if (conversation) {
         await prisma.message.create({
           data: {
@@ -193,8 +194,8 @@ export async function runAgent(
             role: MessageRole.AI,
             content: [
               {
-                type: "text",
-                text: "Sorry, something went wrong. Please try again later.",
+                type: 'text',
+                text: 'Sorry, something went wrong. Please try again later.',
               },
             ],
             pending: PendingType.NONE,
@@ -205,7 +206,7 @@ export async function runAgent(
       logError(sendErr, {
         whatsappId,
         messageId,
-        location: "runAgent.sendTextFallback",
+        location: 'runAgent.sendTextFallback',
         originalError: error.message,
       });
     }

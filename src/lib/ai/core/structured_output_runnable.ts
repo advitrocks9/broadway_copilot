@@ -1,7 +1,7 @@
-import { z, ZodType } from "zod";
-import { BaseMessage, SystemMessage, TextPart } from "./messages";
-import { BaseChatModel } from "./base_chat_model";
-import { TraceBuffer } from "../../../agent/tracing";
+import { ZodType } from 'zod';
+import { TraceBuffer } from '../../../agent/tracing';
+import { BaseChatModel } from './base_chat_model';
+import { BaseMessage, SystemMessage, TextPart } from './messages';
 
 /**
  * A runnable that wraps a chat model and forces it to produce a JSON object
@@ -36,80 +36,11 @@ export class StructuredOutputRunnable<T extends ZodType> {
 
   private _extractJson(text: string): string {
     const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    return match ? match[1] : text;
+    return match?.[1] ?? text;
   }
 
-  private _coerceSchema(schema: z.ZodTypeAny): z.ZodTypeAny {
-    const def = schema._def as any;
-    const typeName = def.typeName;
-
-    if (typeName === "ZodEffects") {
-      const effectsSchema = def.schema;
-      return this._coerceSchema(effectsSchema);
-    } else if (typeName === "ZodNumber") {
-      return z.coerce.number();
-    } else if (typeName === "ZodBigInt") {
-      return z.coerce.bigint();
-    } else if (typeName === "ZodBoolean") {
-      return z.coerce.boolean();
-    } else if (typeName === "ZodDate") {
-      return z.coerce.date();
-    } else if (typeName === "ZodString") {
-      return z.coerce.string();
-    } else if (typeName === "ZodArray") {
-      const elementSchema = this._coerceSchema(def.type);
-      return z.preprocess((val) => {
-        if (typeof val === "string" && val.trim().length > 0) {
-          return val
-            .split(",")
-            .map((item) => item.trim())
-            .filter((item) => item !== "");
-        }
-        return val;
-      }, z.array(elementSchema));
-    } else if (typeName === "ZodObject") {
-      const shape = def.shape();
-      const newShape: { [key: string]: z.ZodTypeAny } = {};
-      for (const key in shape) {
-        newShape[key] = this._coerceSchema(shape[key]);
-      }
-      return z.object(newShape);
-    } else if (typeName === "ZodOptional") {
-      const inner = def.innerType;
-      return this._coerceSchema(inner).optional();
-    } else if (typeName === "ZodNullable") {
-      const inner = def.innerType;
-      return this._coerceSchema(inner).nullable();
-    } else if (typeName === "ZodUnion") {
-      const options = def.options;
-      return z.union(
-        options.map((opt: z.ZodTypeAny) => this._coerceSchema(opt)),
-      );
-    } else if (typeName === "ZodIntersection") {
-      const left = def.left;
-      const right = def.right;
-      return z.intersection(
-        this._coerceSchema(left),
-        this._coerceSchema(right),
-      );
-    } else {
-      // Fallback: check the type property for basic types
-      if (def.type === "string") {
-        return z.coerce.string();
-      } else if (def.type === "number") {
-        return z.coerce.number();
-      } else if (def.type === "boolean") {
-        return z.coerce.boolean();
-      } else if (def.type === "object" && def.shape) {
-        const shape = def.shape;
-        const newShape: { [key: string]: z.ZodTypeAny } = {};
-        for (const key in shape) {
-          newShape[key] = this._coerceSchema(shape[key]);
-        }
-        return z.object(newShape);
-      }
-      return schema;
-    }
+  private _coerceSchema(schema: ZodType): ZodType {
+    return schema;
   }
 
   /**
@@ -132,19 +63,14 @@ export class StructuredOutputRunnable<T extends ZodType> {
     systemPrompt: SystemMessage,
     messages: BaseMessage[],
     traceBuffer: TraceBuffer,
-    nodeName?: string,
-  ): Promise<T["_output"]> {
-    const response = await this.runner.run(
-      systemPrompt,
-      messages,
-      traceBuffer,
-      nodeName,
-    );
+    nodeName: string,
+  ): Promise<T['_output']> {
+    const response = await this.runner.run(systemPrompt, messages, traceBuffer, nodeName);
     const { toolCalls } = response;
 
-    let data;
+    let data: unknown;
 
-    if (toolCalls && toolCalls.length > 0) {
+    if (toolCalls.length > 0) {
       const structuredToolCall = toolCalls.find(
         (tc) => tc.name === this.runner.structuredOutputToolName,
       );
@@ -155,20 +81,18 @@ export class StructuredOutputRunnable<T extends ZodType> {
 
     if (data === undefined) {
       const textContent = response.assistant.content
-        .filter((p): p is TextPart => p.type === "text")
+        .filter((p): p is TextPart => p.type === 'text')
         .map((p) => p.text)
-        .join("");
+        .join('');
 
       const jsonString = this._extractJson(textContent);
 
-      if (jsonString === "") {
-        throw new Error(
-          `Failed to extract JSON from model output. Content: ${textContent}`,
-        );
+      if (jsonString === '') {
+        throw new Error(`Failed to extract JSON from model output. Content: ${textContent}`);
       }
 
       try {
-        data = JSON.parse(jsonString);
+        data = JSON.parse(jsonString) as unknown;
       } catch (error) {
         throw new Error(
           `Failed to parse structured output as JSON: ${error}\nContent: ${jsonString}`,
@@ -181,11 +105,7 @@ export class StructuredOutputRunnable<T extends ZodType> {
       return coercedSchema.parse(data);
     } catch (error) {
       throw new Error(
-        `Failed to validate structured output: ${error}\nData: ${JSON.stringify(
-          data,
-          null,
-          2,
-        )}`,
+        `Failed to validate structured output: ${error}\nData: ${JSON.stringify(data, null, 2)}`,
       );
     }
   }

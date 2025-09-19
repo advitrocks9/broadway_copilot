@@ -1,5 +1,5 @@
-import { ChatOpenAI } from "../openai/chat_models";
-import { ChatGroq } from "../groq/chat_models";
+import { ChatGroq } from '../groq/chat_models';
+import { ChatOpenAI } from '../openai/chat_models';
 
 /**
  * Cached LLM instances for different use cases.
@@ -17,7 +17,7 @@ let visionLLM: ChatOpenAI | null = null;
 export function getTextLLM(): ChatGroq {
   if (!textLLM) {
     textLLM = new ChatGroq({
-      model: "llama-3.3-70b-versatile",
+      model: 'llama-3.3-70b-versatile',
     });
   }
   return textLLM;
@@ -32,8 +32,8 @@ export function getTextLLM(): ChatGroq {
 export function getVisionLLM(): ChatOpenAI {
   if (!visionLLM) {
     visionLLM = new ChatOpenAI({
-      model: "gpt-5-mini",
-      reasoning: { effort: "minimal" },
+      model: 'gpt-5-mini',
+      reasoning: { effort: 'minimal' },
     });
   }
   return visionLLM;

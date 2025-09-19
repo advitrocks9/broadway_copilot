@@ -1,20 +1,19 @@
-import { createId } from "@paralleldrive/cuid2";
+import { createId } from '@paralleldrive/cuid2';
+import type { BufferedNodeRun, TraceBuffer } from '../agent/tracing';
 
 /**
  * @file A custom, lightweight implementation of a state graph inspired by LangGraph.
  * It supports nodes, edges, and conditional edges to build and run stateful, cyclical graphs.
  */
 
-export const START = "START" as const;
-export const END = "END" as const;
+export const START = 'START' as const;
+export const END = 'END' as const;
 
 /**
  * Represents a function that can be executed as a node in the graph.
  * It receives the current state and returns a partial state to be merged.
  */
-type NodeFunction<TState> = (
-  state: TState,
-) => Promise<Partial<TState>> | Partial<TState>;
+type NodeFunction<TState> = (state: TState) => Promise<Partial<TState>> | Partial<TState>;
 
 /**
  * A function that resolves a string key to determine the next node in a conditional edge.
@@ -41,11 +40,8 @@ interface ConditionalEdge<TState> extends Edge {
  */
 export class StateGraph<TState extends object> {
   private readonly nodes = new Map<string, NodeFunction<TState>>();
-  private readonly edges = new Map<
-    string,
-    DirectEdge | ConditionalEdge<TState>
-  >();
-  private startNode = "";
+  private readonly edges = new Map<string, DirectEdge | ConditionalEdge<TState>>();
+  private startNode = '';
 
   /**
    * Adds a node to the graph.
@@ -70,7 +66,7 @@ export class StateGraph<TState extends object> {
   addEdge(source: string, target: string): this {
     if (source === START) {
       if (this.startNode) {
-        throw new Error("Start node is already defined.");
+        throw new Error('Start node is already defined.');
       }
       this.startNode = target;
       return this;
@@ -109,9 +105,7 @@ export class StateGraph<TState extends object> {
    */
   compile() {
     if (!this.startNode) {
-      throw new Error(
-        "Graph must have a starting point defined with `addEdge(START, ...)`.",
-      );
+      throw new Error('Graph must have a starting point defined with `addEdge(START, ...)`.');
     }
 
     return {
@@ -123,16 +117,16 @@ export class StateGraph<TState extends object> {
        */
       invoke: async (
         initialState: TState,
-        config?: { signal?: AbortSignal; runId?: string },
+        config: { signal?: AbortSignal; runId?: string } = {},
       ): Promise<TState> => {
-        let currentNodeName: string | null = this.startNode;
+        let currentNodeName = this.startNode;
         let currentState = { ...initialState };
-        const graphRunId = config?.runId;
+        const { signal, runId: graphRunId } = config;
 
-        while (currentNodeName && currentNodeName !== END) {
-          if (config?.signal?.aborted) {
-            const error = new Error("Graph execution aborted");
-            error.name = "AbortError";
+        while (currentNodeName !== END) {
+          if (signal?.aborted) {
+            const error = new Error('Graph execution aborted');
+            error.name = 'AbortError';
             throw error;
           }
 
@@ -144,17 +138,22 @@ export class StateGraph<TState extends object> {
           const startTime = new Date();
           const nodeRunId = createId();
 
-          if (graphRunId) {
-            (currentState as any).traceBuffer.nodeRuns.push({
+          const traceCandidate = (currentState as { traceBuffer?: TraceBuffer }).traceBuffer;
+          const traceBuffer: TraceBuffer | null =
+            graphRunId && traceCandidate ? traceCandidate : null;
+          let nodeRunEntry: BufferedNodeRun | null = null;
+          if (traceBuffer) {
+            nodeRunEntry = {
               id: nodeRunId,
               nodeName: currentNodeName,
               startTime,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            });
+              createdAt: startTime,
+              updatedAt: startTime,
+            };
+            traceBuffer.nodeRuns.push(nodeRunEntry);
           }
 
-          let stateUpdate;
+          let stateUpdate: Partial<TState> | undefined;
           try {
             stateUpdate = await currentNode(currentState);
           } catch (e) {
@@ -163,19 +162,15 @@ export class StateGraph<TState extends object> {
             throw e;
           }
 
-          if (graphRunId) {
-            const nodeRun = (currentState as any).traceBuffer.nodeRuns.find(
-              (ne: any) => ne.id === nodeRunId,
-            );
-            if (nodeRun) {
-              const endTime = new Date();
-              nodeRun.endTime = endTime;
-              nodeRun.durationMs =
-                endTime.getTime() - nodeRun.startTime.getTime();
-              nodeRun.updatedAt = endTime;
-            }
+          if (nodeRunEntry) {
+            const endTime = new Date();
+            nodeRunEntry.endTime = endTime;
+            nodeRunEntry.durationMs = endTime.getTime() - startTime.getTime();
+            nodeRunEntry.updatedAt = endTime;
           }
-          currentState = { ...currentState, ...stateUpdate };
+          if (stateUpdate !== undefined) {
+            currentState = { ...currentState, ...stateUpdate };
+          }
 
           const edge = this.edges.get(currentNodeName);
           if (!edge) {
@@ -184,7 +179,7 @@ export class StateGraph<TState extends object> {
             );
           }
 
-          if ("target" in edge) {
+          if ('target' in edge) {
             currentNodeName = edge.target;
           } else {
             const targetKey = edge.resolver(currentState);

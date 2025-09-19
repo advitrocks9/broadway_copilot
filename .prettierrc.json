@@ -1,6 +1,25 @@
 {
+  "$schema": "https://json.schemastore.org/prettierrc",
+  "printWidth": 100,
   "semi": true,
-  "singleQuote": false,
+  "singleQuote": true,
+  "trailingComma": "all",
   "tabWidth": 2,
-  "trailingComma": "all"
+  "useTabs": false,
+  "arrowParens": "always",
+  "bracketSpacing": true,
+  "quoteProps": "as-needed",
+  "endOfLine": "lf",
+  "proseWrap": "preserve",
+  "plugins": ["prettier-plugin-organize-imports"],
+  "overrides": [
+    {
+      "files": ["*.ts"],
+      "options": { "parser": "typescript" }
+    },
+    {
+      "files": ["*.md"],
+      "options": { "proseWrap": "always" }
+    }
+  ]
 }

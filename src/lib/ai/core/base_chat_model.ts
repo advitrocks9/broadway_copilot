@@ -1,13 +1,13 @@
-import "dotenv/config";
+import 'dotenv/config';
 
-import Groq from "groq-sdk";
-import OpenAI from "openai";
-import { ZodType } from "zod";
-import { ModelRunner, ChatModelParams, RunOutcome } from "./runnables";
-import { BaseMessage, SystemMessage } from "./messages";
-import { Tool } from "./tools";
-import { StructuredOutputRunnable } from "./structured_output_runnable";
-import { TraceBuffer } from "../../../agent/tracing";
+import Groq from 'groq-sdk';
+import OpenAI from 'openai';
+import { ZodType } from 'zod';
+import { TraceBuffer } from '../../../agent/tracing';
+import { BaseMessage, SystemMessage } from './messages';
+import { ChatModelParams, ModelRunner, RunOutcome } from './runnables';
+import { StructuredOutputRunnable } from './structured_output_runnable';
+import type { Tool } from './tools';
 
 /**
  * Abstract base class for chat models, providing a common interface for
@@ -17,9 +17,9 @@ import { TraceBuffer } from "../../../agent/tracing";
 export abstract class BaseChatModel implements ModelRunner {
   protected abstract client: OpenAI | Groq;
   public params: ChatModelParams;
-  protected boundTools?: Tool<any>[];
-  protected structuredOutputSchema?: ZodType;
-  public structuredOutputToolName: string = "structured_output";
+  protected boundTools: Tool[] = [];
+  protected structuredOutputSchema: ZodType | null = null;
+  public structuredOutputToolName: string = 'structured_output';
 
   constructor(params: ChatModelParams) {
     this.params = {
@@ -35,11 +35,11 @@ export abstract class BaseChatModel implements ModelRunner {
    * @param tools An array of tools to bind to the model.
    * @returns A new `BaseChatModel` instance with the tools bound.
    */
-  bind(tools: Tool<any>[]): this {
-    const newInstance = new (this.constructor as new (
-      params: ChatModelParams,
-    ) => this)(this.params);
-    newInstance.boundTools = tools;
+  bind(tools: Tool[]): this {
+    const newInstance = new (this.constructor as new (params: ChatModelParams) => this)(
+      this.params,
+    );
+    newInstance.boundTools = [...tools];
     return newInstance;
   }
 
@@ -49,9 +49,7 @@ export abstract class BaseChatModel implements ModelRunner {
    * @param schema The Zod schema for the desired output format.
    * @returns A `StructuredOutputRunnable` instance that will return a typed object.
    */
-  withStructuredOutput<T extends ZodType>(
-    schema: T,
-  ): StructuredOutputRunnable<T> {
+  withStructuredOutput<T extends ZodType>(schema: T): StructuredOutputRunnable<T> {
     const newInstance = this._clone();
     newInstance.structuredOutputSchema = schema;
     return new StructuredOutputRunnable(newInstance, schema);
@@ -72,15 +70,19 @@ export abstract class BaseChatModel implements ModelRunner {
     systemPrompt: SystemMessage,
     msgs: BaseMessage[],
     traceBuffer: TraceBuffer,
-    nodeName?: string,
+    nodeName: string,
   ): Promise<RunOutcome>;
 
   protected _clone(): this {
-    const newInstance = new (this.constructor as new (
-      params: ChatModelParams,
-    ) => this)(this.params);
-    newInstance.boundTools = this.boundTools;
-    newInstance.structuredOutputSchema = this.structuredOutputSchema;
+    const newInstance = new (this.constructor as new (params: ChatModelParams) => this)(
+      this.params,
+    );
+    if (this.boundTools.length > 0) {
+      newInstance.boundTools = [...this.boundTools];
+    }
+    if (this.structuredOutputSchema) {
+      newInstance.structuredOutputSchema = this.structuredOutputSchema;
+    }
     return newInstance;
   }
 }

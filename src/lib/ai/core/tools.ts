@@ -1,5 +1,7 @@
-import { z, ZodObject, ZodRawShape } from "zod";
-import type { FunctionTool as OpenAIFunctionTool } from "openai/resources/responses/responses";
+import type { FunctionTool as OpenAIFunctionTool } from 'openai/resources/responses/responses';
+import { z, ZodObject, ZodType } from 'zod';
+
+type ToolSchema = ZodObject<Record<string, ZodType>>;
 
 /**
  * Defines the structure for a tool that the model can call. Each tool has a
@@ -22,21 +24,21 @@ import type { FunctionTool as OpenAIFunctionTool } from "openai/resources/respon
  * };
  * ```
  */
-export class Tool<T extends ZodRawShape = ZodRawShape> {
+export class Tool<TSchema extends ToolSchema = ToolSchema, TResult = unknown> {
   /** The name of the tool. Must be unique among all tools provided to the model. */
   name: string;
   /** A detailed description of what the tool does, used by the model to decide when to use it. */
   description: string;
   /** The Zod schema that defines the arguments the tool accepts. */
-  schema: ZodObject<T>;
+  schema: TSchema;
   /** The function to execute when the tool is called. It receives the parsed arguments. */
-  func: (args: any) => unknown | Promise<unknown>;
+  func: (args: z.infer<TSchema>) => TResult | Promise<TResult>;
 
   constructor(config: {
     name: string;
     description: string;
-    schema: ZodObject<T>;
-    func: (args: z.infer<ZodObject<T>>) => unknown | Promise<unknown>;
+    schema: TSchema;
+    func: (args: z.infer<TSchema>) => TResult | Promise<TResult>;
   }) {
     this.name = config.name;
     this.description = config.description;
@@ -108,12 +110,12 @@ export interface ToolResult {
  * // }
  * ```
  */
-export function toOpenAIToolSpec(tool: Tool<any>): OpenAIFunctionTool {
+export function toOpenAIToolSpec(tool: Tool): OpenAIFunctionTool {
   return {
-    type: "function",
+    type: 'function',
     name: tool.name,
     description: tool.description,
-    parameters: z.toJSONSchema(tool.schema),
+    parameters: z.toJSONSchema(tool.schema) as Record<string, unknown>,
     strict: true,
   };
 }

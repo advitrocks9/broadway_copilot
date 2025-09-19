@@ -1,16 +1,16 @@
-import { randomUUID } from "crypto";
-import fs from "fs/promises";
-import path from "path";
+import { randomUUID } from 'crypto';
+import fs from 'fs/promises';
+import path from 'path';
 
-import { extension as extFromMime } from "mime-types";
+import { extension as extFromMime } from 'mime-types';
 
-import { BadRequestError, InternalServerError } from "./errors";
-import { logger } from "./logger";
-import { ensureDir, userUploadDir } from "./paths";
+import { BadRequestError, InternalServerError } from './errors';
+import { logger } from './logger';
+import { ensureDir, userUploadDir } from './paths';
 
 const twilioAuth = {
-  sid: process.env.TWILIO_ACCOUNT_SID || "",
-  token: process.env.TWILIO_AUTH_TOKEN || "",
+  sid: process.env.TWILIO_ACCOUNT_SID || '',
+  token: process.env.TWILIO_AUTH_TOKEN || '',
 };
 
 /**
@@ -26,25 +26,23 @@ export async function downloadTwilioMedia(
   mimeType: string,
 ): Promise<string> {
   if (!twilioAuth.sid || !twilioAuth.token) {
-    throw new InternalServerError("Twilio credentials missing");
+    throw new InternalServerError('Twilio credentials missing');
   }
   if (!mimeType) {
-    throw new BadRequestError("MIME type is required");
+    throw new BadRequestError('MIME type is required');
   }
   try {
     const extension = extFromMime(mimeType);
-    const filename = `twilio_${randomUUID()}${extension ? `.${extension}` : ""}`;
+    const filename = `twilio_${randomUUID()}${extension ? `.${extension}` : ''}`;
 
     const response = await fetch(url, {
       headers: {
-        Authorization: `Basic ${Buffer.from(`${twilioAuth.sid}:${twilioAuth.token}`).toString("base64")}`,
+        Authorization: `Basic ${Buffer.from(`${twilioAuth.sid}:${twilioAuth.token}`).toString('base64')}`,
       },
     });
 
     if (!response.ok) {
-      throw new InternalServerError(
-        `Failed to download media: ${response.status}`,
-      );
+      throw new InternalServerError(`Failed to download media: ${response.status}`);
     }
 
     const uploadDir = userUploadDir(whatsappId);
@@ -53,16 +51,16 @@ export async function downloadTwilioMedia(
     const buffer = Buffer.from(await response.arrayBuffer());
     await fs.writeFile(filePath, buffer);
 
-    const baseUrl = process.env.SERVER_URL?.replace(/\/$/, "") || "";
+    const baseUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
     const publicUrl = `${baseUrl}/uploads/${whatsappId}/${filename}`;
     logger.debug(
       { whatsappId, filename, filePath, mimeType, size: buffer.length },
-      "Twilio media downloaded and saved",
+      'Twilio media downloaded and saved',
     );
 
     return publicUrl;
   } catch (err: unknown) {
-    throw new InternalServerError("Failed to download Twilio media", {
+    throw new InternalServerError('Failed to download Twilio media', {
       cause: err,
     });
   }

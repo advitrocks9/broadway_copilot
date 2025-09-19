@@ -1,4 +1,4 @@
-import { logger } from "./logger";
+import { logger } from './logger';
 
 /**
  * Simple error handling system for the Broadway Copilot application.
@@ -11,14 +11,10 @@ import { logger } from "./logger";
 export class HttpError extends Error {
   public readonly statusCode: number;
 
-  constructor(
-    message: string,
-    statusCode: number = 500,
-    options?: { cause?: any },
-  ) {
+  constructor(message: string, statusCode: number = 500, options?: { cause?: unknown }) {
     super(message, options);
     this.statusCode = statusCode;
-    this.name = "HttpError";
+    this.name = 'HttpError';
     Error.captureStackTrace(this, this.constructor);
   }
 }
@@ -27,58 +23,58 @@ export class HttpError extends Error {
  * A collection of specific HTTP error classes for different status codes.
  */
 export class BadRequestError extends HttpError {
-  constructor(message: string, options?: { cause?: any }) {
+  constructor(message: string, options?: { cause?: unknown }) {
     super(message, 400, options);
-    this.name = "BadRequestError";
+    this.name = 'BadRequestError';
   }
 }
 
 export class UnauthorizedError extends HttpError {
-  constructor(message: string, options?: { cause?: any }) {
+  constructor(message: string, options?: { cause?: unknown }) {
     super(message, 401, options);
-    this.name = "UnauthorizedError";
+    this.name = 'UnauthorizedError';
   }
 }
 
 export class ForbiddenError extends HttpError {
-  constructor(message: string, options?: { cause?: any }) {
+  constructor(message: string, options?: { cause?: unknown }) {
     super(message, 403, options);
-    this.name = "ForbiddenError";
+    this.name = 'ForbiddenError';
   }
 }
 
 export class NotFoundError extends HttpError {
-  constructor(message: string, options?: { cause?: any }) {
+  constructor(message: string, options?: { cause?: unknown }) {
     super(message, 404, options);
-    this.name = "NotFoundError";
+    this.name = 'NotFoundError';
   }
 }
 
 export class TooManyRequestsError extends HttpError {
-  constructor(message: string, options?: { cause?: any }) {
+  constructor(message: string, options?: { cause?: unknown }) {
     super(message, 429, options);
-    this.name = "TooManyRequestsError";
+    this.name = 'TooManyRequestsError';
   }
 }
 
 export class InternalServerError extends HttpError {
-  constructor(message: string, options?: { cause?: any }) {
+  constructor(message: string, options?: { cause?: unknown }) {
     super(message, 500, options);
-    this.name = "InternalServerError";
+    this.name = 'InternalServerError';
   }
 }
 
 export class ServiceUnavailableError extends HttpError {
-  constructor(message: string, options?: { cause?: any }) {
+  constructor(message: string, options?: { cause?: unknown }) {
     super(message, 503, options);
-    this.name = "ServiceUnavailableError";
+    this.name = 'ServiceUnavailableError';
   }
 }
 
 export class GatewayTimeoutError extends HttpError {
-  constructor(message: string, options?: { cause?: any }) {
+  constructor(message: string, options?: { cause?: unknown }) {
     super(message, 504, options);
-    this.name = "GatewayTimeoutError";
+    this.name = 'GatewayTimeoutError';
   }
 }
 
@@ -88,10 +84,7 @@ export class GatewayTimeoutError extends HttpError {
  * @param context Additional context about where the error occurred.
  * @returns The normalized HttpError for further use if needed.
  */
-export function logError(
-  error: unknown,
-  context?: Record<string, unknown>,
-): HttpError {
+export function logError(error: unknown, context?: Record<string, unknown>): HttpError {
   const httpError = normalizeError(error);
 
   const logData = {
@@ -107,9 +100,9 @@ export function logError(
   };
 
   if (httpError.statusCode >= 500) {
-    logger.error(logData, "System error");
+    logger.error(logData, 'System error');
   } else {
-    logger.warn(logData, "Client error");
+    logger.warn(logData, 'Client error');
   }
 
   return httpError;
@@ -127,12 +120,12 @@ export function normalizeError(error: unknown): HttpError {
   }
 
   if (error instanceof Error) {
-    return new InternalServerError(error.message || "Unknown error occurred", {
+    return new InternalServerError(error.message || 'Unknown error occurred', {
       cause: error,
     });
   }
 
-  return new InternalServerError("An unknown error occurred");
+  return new InternalServerError('An unknown error occurred');
 }
 
 /**

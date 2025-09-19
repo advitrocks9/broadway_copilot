@@ -1,6 +1,6 @@
-import { BaseMessage, SystemMessage } from "./messages";
-import { ToolCall } from "./tools";
-import { TraceBuffer } from "../../../agent/tracing";
+import { TraceBuffer } from '../../../agent/tracing';
+import { BaseMessage, SystemMessage } from './messages';
+import { ToolCall } from './tools';
 
 /**
  * Defines the core parameters for configuring a chat model instance.
@@ -35,7 +35,7 @@ export interface OpenAIChatModelParams extends ChatModelParams {
    * which can improve performance on complex tasks.
    * Only applicable when `useResponsesApi` is `true`.
    */
-  reasoning?: { effort: "minimal" | "low" | "medium" | "high" };
+  reasoning?: { effort: 'minimal' | 'low' | 'medium' | 'high' };
   /**
    * (OpenAI-specific) Toggles between the Responses API and the Chat Completions API.
    * Defaults to `false` (Chat Completions API).
@@ -46,7 +46,7 @@ export interface OpenAIChatModelParams extends ChatModelParams {
    * Setting to `{ type: "json_object" }` enables JSON mode.
    * Only applicable for Chat Completions API.
    */
-  responseFormat?: { type: "text" | "json_object" };
+  responseFormat?: { type: 'text' | 'json_object' };
 }
 
 export interface GroqChatModelParams extends ChatModelParams {
@@ -79,10 +79,10 @@ export interface GroqChatModelParams extends ChatModelParams {
 export interface RunOutcome {
   /** The assistant's response message. */
   assistant: BaseMessage;
-  /** An array of tool calls requested by the assistant, if any. */
-  toolCalls?: ToolCall[];
+  /** An array of tool calls requested by the assistant. Empty when none were made. */
+  toolCalls: ToolCall[];
   /** The raw, unmodified response from the LLM provider for debugging. */
-  raw?: unknown;
+  raw: unknown;
 }
 
 /**
@@ -92,10 +92,16 @@ export interface RunOutcome {
  * @example
  * ```typescript
  * class MyModelRunner implements ModelRunner {
- *   async run(messages: BaseMessage[]): Promise<RunOutcome> {
+ *   async run(
+ *     systemPrompt: SystemMessage,
+ *     messages: BaseMessage[],
+ *     traceBuffer: TraceBuffer,
+ *     nodeName: string,
+ *   ): Promise<RunOutcome> {
  *     // Logic to call a specific LLM provider
  *     return {
  *       assistant: new AssistantMessage('Response from my custom model'),
+ *       toolCalls: [],
  *       raw: response,
  *     };
  *   }
@@ -116,6 +122,6 @@ export interface ModelRunner {
     systemPrompt: SystemMessage,
     messages: BaseMessage[],
     traceBuffer: TraceBuffer,
-    nodeName?: string,
+    nodeName: string,
   ): Promise<RunOutcome>;
 }

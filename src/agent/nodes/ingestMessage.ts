@@ -1,12 +1,12 @@
-import { AssistantMessage, UserMessage, MessageContent } from "../../lib/ai";
-import { MessageRole, PendingType } from "@prisma/client";
+import { MessageRole, PendingType } from '@prisma/client';
+import { AssistantMessage, MessageContent, UserMessage } from '../../lib/ai';
 
-import { prisma } from "../../lib/prisma";
-import { downloadTwilioMedia } from "../../utils/media";
-import { extractTextContent } from "../../utils/text";
-import { logger } from "../../utils/logger";
-import { GraphState } from "../state";
-import { queueImageUpload } from "../../lib/tasks";
+import { prisma } from '../../lib/prisma';
+import { queueImageUpload } from '../../lib/tasks';
+import { logger } from '../../utils/logger';
+import { downloadTwilioMedia } from '../../utils/media';
+import { extractTextContent } from '../../utils/text';
+import { GraphState } from '../state';
 
 /**
  * Ingests incoming Twilio messages, processes media attachments, manages conversation history,
@@ -27,25 +27,15 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
   } = input;
 
   if (!whatsappId) {
-    throw new Error("Whatsapp ID not found in webhook payload");
+    throw new Error('Whatsapp ID not found in webhook payload');
   }
 
-  let media:
-    | { serverUrl: string; twilioUrl: string; mimeType: string }
-    | undefined;
-  let content: MessageContent = [{ type: "text", text }];
-  if (
-    numMedia === "1" &&
-    mediaUrl0 &&
-    mediaContentType0?.startsWith("image/")
-  ) {
+  let media: { serverUrl: string; twilioUrl: string; mimeType: string } | undefined;
+  let content: MessageContent = [{ type: 'text', text }];
+  if (numMedia === '1' && mediaUrl0 && mediaContentType0?.startsWith('image/')) {
     try {
-      const serverUrl = await downloadTwilioMedia(
-        mediaUrl0,
-        whatsappId,
-        mediaContentType0,
-      );
-      content.push({ type: "image_url", image_url: { url: serverUrl } });
+      const serverUrl = await downloadTwilioMedia(mediaUrl0, whatsappId, mediaContentType0);
+      content.push({ type: 'image_url', image_url: { url: serverUrl } });
       media = { serverUrl, twilioUrl: mediaUrl0, mimeType: mediaContentType0 };
     } catch (error) {
       logger.warn(
@@ -54,77 +44,77 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
           whatsappId,
           mediaUrl0,
         },
-        "Failed to download image, proceeding without it.",
+        'Failed to download image, proceeding without it.',
       );
     }
   }
 
-  const { savedMessage, messages, pending } = await prisma.$transaction(
-    async (tx) => {
-      const [lastMessage, latestAssistantMessage] = await Promise.all([
-        tx.message.findFirst({
-          where: { conversationId },
-          orderBy: { createdAt: "desc" },
-          select: { id: true, role: true, content: true },
-        }),
-        tx.message.findFirst({
-          where: {
-            conversation: { id: conversationId, userId: user.id },
-            role: MessageRole.AI,
-          },
-          orderBy: { createdAt: "desc" },
-          select: { pending: true },
-        }),
-      ]);
+  const { savedMessage, messages, pending } = await prisma.$transaction(async (tx) => {
+    const [lastMessage, latestAssistantMessage] = await Promise.all([
+      tx.message.findFirst({
+        where: { conversationId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, role: true, content: true },
+      }),
+      tx.message.findFirst({
+        where: {
+          conversation: { id: conversationId, userId: user.id },
+          role: MessageRole.AI,
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { pending: true },
+      }),
+    ]);
 
-      const pendingState = latestAssistantMessage?.pending ?? PendingType.NONE;
+    const pendingState = latestAssistantMessage?.pending ?? PendingType.NONE;
 
-      let savedMessage;
-      if (lastMessage && lastMessage.role === MessageRole.USER) {
-        const existingContent = lastMessage.content as MessageContent;
-        const mergedContent = [...existingContent, ...content];
+    let savedMessage;
+    if (lastMessage && lastMessage.role === MessageRole.USER) {
+      const existingContent = lastMessage.content as MessageContent;
+      const mergedContent = [...existingContent, ...content];
 
-        savedMessage = await tx.message.update({
-          where: { id: lastMessage.id },
-          data: {
-            content: mergedContent,
-            ...(buttonPayload != null && { buttonPayload }),
-            ...(media && {
-              media: {
-                create: {
-                  twilioUrl: media.twilioUrl,
-                  serverUrl: media.serverUrl,
-                  mimeType: media.mimeType,
-                },
+      savedMessage = await tx.message.update({
+        where: { id: lastMessage.id },
+        data: {
+          content: mergedContent,
+          ...(buttonPayload != null && { buttonPayload }),
+          ...(media && {
+            media: {
+              create: {
+                twilioUrl: media.twilioUrl,
+                serverUrl: media.serverUrl,
+                mimeType: media.mimeType,
               },
-            }),
-          },
-        });
-      } else {
-        savedMessage = await tx.message.create({
-          data: {
-            conversationId,
-            role: MessageRole.USER,
-            content,
-            ...(buttonPayload != null && { buttonPayload }),
-            ...(media && {
-              media: {
-                create: {
-                  twilioUrl: media.twilioUrl,
-                  serverUrl: media.serverUrl,
-                  mimeType: media.mimeType,
-                },
+            },
+          }),
+        },
+      });
+    } else {
+      savedMessage = await tx.message.create({
+        data: {
+          conversationId,
+          role: MessageRole.USER,
+          content,
+          ...(buttonPayload != null && { buttonPayload }),
+          ...(media && {
+            media: {
+              create: {
+                twilioUrl: media.twilioUrl,
+                serverUrl: media.serverUrl,
+                mimeType: media.mimeType,
               },
-            }),
-          },
-        });
-      }
+            },
+          }),
+        },
+      });
+    }
 
-      const messages = await tx.message.findMany({
+    const messages = await tx.message
+      .findMany({
         where: {
           conversationId,
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: 'desc' },
         take: 10,
         select: {
           id: true,
@@ -133,11 +123,11 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
           buttonPayload: true,
           createdAt: true,
         },
-      }).then(msgs => msgs.reverse());
+      })
+      .then((msgs) => msgs.reverse());
 
-      return { savedMessage, messages, pending: pendingState };
-    },
-  );
+    return { savedMessage, messages, pending: pendingState };
+  });
 
   queueImageUpload(user.id, savedMessage.id).catch((err) => {
     logger.error(
@@ -146,7 +136,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
         userId: user.id,
         messageId: savedMessage.id,
       },
-      "Failed to queue image upload",
+      'Failed to queue image upload',
     );
   });
 
@@ -154,9 +144,6 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
   const conversationHistoryTextOnly: (UserMessage | AssistantMessage)[] = [];
 
   for (const msg of messages) {
-    const MessageClass =
-      msg.role === MessageRole.USER ? UserMessage : AssistantMessage;
-
     const meta = {
       createdAt: msg.createdAt,
       messageId: msg.id,
@@ -166,17 +153,25 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     };
 
     const contentWithImage = msg.content as MessageContent;
-    const messageWithImage = new MessageClass(contentWithImage);
-    messageWithImage.meta = meta;
-    conversationHistoryWithImages.push(messageWithImage);
-
     const textContent = extractTextContent(contentWithImage);
-    const textOnlyMessage = new MessageClass(textContent);
-    textOnlyMessage.meta = meta;
-    conversationHistoryTextOnly.push(textOnlyMessage);
+
+    if (msg.role === MessageRole.USER) {
+      const messageWithImage = new UserMessage(contentWithImage);
+      messageWithImage.meta = meta;
+      conversationHistoryWithImages.push(messageWithImage);
+
+      const textOnlyMessage = new UserMessage(textContent);
+      textOnlyMessage.meta = meta;
+      conversationHistoryTextOnly.push(textOnlyMessage);
+    } else {
+      const assistantMessage = new AssistantMessage(textContent);
+      assistantMessage.meta = meta;
+      conversationHistoryWithImages.push(assistantMessage);
+      conversationHistoryTextOnly.push(assistantMessage);
+    }
   }
 
-  logger.debug({ whatsappId, graphRunId }, "Message ingested successfully");
+  logger.debug({ whatsappId, graphRunId }, 'Message ingested successfully');
 
   return {
     ...state,

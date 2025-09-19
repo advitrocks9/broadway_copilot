@@ -1,10 +1,9 @@
-import { User, Conversation, ConversationStatus } from "@prisma/client";
+import { Conversation, ConversationStatus, Prisma, User } from '@prisma/client';
 
-import { prisma } from "../lib/prisma";
-import { queueMemoryExtraction } from "../lib/tasks";
-import { logger } from "./logger";
-import { BadRequestError } from "./errors";
-import { BaseMessage } from "../lib/ai/core/messages";
+import { BaseMessage } from '../lib/ai/core/messages';
+import { prisma } from '../lib/prisma';
+import { queueMemoryExtraction } from '../lib/tasks';
+import { logger } from './logger';
 
 const CONVERSATION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -21,7 +20,7 @@ async function handleStaleConversation(
 ): Promise<Conversation> {
   logger.debug(
     { userId: user.id, conversationId: conversation.id },
-    "Stale conversation detected, closing and creating a new one.",
+    'Stale conversation detected, closing and creating a new one.',
   );
 
   const [, newConversation] = await prisma.$transaction([
@@ -41,12 +40,12 @@ async function handleStaleConversation(
         userId: user.id,
         conversationId: conversation.id,
       },
-      "Failed to queue memory extraction for stale conversation",
+      'Failed to queue memory extraction for stale conversation',
     );
   });
   logger.debug(
     { userId: user.id, conversationId: conversation.id },
-    "Queued memory extraction for closed conversation.",
+    'Queued memory extraction for closed conversation.',
   );
 
   return newConversation;
@@ -63,16 +62,16 @@ async function handleStaleConversation(
  */
 export async function getOrCreateUserAndConversation(
   whatsappId: string,
-  profileName?: string,
+  profileName: string,
 ): Promise<{ user: User; conversation: Conversation }> {
-  if (!whatsappId) {
-    throw new BadRequestError("WhatsApp ID is required");
-  }
-
+  const updateData: Prisma.UserUpdateInput = {};
   const user = await prisma.user.upsert({
     where: { whatsappId },
-    update: { profileName },
-    create: { whatsappId, profileName },
+    update: updateData,
+    create: {
+      whatsappId,
+      profileName,
+    },
   });
 
   const lastOpenConversation = await prisma.conversation.findFirst({
@@ -80,12 +79,11 @@ export async function getOrCreateUserAndConversation(
       userId: user.id,
       status: ConversationStatus.OPEN,
     },
-    orderBy: { updatedAt: "desc" },
+    orderBy: { updatedAt: 'desc' },
   });
 
   if (lastOpenConversation) {
-    const timeSinceLastUpdate =
-      Date.now() - new Date(lastOpenConversation.updatedAt).getTime();
+    const timeSinceLastUpdate = Date.now() - new Date(lastOpenConversation.updatedAt).getTime();
     if (timeSinceLastUpdate > CONVERSATION_TIMEOUT_MS) {
       return {
         user,
@@ -95,10 +93,7 @@ export async function getOrCreateUserAndConversation(
     return { user, conversation: lastOpenConversation };
   }
 
-  logger.debug(
-    { userId: user.id },
-    "No open conversation found, creating a new one.",
-  );
+  logger.debug({ userId: user.id }, 'No open conversation found, creating a new one.');
   const newConversation = await prisma.conversation.create({
     data: { userId: user.id },
   });
@@ -112,13 +107,8 @@ export async function getOrCreateUserAndConversation(
  * @param conversationHistoryWithImages - Array of conversation messages with image data
  * @returns Number of image URLs in the latest message
  */
-export function numImagesInMessage(
-  conversationHistoryWithImages: BaseMessage[],
-): number {
-  if (
-    !conversationHistoryWithImages ||
-    conversationHistoryWithImages.length === 0
-  ) {
+export function numImagesInMessage(conversationHistoryWithImages: BaseMessage[]): number {
+  if (!conversationHistoryWithImages || conversationHistoryWithImages.length === 0) {
     return 0;
   }
 
@@ -131,5 +121,5 @@ export function numImagesInMessage(
     return 0;
   }
 
-  return latestMessage.content.filter(item => item.type === "image_url").length;
+  return latestMessage.content.filter((item) => item.type === 'image_url').length;
 }

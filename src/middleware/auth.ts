@@ -1,7 +1,7 @@
-import { Request, Response, NextFunction } from "express";
+import { NextFunction, Request, Response } from 'express';
 
-import { ForbiddenError } from "../utils/errors";
-import { validateTwilioRequest } from "../lib/twilio";
+import { validateTwilioRequest } from '../lib/twilio';
+import { ForbiddenError } from '../utils/errors';
 
 /**
  * Express middleware to authenticate incoming Twilio webhook requests.
@@ -12,24 +12,20 @@ import { validateTwilioRequest } from "../lib/twilio";
  * @param next - Express next function to continue request processing
  * @throws {HttpError} When webhook signature validation fails
  */
-export const authenticateRequest = (
-  req: Request,
-  _res: Response,
-  next: NextFunction,
-) => {
-  const twilioSignature = req.header("X-Twilio-Signature");
+export const authenticateRequest = (req: Request, _res: Response, next: NextFunction) => {
+  const twilioSignature = req.header('X-Twilio-Signature');
 
   if (!twilioSignature) {
-    throw new ForbiddenError("Authentication failed");
+    throw new ForbiddenError('Authentication failed');
   }
 
   try {
     const isValid = validateTwilioRequest(req);
     if (!isValid) {
-      throw new ForbiddenError("Invalid webhook signature");
+      throw new ForbiddenError('Invalid webhook signature');
     }
     next();
   } catch (err: unknown) {
-    throw new ForbiddenError("Authentication failed", { cause: err });
+    throw new ForbiddenError('Authentication failed', { cause: err });
   }
 };
