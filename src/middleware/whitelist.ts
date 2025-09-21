@@ -6,6 +6,10 @@ import { ForbiddenError, InternalServerError } from '../utils/errors';
 import { logger } from '../utils/logger';
 
 export const whitelist = async (req: Request, res: Response, next: NextFunction) => {
+  if (process.env.NODE_ENV === 'development') {
+    return next();
+  }
+
   const { WaId } = req.body as TwilioWebhookRequest;
 
   if (!WaId) {

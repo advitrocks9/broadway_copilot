@@ -33,16 +33,7 @@ async function handleStaleConversation(
     }),
   ]);
 
-  queueMemoryExtraction(user.id, conversation.id).catch((err) => {
-    logger.error(
-      {
-        err: err instanceof Error ? err.message : String(err),
-        userId: user.id,
-        conversationId: conversation.id,
-      },
-      'Failed to queue memory extraction for stale conversation',
-    );
-  });
+  queueMemoryExtraction(user.id, conversation.id);
   logger.debug(
     { userId: user.id, conversationId: conversation.id },
     'Queued memory extraction for closed conversation.',

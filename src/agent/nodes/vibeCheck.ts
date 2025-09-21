@@ -148,7 +148,7 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
       }),
     ]);
 
-    await queueWardrobeIndex(userId, latestMessageId);
+    queueWardrobeIndex(userId, latestMessageId);
     logger.debug({ userId }, 'Scheduled wardrobe indexing for message');
 
     const replies: Replies = [{ reply_type: 'text', reply_text: result.message1_text }];

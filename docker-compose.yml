@@ -1,0 +1,156 @@
+services:
+  app:
+    image: node:22
+    working_dir: /usr/src/app
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        set -Eeuo pipefail
+
+        log() {
+          printf '%s\n' "$${*}"
+        }
+
+        log "Installing dependencies..."
+        npm ci --legacy-peer-deps --silent --no-progress
+        log "Dependencies installed."
+
+        log "Checking Postgres availability..."
+        until node <<'NODE' >/dev/null 2>&1; do
+        const net = require('net');
+        const host = process.env.POSTGRES_HOST || 'db';
+        const port = Number(process.env.POSTGRES_PORT || 5432);
+        const socket = net.createConnection({ host, port }, () => {
+          socket.end();
+          process.exit(0);
+        });
+        const fail = () => process.exit(1);
+        socket.on('error', fail);
+        setTimeout(fail, 2000);
+        NODE
+          sleep 1
+        done
+        log "Postgres is ready."
+
+        log "Generating Prisma client..."
+        if ! npx prisma generate >/tmp/prisma-generate.log 2>&1; then
+          log "Prisma generate failed:"
+          cat /tmp/prisma-generate.log >&2
+          exit 1
+        fi
+        rm -f /tmp/prisma-generate.log
+        log "Prisma client ready."
+
+        log "Pushing database schema..."
+        if ! npx prisma db push >/tmp/prisma-db-push.log 2>&1; then
+          log "Prisma db push failed:"
+          cat /tmp/prisma-db-push.log >&2
+          exit 1
+        fi
+        rm -f /tmp/prisma-db-push.log
+        log "Database schema is in sync."
+
+        NGROK_API_URL="$${NGROK_API_URL:-http://ngrok:4040/api/tunnels}"
+        log "Waiting for ngrok tunnel from $${NGROK_API_URL}..."
+        while true; do
+          RESPONSE=$$(curl -s --fail "$${NGROK_API_URL}" || true)
+          if [ -n "$${RESPONSE}" ]; then
+            PUBLIC_URL=$$(RESPONSE="$${RESPONSE}" node -e "const resp = process.env.RESPONSE; if (!resp) process.exit(1); try { const data = JSON.parse(resp); const tunnel = (data.tunnels || []).find(t => t.public_url && t.public_url.startsWith('https://')); if (tunnel) { process.stdout.write(tunnel.public_url); } } catch (err) { process.exit(1); }")
+            if [ -n "$${PUBLIC_URL}" ]; then
+              export SERVER_URL="$${PUBLIC_URL}"
+              log "Ngrok tunnel ready."
+              log "This is the URL – paste it in the Twilio console: $${PUBLIC_URL}/twilio"
+              break
+            fi
+          fi
+          sleep 2
+        done
+
+        log "Starting development server..."
+        npm run dev
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${PORT:-8080}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/broadway?schema=public
+      REDIS_URL: redis://redis:6379
+      NGROK_API_URL: http://ngrok:4040/api/tunnels
+    ports:
+      - "${PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      ngrok:
+        condition: service_started
+    volumes:
+      - .:/usr/src/app
+      - node_modules:/usr/src/app/node_modules
+      - dist:/usr/src/app/dist
+      - /usr/src/app/functions
+
+  db:
+    image: pgvector/pgvector:0.8.0-pg17
+    command:
+      - postgres
+      - -c
+      - log_min_messages=fatal
+      - -c
+      - client_min_messages=warning
+      - -c
+      - log_connections=off
+      - -c
+      - log_disconnections=off
+      - -c
+      - log_statement=none
+      - -c
+      - log_error_verbosity=terse
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: broadway
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_v0_8_0:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:8
+    command:
+      - redis-server
+      - --loglevel
+      - warning
+    volumes:
+      - redis_data:/data
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    command:
+      - http
+      - app:8080
+      - --log=stdout
+      - --log-level=warn
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+      NGROK_DOMAIN: ${NGROK_DOMAIN:-}
+      NGROK_EDGE: ${NGROK_EDGE:-}
+    ports:
+      - "4040:4040"
+
+volumes:
+  node_modules:
+  dist:
+  postgres_data_v0_8_0:
+  redis_data:

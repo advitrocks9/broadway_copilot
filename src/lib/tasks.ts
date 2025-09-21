@@ -61,38 +61,48 @@ async function queueTask(
     name: taskName,
   };
 
-  try {
-    const [response] = await client.createTask({ parent, task });
-    logger.info({ taskName: response.name, type: taskType }, `Queued ${taskType} task`);
+  const [response] = await client.createTask({ parent, task });
+  logger.info({ taskName: response.name, type: taskType }, `Queued ${taskType} task`);
 
-    await prisma.task.create({
-      data: {
-        taskId: taskId,
-        userId: payload.userId,
-        type: taskType,
-        payload,
-        runAt: new Date(),
-      },
+  await prisma.task.create({
+    data: {
+      taskId: taskId,
+      userId: payload.userId,
+      type: taskType,
+      payload,
+      runAt: new Date(),
+    },
+  });
+}
+
+function runTaskInBackground(taskType: TaskType, runner: () => Promise<void>): void {
+  setImmediate(() => {
+    runner().catch((err: unknown) => {
+      logger.error(
+        { err: err instanceof Error ? err.message : String(err), type: taskType },
+        `Failed to queue ${taskType} task`,
+      );
     });
-  } catch (err: unknown) {
-    logger.error(
-      { err: err instanceof Error ? err.message : String(err), type: taskType },
-      `Failed to queue ${taskType} task`,
-    );
-    throw new InternalServerError('Failed to queue task');
-  }
+  });
 }
 
 /**
  * Queues a task to index wardrobe from a message by calling the cloud function.
  * @param messageId The ID of the message to process.
  */
-export async function queueWardrobeIndex(userId: string, messageId: string): Promise<void> {
-  await queueTask(
-    'wardrobe-index',
-    WARDROBE_FUNCTION_URL,
-    { userId, messageId },
-    TaskType.SCHEDULE_WARDROBE_INDEX,
+export function queueWardrobeIndex(userId: string, messageId: string): void {
+  if (process.env.NODE_ENV === 'development') {
+    logger.debug({ userId, messageId }, 'Skipping wardrobe index queueing in development');
+    return;
+  }
+
+  runTaskInBackground(TaskType.SCHEDULE_WARDROBE_INDEX, () =>
+    queueTask(
+      'wardrobe-index',
+      WARDROBE_FUNCTION_URL,
+      { userId, messageId },
+      TaskType.SCHEDULE_WARDROBE_INDEX,
+    ),
   );
 }
 
@@ -100,12 +110,19 @@ export async function queueWardrobeIndex(userId: string, messageId: string): Pro
  * Queues a task to extract and save memories for a user by calling the cloud function.
  * @param userId The ID of the user to process.
  */
-export async function queueMemoryExtraction(userId: string, conversationId: string): Promise<void> {
-  await queueTask(
-    'memory-extraction',
-    MEMORY_FUNCTION_URL,
-    { userId, conversationId },
-    TaskType.PROCESS_MEMORIES,
+export function queueMemoryExtraction(userId: string, conversationId: string): void {
+  if (process.env.NODE_ENV === 'development') {
+    logger.debug({ userId, conversationId }, 'Skipping memory extraction queueing in development');
+    return;
+  }
+
+  runTaskInBackground(TaskType.PROCESS_MEMORIES, () =>
+    queueTask(
+      'memory-extraction',
+      MEMORY_FUNCTION_URL,
+      { userId, conversationId },
+      TaskType.PROCESS_MEMORIES,
+    ),
   );
 }
 
@@ -114,11 +131,18 @@ export async function queueMemoryExtraction(userId: string, conversationId: stri
  * @param userId The ID of the user to process.
  * @param messageId The ID of the message containing the images.
  */
-export async function queueImageUpload(userId: string, messageId: string): Promise<void> {
-  await queueTask(
-    'image-upload',
-    IMAGE_UPLOAD_FUNCTION_URL,
-    { userId, messageId },
-    TaskType.UPLOAD_IMAGES,
+export function queueImageUpload(userId: string, messageId: string): void {
+  if (process.env.NODE_ENV === 'development') {
+    logger.debug({ userId, messageId }, 'Skipping image upload queueing in development');
+    return;
+  }
+
+  runTaskInBackground(TaskType.UPLOAD_IMAGES, () =>
+    queueTask(
+      'image-upload',
+      IMAGE_UPLOAD_FUNCTION_URL,
+      { userId, messageId },
+      TaskType.UPLOAD_IMAGES,
+    ),
   );
 }
