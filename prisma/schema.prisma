@@ -320,7 +320,7 @@ model Feedback {
   conversationId String       @unique
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  rating  Int?
+  helpful Boolean?
   comment String?
 
   createdAt DateTime @default(now())

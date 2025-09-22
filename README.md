@@ -1,237 +1,650 @@
+
 # Broadway Copilot
 
-Broadway Copilot is a sophisticated, AI-powered personal stylist delivered through an intuitive WhatsApp interface. It leverages large language models and computer vision to provide personalized fashion advice, analyze outfits, and help users manage their wardrobe.
+  
 
-The application is built with a robust, scalable architecture using Node.js, Express, and a state-of-the-art agent framework powered by LangGraph. It's designed for production deployment with Docker and Google Cloud Run.
+Broadway Copilot is an AI-powered personal stylist that lives on WhatsApp. It combines a LangGraph-inspired conversational agent, OpenAI/Groq language models, computer vision features, and a rich data layer to deliver personalized fashion advice in real time.
+
+  
 
 ![Agent Graph](./langgraph.png)
 
+  
+
 ## Table of Contents
 
-- [Features](#features)
-- [Architecture](#architecture)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Environment Variables](#environment-variables)
-- [Usage](#usage)
-  - [Running Locally](#running-locally)
-  - [Available Scripts](#available-scripts)
-- [API Endpoints](#api-endpoints)
-- [Database Schema](#database-schema)
-- [Key Components](#key-components)
-- [Deployment](#deployment)
-  - [Docker](#docker)
-  - [Google Cloud Run](#google-cloud-run)
-- [Troubleshooting](#troubleshooting)
+  
 
-## Features
+1. [At a Glance](#at-a-glance)
 
-Broadway Copilot offers a range of intelligent features to serve as a user's virtual fashion assistant:
+2. [Quick Start](#quick-start)
 
-**Fashion & Style Analysis:**
--   **Outfit Rating (Vibe Check)**: Upload outfit photos for AI-powered analysis with detailed scores for fit, color harmony, styling details, accessories, and overall aesthetic.
--   **Color Analysis**: Get seasonal color analysis from face photos or color palettes, providing personalized color recommendations, undertone identification, and makeup/hair suggestions.
--   **Style Suggestions**: Receive outfit improvement recommendations, style tweaks, and shopping suggestions based on your current looks.
+- [Prerequisites](#prerequisites)
 
-**Personalized Recommendations:**
--   **Occasion Styling**: Get event-appropriate outfit advice considering dress code, weather, climate, and occasion tone.
--   **Vacation Packing**: Receive destination-aware outfit and packing recommendations with weather/activity context and capsule wardrobe suggestions.
--   **Item Pairing**: Learn how to style specific clothing items with complementary color, silhouette, fabric, and accessory recommendations.
+- [Configure Environment](#configure-environment)
 
-**Smart Conversation Flow:**
--   **Intent Recognition**: Automatically understands user requests and routes to appropriate specialized handlers.
--   **Context Awareness**: Maintains conversation context across multiple turns for a natural, human-like interaction.
--   **Profile Inference**: Learns user preferences including gender, style preferences, and fashion profile over time.
--   **Multi-modal Input**: Processes both text messages and image uploads seamlessly.
+- [Launch the Stack](#launch-the-stack)
 
-## Architecture
+- [Twilio + Ngrok Setup](#twilio--ngrok-setup)
 
-The application is built on a modern, scalable backend architecture designed for real-time, stateful conversations over WhatsApp.
+3. [Local Development](#local-development)
 
-### High-Level Flow
+- [Service Topology](#service-topology)
 
-1.  **Message Ingestion**: A user sends a WhatsApp message, which triggers a webhook from Twilio to the application's `/twilio/` endpoint.
-2.  **Authentication & Rate Limiting**: The Express server authenticates the incoming request to ensure it's from Twilio and applies rate limiting to prevent abuse.
-3.  **Queuing & Concurrency**: The message is placed into a Redis-based queue. A concurrency controller ensures that only one message per user is processed at a time, preventing race conditions and ensuring conversational context is maintained. New messages from a user will abort any ongoing processing for that same user.
-4.  **Agent Execution**: The message is picked up by a processor that invokes the LangGraph agent.
-5.  **Stateful Processing**: The agent executes a series of nodes based on the conversation's current state, the user's input, and the inferred intent. It may fetch conversation history from the PostgreSQL database, call the OpenAI API for analysis, or access other services.
-6.  **Response Generation**: Once the agent determines the appropriate response, it calls the `send_reply` node.
-7.  **Message Delivery**: The `send_reply` node uses the Twilio service to send the response back to the user via WhatsApp.
-8.  **Status Callbacks**: Twilio sends delivery status updates to the `/twilio/callback/` endpoint, allowing the application to track message delivery.
+- [Common Commands](#common-commands)
 
-### LangGraph Agent
+- [Running Without Docker](#running-without-docker)
 
-The core of the application is a state machine built with LangGraph. This agent is composed of a series of nodes connected by conditional edges, allowing for complex and dynamic conversation flows.
+4. [Architecture](#architecture)
 
-**Key Nodes:**
+- [Request Lifecycle](#request-lifecycle)
 
--   `ingestMessage`: The entry point for the graph. It processes the raw webhook payload, extracts the message content and user information, and saves it to the database.
--   `recordUserInfo`: If the user is responding to a question from the agent (e.g., providing their gender), this node records the information in the database.
--   `inferProfile`: Analyzes conversation history to passively infer and update user profile details like style preferences, gender, or age, enhancing personalization over time.
--   `routeIntent`: A critical routing node. It analyzes the user's message to determine their intent (e.g., asking for a "vibe check," styling advice, or just chatting).
--   `askUserInfo`: If the agent needs more information to fulfill a request (e.g., the user's gender), this node generates a question to ask the user.
--   `routeGeneral`: A sub-router that handles general conversational intents like greetings, questions, or menu requests.
--   `routeStyling`: A sub-router for all fashion-related queries. It directs the flow based on whether the user wants to pair an item, get vacation packing advice, or get help for a specific occasion.
--   `handleGeneral`: Processes general, non-fashion-related messages.
--   `handleStyling`: The main handler for all styling-related intents. It uses the OpenAI API to generate personalized fashion advice.
--   `vibeCheck`: Handles outfit photo analysis. It takes an image, sends it to the OpenAI Vision API, and returns a detailed critique.
--   `colorAnalysis`: Performs a seasonal color analysis based on a user's photo.
--   `sendReply`: The final node in the graph. It takes the generated response from one of the handler nodes and sends it to the user via Twilio.
+- [LangGraph Agent](#langgraph-agent)
 
-## Getting Started
+- [Core Components](#core-components)
+
+5. [Data & Persistence](#data--persistence)
+
+6. [External Integrations](#external-integrations)
+
+7. [Repository Layout](#repository-layout)
+
+8. [Deployment](#deployment)
+
+- [Docker Image](#docker-image)
+
+- [Google Cloud Run](#google-cloud-run)
+
+9. [Production Infrastructure](#production-infrastructure)
+
+10. [CI/CD & Automation](#cicd--automation)
+
+11. [Observability & Troubleshooting](#observability--troubleshooting)
+
+12. [Extending the Agent](#extending-the-agent)
+
+13. [Contributing](#contributing)
+
+  
+
+---
+
+  
+
+## At a Glance
+
+  
+
+-  **Channel:** WhatsApp via Twilio webhooks and status callbacks.
+
+-  **Runtime:** Node.js Express server orchestrated with Docker Compose locally and deployed to Google Cloud Run (Gen 2) in production.
+
+-  **Agent Brain:** LangGraph-inspired state machine coordinating specialized nodes for intent routing, outfit analysis, and personalized recommendations.
+
+-  **Storage:** PostgreSQL with pgvector for conversations (Cloud SQL in prod), Redis for queues/rate limiting (Cloud Memorystore in prod), and Cloud Storage for media archiving.
+
+-  **LLMs:** OpenAI for vision heavy tasks and Groq for quick conversational tasks.
+
+-  **Infrastructure Targets:** Local Docker Compose, Google Cloud Run behind a private VPC, Cloud SQL + Cloud Memorystore via VPC connectors, Google Cloud Tasks, and Google Cloud Functions for async work.
+
+  
+
+---
+
+  
+
+## Quick Start
+
+  
 
 ### Prerequisites
 
--   Node.js (v20 or higher recommended)
--   npm
--   PostgreSQL database
--   Twilio Account with an active WhatsApp Business Number
--   OpenAI API Key
--   `ngrok` (for local development)
+  
 
-### Installation
+- Docker Desktop, or Docker Engine + Docker Compose v2
 
-1.  Clone the repository:
-    ```bash
-    git clone <repository-url>
-    cd broadway_copilot
-    ```
+- Twilio account with WhatsApp sandbox or production sender
 
-2.  Install dependencies:
-    ```bash
-    npm install
-    ```
+- Ngrok account (free tier works) for secure tunneling
 
-3.  Generate the Prisma client:
-    ```bash
-    npx prisma generate
-    ```
+- OpenAI and/or Groq API keys
 
-### Environment Variables
+  
 
-Create a `.env` file in the root of the project and add the following variables:
+### Configure Environment
 
-```
-# OpenAI (Required)
-OPENAI_API_KEY=
+  
 
-# Twilio (Required)
-TWILIO_ACCOUNT_SID=
-TWILIO_AUTH_TOKEN=
-TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+1. Duplicate the example environment file:
 
-# Database (Required)
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB?schema=public
-
-# Server Configuration (Optional)
-PORT=8080
-LOG_LEVEL=debug
-NODE_ENV=development
-
-# --- Optional Twilio configuration ---
-# Set to false to skip webhook signature validation (useful for local testing)
-TWILIO_VALIDATE_WEBHOOK=true
-
-# Optional Twilio timeouts (in milliseconds)
-TWILIO_HTTP_TIMEOUT_MS=10000
-TWILIO_SENT_TIMEOUT_MS=15000
-TWILIO_DELIVERED_TIMEOUT_MS=60000
-```
-
-**Variable Explanations:**
-
--   `TWILIO_VALIDATE_WEBHOOK`: Set to `true` to enforce Twilio request signature validation. Recommended for production.
--   `TWILIO_*_TIMEOUT_MS`: Advanced settings to control how long the application waits for various stages of the message sending process.
-
-## Usage
-
-### Running Locally
-
-1.  Start the development server:
 ```bash
-npm run dev
+
+cp .env.example .env
+
 ```
 
-2.  Expose your local server to the internet using ngrok:
+2. Fill in the variables from `.env.example` that matter for your setup:
+
+  
+
+| Variable | Purpose | Required for local dev? | Notes / Defaults |
+| --- | --- | --- | --- |
+| `SERVER_URL` | Base URL the app uses when building absolute links (Twilio callbacks, media URLs). | ✅ | Defaults to `http://localhost:8080`; switch to your ngrok or Cloud Run URL in staging/prod.
+| `NODE_ENV` | Enables development shortcuts (skips Cloud Tasks, relaxed logging). | ✅ | `development` locally; set to `production` in Cloud Run.
+| `PORT` | Express listen port. | ✅ | Defaults to `8080`; must match any Docker/forwarding config.
+| `DATABASE_URL` | PostgreSQL connection string. | ✅ | Compose injects its own DSN; override to point at Cloud SQL or another instance.
+| `REDIS_URL` | Redis connection string. | ✅ | Compose injects `redis://redis:6379`; replace with your Memorystore or standalone Redis in prod.
+| `TWILIO_ACCOUNT_SID` | Twilio account identifier for REST + webhook validation. | ✅ | Required to send/receive WhatsApp messages.
+| `TWILIO_AUTH_TOKEN` | Twilio auth token used for REST + signature checks. | ✅ | Required.
+| `TWILIO_WHATSAPP_FROM` | Default WhatsApp sender (sandbox or production number). | ✅ | Sandbox default `whatsapp:+14155238886` is prefilled.
+| `TWILIO_VALIDATE_WEBHOOK` | Toggle signature validation for incoming webhooks. | ⚙️ | Keep `true` in prod; set `false` locally if tunneling causes signature mismatch.
+| `TWILIO_WAIT_FOR_STATUS` | Whether the agent waits for Twilio status callbacks before deeming a reply delivered. | ⚙️ | `true` by default; flip to `false` for faster local iterations.
+| `TWILIO_HTTP_TIMEOUT_MS` | REST timeout for outbound Twilio requests. | ⚙️ | Default `10000` (10 s).
+| `TWILIO_SENT_TIMEOUT_MS` | How long to wait for a `sent` callback before treating a message as stalled. | ⚙️ | Default `15000` (15 s).
+| `TWILIO_DELIVERED_TIMEOUT_MS` | How long to wait for a `delivered` callback before giving up. | ⚙️ | Default `60000` (60 s).
+| `FEEDBACK_REQUEST_DELAY_MS` | Delay before the feedback Cloud Task is queued after a conversation. | ⚙️ | Default `60000` (1 min).
+| `OPENAI_API_KEY` | OpenAI access token for chat, vision, embeddings, and Cloud Functions. | ⚙️ | Provide if you want OpenAI models; at least one of OpenAI/Groq must be set.
+| `GROQ_API_KEY` | Groq access token for fast chat completions. | ⚙️ | Provide if you want Groq models; at least one of OpenAI/Groq must be set.
+| `NGROK_AUTHTOKEN` | Auth token so the Dockerized ngrok agent can start a tunnel. | ⚙️ | Required if you use the bundled ngrok container.
+| `CLOUD_TASKS_SERVICE_ACCOUNT` | Service account email used when Cloud Tasks calls your Cloud Functions. | 🚀 | Required for production async flows; skip locally.
+| `CLOUD_FUNCTION_REGION` | Region where Cloud Functions are deployed (used to build their URLs). | 🚀 | Defaults to `asia-south2`; match your deployment region.
+| `CLOUD_TASKS_REGION` | Region for Cloud Tasks queues. | 🚀 | Example uses `asia-south1`; ensure it matches the queues you create.
+| `PROJECT_ID` | Google Cloud project that owns Cloud Run, Functions, Tasks, and databases. | 🚀 | Defaults to `broadway-chatbot`.
+
+Legend: ✅ required for local dev, ⚙️ configurable but recommended, 🚀 production-only knobs.
+
+  
+
+Optional Google Cloud variables are only needed when you enable the production async pipeline (Cloud Tasks + Cloud Functions).
+
+  
+
+### Launch the Stack
+
+  
+
 ```bash
-ngrok http 8080
-    ```
 
-3.  Configure your Twilio WhatsApp number's webhook to point to the ngrok URL (e.g., `https://<your-ngrok-id>.ngrok.io/twilio/`).
+docker  compose  up  --build
 
-### Available Scripts
+```
 
--   `npm run dev`: Starts the development server with hot-reloading.
--   `npm run build`: Compiles the TypeScript code to JavaScript.
--   `npm start`: Starts the production server (requires a prior build).
--   `npm run graph`: Generates a visualization of the LangGraph agent (`langgraph.png`).
--   `npx prisma migrate dev`: Runs database migrations in a development environment.
--   `npx prisma migrate deploy`: Applies database migrations in a production environment.
+  
 
-## API Endpoints
+Compose starts four services:
 
--   `POST /twilio/`: The main webhook for incoming WhatsApp messages from Twilio. It authenticates requests, handles rate limiting, and queues messages for processing by the agent.
--   `POST /twilio/callback/`: An endpoint for Twilio to send status updates about message delivery.
--   `GET /uploads/*`: Serves static files from the `uploads` directory, making user-uploaded images accessible.
+  
 
-## Database Schema
+-  **app** – Node.js dev container (installs deps, runs Prisma migrations, launches `npm run dev`).
 
-The database schema is managed with Prisma and is designed to support a rich, multi-turn conversational experience.
+-  **db** – PostgreSQL 17 with the pgvector extension.
 
-**Core Models:**
+-  **redis** – Redis 8 for queues, locks, and rate limiting.
 
--   **User**: The central model, representing a WhatsApp user. It stores the user's WhatsApp ID and any profile information the agent learns over time.
--   **Conversation**: Represents a single conversation session with a user. Each time a user starts interacting with the agent after a period of inactivity, a new conversation is created. It is linked to a `User`.
--   **Message**: Represents a single message within a `Conversation`. It stores the content, who sent it (`role`), and any identified `intent`. Each message is linked to a `Conversation`.
+-  **ngrok** – Exposes the Express server and prints the public HTTPS URL.
 
-**Supporting Models:**
+  
 
--   **Media**: If a user sends an image, this model stores information about it, including its Twilio URL and where it's stored on the application server. It is linked to a `Message`.
--   **VibeCheck** & **ColorAnalysis**: These models store the structured JSON output from the AI when it performs an outfit or color analysis. They are linked to a `User`.
--   **WardrobeItem**: Stores items from a user's digital wardrobe, including properties like category, color, and type. It is linked to a `User`.
--   **Memory**: A key-value store for long-term facts the agent remembers about a user.
--   **GraphRun** & **LLMTrace**: These models are used for detailed logging and debugging. `GraphRun` logs the state of the agent at the beginning and end of each run, while `LLMTrace` logs the raw requests and responses to the OpenAI API.
+Watch the `app` logs for `Ngrok tunnel ready` and note the printed URL.
 
-For a complete and detailed schema, refer to the `prisma/schema.prisma` file.
+  
 
-## Key Components
+Shut the stack down with `docker compose down` (add `-v` to reset Postgres and Redis volumes).
 
--   `src/index.ts`: The main entry point for the Express server. It sets up middleware, defines the Twilio webhook routes, and contains the core message queuing and processing logic.
--   `src/agent/graph.ts`: The heart of the AI. It defines the structure and logic of the LangGraph agent, including all the nodes and the conditional edges that connect them, dictating the flow of conversation.
--   `src/agent/nodes/`: This directory contains the implementation for each node in the LangGraph agent. Each file corresponds to a specific task (e.g., `ingestMessage.ts`, `routeIntent.ts`, `vibeCheck.ts`).
--   `src/lib/`: Contains modules for interacting with external services. `prisma.ts` configures the Prisma client, `redis.ts` manages the connection to Redis, and `twilio.ts` provides a wrapper around the Twilio client.
--   `src/utils/`: A collection of utility functions used throughout the application, for tasks such as structured logging (`logger.ts`), handling media uploads (`media.ts`), and loading prompts (`prompts.ts`).
--   `prompts/`: A directory of `.txt` files containing the system prompts that are used to instruct the OpenAI models on how to perform various tasks, such as analyzing an outfit or determining a user's intent.
--   `prisma/schema.prisma`: The definitive source of truth for the database schema. It defines all the models, their fields, and the relationships between them.
+  
+
+### Twilio & Ngrok Setup
+
+  
+
+1. In the [Twilio Console](https://www.twilio.com/console), enable the WhatsApp sandbox or request a production sender.
+
+2. Configure the **Webhook URL** to `https://<ngrok-domain>/twilio/`. with `POST`
+
+3. Configure the **Status Callback URL** to `https://<ngrok-domain>/twilio/callback/`. with `POST`
+
+4. Send a WhatsApp message to your Twilio number—requests will now reach the local agent.
+
+  
+
+---
+
+  
+
+## Local Development
+
+  
+
+### Service Topology
+
+  
+
+The backend expects the following supporting services:
+
+  
+
+| Service | Purpose | Default Source |
+
+| --- | --- | --- |
+
+| Express app | HTTP API, webhook ingestion, agent runner | `app` container (`npm run dev`) |
+
+| PostgreSQL | Conversation and tracing database | `db` container (port 5432, user `postgres`/`postgres`) |
+
+| Redis | Rate limiting, message queues, abort signals | `redis` container (port 6379) |
+
+| Ngrok | Secure tunnel for Twilio callbacks | `ngrok` container (port 4040 admin UI) | ( only in development )
+
+  
+
+### Common Commands
+
+  
+
+All commands run inside the `app` container by default when using Compose. Run them from the host with `docker compose exec app <command>` if needed.
+
+  
+
+| Command | Purpose |
+
+| --- | --- |
+
+| `npm ci` | Install dependencies (already handled at container build) |
+
+| `npm run dev` | Start the Express server with hot reload (default compose command) |
+
+| `npm run build` | Compile TypeScript to `dist/` |
+
+| `npm run lint` | Lint the codebase |
+
+| `npx prisma generate` | Regenerate Prisma client after schema updates |
+
+| `npx prisma migrate dev` | Create and apply a new migration locally |
+
+| `npm run graph` | Regenerate `langgraph.png` from the current state graph |
+
+  
+
+### Running Without Docker
+
+  
+
+If you prefer running on the host:
+
+  
+
+1. Install dependencies with `npm ci`.
+
+2. Provide Postgres and Redis instances (local or remote) and set `DATABASE_URL` / `REDIS_URL` accordingly.
+
+3. Run migrations: `npx prisma migrate deploy` or `npx prisma db push` for dev sync.
+
+4. Start the server with `npm run dev`.
+
+  
+
+You will still need ngrok (or another reverse proxy) to expose your local server to Twilio. ( Cloud run automatically sets this up )
+
+  
+
+---
+
+  
+
+## Architecture
+
+  
+
+### Request Lifecycle
+
+  
+
+1.  **Inbound Webhook (`src/index.ts`)** – Validates Twilio signatures (`middleware/auth.ts`), applies rate limiting and whitelist checks, deduplicates message SIDs, and enqueues work per user.
+
+2.  **Concurrency Control** – Redis-backed locks ensure only one message per user is processed at a time. New messages abort the currently running agent via `user_abort:<WaId>` pub/sub.
+
+3.  **Agent Execution** – `runAgent` loads user + conversation context, seeds a `GraphRun` record, then executes the LangGraph state machine defined in `src/agent/graph.ts`.
+
+4.  **Node Processing** – Specialized nodes handle tasks such as intent routing, profile inference, outfit analysis, and response crafting. Nodes may call external services (LLMs, image analysis) or interact with the database.
+
+5.  **Reply Delivery** – Once the agent emits a response, the `send_reply` node leverages `src/lib/twilio.ts` to send text, menu, or image messages. Optional delivery confirmation subscribes to Twilio status callbacks via Redis channels.
+
+6.  **Tracing & Persistence** – Message transcripts, node runs, and LLM interactions are persisted in Postgres (`GraphRun`, `NodeRun`, `LLMTrace`) for replay and debugging.
+
+  
+
+### LangGraph Agent
+
+  
+
+-  **Graph Definition:**  `src/agent/graph.ts` wires nodes with conditional edges for complex branching conversations.
+
+-  **Representative Nodes:**
+
+-  `ingestMessage` – Normalizes the webhook payload and stores the inbound message.
+
+-  `recordUserInfo` – Captures user-provided slots (e.g., gender, style preferences).
+
+-  `inferProfile` – Passively updates long-term profile attributes from conversation history.
+
+-  `routeIntent` – Selects specialized flows (vibe check, color analysis, outfit help, etc.).
+
+-  `vibeCheck` / `colorAnalysis` – Run LLM + vision prompts and store structured outputs (`VibeCheck`, `ColorAnalysis`).
+
+-  `sendReply` – Chooses response modality and enqueues follow-up actions when necessary.
+
+-  **Tools & Integrations:** Custom LangChain-style tools live in `src/agent/tools.ts`, while prompts are stored under `prompts/` and loaded via `utils/prompts.ts`.
+
+  
+
+### Core Components
+
+  
+
+| Location | Responsibility |
+
+| --- | --- |
+
+| `src/index.ts` | Express app bootstrap, Twilio webhook routing, message queue management |
+
+| `src/agent/` | LangGraph definition, node implementations, helper utilities |
+
+| `src/lib/prisma.ts` | Prisma client with connection caching |
+
+| `src/lib/redis.ts` | Redis client + helper utilities for locking and pub/sub |
+
+| `src/lib/twilio.ts` | Twilio REST helpers (text, image, menu replies) |
+
+| `src/lib/ai/` | OpenAI/Groq client wrappers and configuration factories |
+
+| `src/utils/` | Shared helpers for logging, media downloads, structured context management |
+
+| `functions/` | Google Cloud Functions used for wardrobe indexing, memory extraction, and other background tasks |
+
+  
+
+---
+
+  
+
+## Data & Persistence
+
+  
+
+Prisma manages the relational schema (source of truth lives in `functions/prisma/schema.prisma`). Key models include:
+
+  
+
+-  **User** – WhatsApp contact metadata and inferred profile attributes.
+
+-  **Conversation** – Session groupings for messages, reset after inactivity.
+
+-  **Message** – Individual inbound/outbound messages with role, intent, and media references.
+
+-  **Media** – Metadata and storage pointers for user-uploaded images.
+
+-  **VibeCheck / ColorAnalysis** – Structured analysis outputs produced by the agent.
+
+-  **WardrobeItem** – Catalog of a user’s wardrobe items with descriptors.
+
+-  **Memory** – Key-value store for long-term facts.
+
+-  **GraphRun / NodeRun / LLMTrace** – Tracing artifacts for debugging agent executions.
+
+  
+
+Run `npx prisma studio` (inside the container) to inspect data during development.
+
+  
+
+---
+
+  
+
+## External Integrations
+
+  
+
+-  **Twilio** – Primary messaging channel. Configure webhook URLs to point at the running server. Signature validation can be toggled via `TWILIO_VALIDATE_WEBHOOK`.
+
+-  **Ngrok** – Provides a stable HTTPS endpoint for local development. Token is required for the bundled ngrok container to start.
+
+-  **LLM Providers** – OpenAI and Groq chat/vision models are supported. Select providers within `src/lib/ai/config/llm.ts`.
+
+-  **Google Cloud Tasks** – Optional asynchronous execution path used for memory extraction and wardrobe indexing (`src/lib/tasks.ts`). In development the calls short-circuit; production requires service account credentials and queue configuration.
+
+  
+
+---
+
+  
+
+## Repository Layout
+
+  
+
+```
+
+.
+
+├── docker-compose.yml # Local orchestration for app + infra + ngrok
+
+├── src/ # Express API, agent graph, shared libraries
+
+│ ├── agent/ # LangGraph definition, nodes, and tools
+
+│ ├── lib/ # Twilio, Redis, Prisma, AI helpers
+
+│ ├── middleware/ # Auth, rate limiting, whitelist checks
+
+│ ├── utils/ # Context, logging, media, prompt loaders
+
+│ └── index.ts # HTTP entrypoint and message queue bootstrap
+
+├── functions/ # Cloud Functions (memories, wardrobe indexing)
+
+├── prompts/ # Prompt templates consumed by agent nodes
+
+├── functions/prisma/ # Prisma schema and migrations (authoritative)
+
+├── prisma/ # Generated Prisma client artifacts
+
+├── uploads/ # Local storage for downloaded media (gitignored)
+
+└── README.md # This document
+
+```
+
+  
+
+---
+
+  
 
 ## Deployment
 
-### Docker
+  
 
-The project includes a multi-stage `Dockerfile` for building optimized, production-ready Docker images.
+### Docker Image
 
--   **Build the image:**
+  
+
+Build and run locally using the production Docker image:
+
+  
+
 ```bash
-docker build -t broadway-copilot .
+
+docker  build  -t  broadway-copilot  .
+
+docker  run  --rm  -p  8080:8080  --env-file  .env  broadway-copilot
+
 ```
--   **Run the container:**
-```bash
-    docker run --rm -p 8080:8080 --env-file .env broadway-copilot
-    ```
+
+  
 
 ### Google Cloud Run
 
-The repository is configured for continuous deployment to Google Cloud Run using GitHub Actions. The workflow in `.github/workflows/google-cloudrun-deploy.yml` automates the process of building and deploying the Docker container.
+  
 
-**Prerequisites:**
--   A Google Cloud project with the Artifact Registry and Cloud Run APIs enabled.
--   A service account with the necessary permissions for deployment.
--   The required secrets configured in the GitHub repository settings.
+Automated deployments are configured via `.github/workflows/google-cloudrun-deploy.yml`.
 
-## Troubleshooting
+  
 
--   **Twilio Webhook Errors**: Ensure `ngrok` is running and the webhook URL is correctly configured in your Twilio console. If you're having signature validation issues during local development, you can temporarily set `TWILIO_VALIDATE_WEBHOOK=false` in your `.env` file.
--   **Database Connection Issues**: Verify that your `DATABASE_URL` is correct and that the PostgreSQL server is accessible.
--   **Prisma Client Not Found**: Run `npx prisma generate` after installing dependencies or making changes to the schema.
--   **Agent Visualization**: If the `langgraph.png` diagram is out of date, run `npm run graph` to regenerate it.
+**Requirements:**
+
+  
+
+- Google Cloud project with Artifact Registry and Cloud Run APIs enabled.
+
+- Service account with permissions to push to Artifact Registry and deploy to Cloud Run.
+
+- GitHub Actions secrets set for GCP credentials, project ID, and service configuration.
+
+  
+
+The workflow builds the Docker image, pushes it to Artifact Registry, and deploys the latest tag to Cloud Run.
+
+  
+
+---
+
+  
+
+## Production Infrastructure
+
+  
+
+-  **Application Runtime:** Cloud Run Gen 2 service `broadway-chatbot` runs with 2 vCPUs, 4 Gi RAM, concurrency of 8, and `min-instances=1` to keep the agent warm.
+
+-  **Private Networking:** Deployments attach to the `chatbot-vpc` network and `chatbot-subnet`, restrict egress to private ranges, and use a dedicated service account so outbound calls to Cloud SQL, Cloud Memorystore, and internal APIs stay on private IP space.
+
+-  **Data Plane:** Regional Cloud SQL for PostgreSQL (pgvector enabled) stores conversations, traces, and wardrobe data. Cloud Memorystore (Redis) provides queues, locks, and abort channels. Both resources are reached through the VPC connector configured on Cloud Run.
+
+-  **Async Workers:** Google Cloud Tasks triggers background Cloud Functions (`functions/src`) for image uploads, memory extraction, wardrobe indexing, and post-conversation feedback. Each task writes lifecycle events to the `Task` table so the agent can react to completions or retries.
+
+-  **Media & Assets:** User-uploaded images are persisted to Cloud Storage buckets in production while mirrored to `uploads/` when running locally.
+
+-  **Secrets & Config:** Runtime secrets (Twilio, LLM keys, database URLs) come from Secret Manager. Feature flags—`TWILIO_VALIDATE_WEBHOOK`, `TWILIO_WAIT_FOR_STATUS`, task delays—are injected as Cloud Run environment variables.
+
+  
+
+---
+
+  
+
+## CI/CD & Automation
+
+  
+
+-  **Cloud Run Deploy (`.github/workflows/google-cloudrun-deploy.yml`):** On every push to `main`, GitHub Actions authenticates with Workload Identity Federation, builds the container, publishes to Artifact Registry, and deploys to Cloud Run with the VPC, secret, and scaling configuration above.
+
+-  **Cloud Functions Deploy (`.github/workflows/google-cloudfunctions-deploy.yml`):** Triggered for changes under `functions/**`, this workflow installs dependencies, builds TypeScript, and redeploys the task handlers (`imageUpload`, `storeMemories`, `indexWardrobe`, `sendFeedbackRequest`) with secrets from Secret Manager.
+
+-  **Automated Releases:** Merges to `main` re-deploy both the chat service and any updated Cloud Functions, so approved pull requests roll out to production without extra steps.
+
+  
+
+---
+
+  
+
+## Observability & Troubleshooting
+
+  
+
+-  **Structured Logging:** All services log via `src/utils/logger.ts` (pino). Logs include Twilio IDs, user IDs, and node names for traceability.
+
+-  **Tracing Database:** Inspect `GraphRun`, `NodeRun`, and `LLMTrace` tables to replay agent runs and review raw LLM payloads.
+
+-  **Redis Keys:**
+
+-  `message:<MessageSid>` – Hash of status fields (queued, running, sending, delivered/failed).
+
+-  `user_active:<WaId>` – Tracks the message currently being processed for a user.
+
+-  `user_queue:<WaId>` – Pending messages waiting for execution.
+
+-  `twilio:status:<sid>` / `twilio:seen:<sid>` – Delivery tracking channels.
+
+- Publish to `user_abort:<WaId>` to cancel an active run.
+
+-  **Common Issues:**
+
+- Signature validation failures → ensure ngrok domain matches `SERVER_URL`; temporarily disable via `TWILIO_VALIDATE_WEBHOOK=false` for local debugging.
+
+- Messages stuck in `running` → inspect Redis keys above and confirm abort signals fire.
+
+- LLM errors → check `LLMTrace.errorTrace` and API usage limits.
+
+- Media download failures → verify Twilio MMS permissions and that `uploads/` is writable.
+
+  
+
+---
+
+  
+
+## Extending the Agent
+
+  
+
+1.  **Add a Node**
+
+- Implement `async function nodeName(state: GraphState)` in `src/agent/nodes/`.
+
+- Register the node and new edges in `src/agent/graph.ts`.
+
+- Update prompts/tools as needed.
+
+  
+
+2.  **Add a Tool**
+
+- Create a new tool in `src/agent/tools.ts` (or alongside its consumer) using the LangChain tool interface.
+
+- Inject it where relevant when constructing the agent executor.
+
+  
+
+3.  **Persist New Data**
+
+- Update `functions/prisma/schema.prisma`, regenerate the Prisma client, and run migrations.
+
+- Surface the new data in tracing or responses if needed for observability.
+
+  
+
+4.  **Support Another LLM Provider**
+
+- Follow the pattern under `src/lib/ai/openai/` or `src/lib/ai/groq/` to implement a provider.
+
+- Register it in the factories under `src/lib/ai/config/llm.ts`.
+
+  
+
+---
+
+  
+
+## Contributing
+
+  
+
+-  **Fork & Branch:** Create a fork, clone it locally, and branch from `main` (`git checkout -b feature/xyz`).
+
+-  **Environment:** Copy `.env.example`, supply local Twilio + LLM keys, and ensure Postgres/Redis are running (via Docker Compose or your own instances).
+
+-  **Quality Gates:** Run `npm run lint` and `npm run build` from the repo root and, if your change touches Cloud Functions, run `npm run build` inside `functions/`.
+
+-  **Pull Request:** Open a PR against `main`. Once approved and merged, GitHub Actions automatically redeploys Cloud Run and any touched Cloud Functions via the workflows above—no manual release needed.
+
+-  **Discussions:** Use GitHub Issues/Discussions to propose bigger architectural changes so we can align on trace schema, agent graphs, or infra adjustments before you ship code.
+
+  
+
+---
+
+  
+
+With this guide you can run Broadway Copilot locally, understand how messages flow through the system, and confidently extend the conversational agent.

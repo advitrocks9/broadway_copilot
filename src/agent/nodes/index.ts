@@ -1,5 +1,6 @@
 export * from './askUserInfo';
 export * from './colorAnalysis';
+export * from './handleFeedback';
 export * from './handleGeneral';
 export * from './handleStyling';
 export * from './ingestMessage';

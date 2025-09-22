@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-import { CloudTasksClient } from '@google-cloud/tasks';
+import { CloudTasksClient, type protos } from '@google-cloud/tasks';
 import { createId as cuid } from '@paralleldrive/cuid2';
 import { TaskType } from '@prisma/client';
 import { InternalServerError } from '../utils/errors';
@@ -21,6 +21,7 @@ const CLOUD_TASKS_REGION = process.env.CLOUD_TASKS_REGION || 'asia-south1';
 const WARDROBE_FUNCTION_URL = `https://${CLOUD_FUNCTION_REGION}-${PROJECT_ID}.cloudfunctions.net/indexWardrobe`;
 const MEMORY_FUNCTION_URL = `https://${CLOUD_FUNCTION_REGION}-${PROJECT_ID}.cloudfunctions.net/storeMemories`;
 const IMAGE_UPLOAD_FUNCTION_URL = `https://${CLOUD_FUNCTION_REGION}-${PROJECT_ID}.cloudfunctions.net/imageUpload`;
+const FEEDBACK_FUNCTION_URL = `https://${CLOUD_FUNCTION_REGION}-${PROJECT_ID}.cloudfunctions.net/sendFeedbackRequest`;
 
 const SERVICE_ACCOUNT_EMAIL = process.env.CLOUD_TASKS_SERVICE_ACCOUNT;
 
@@ -31,11 +32,13 @@ const SERVICE_ACCOUNT_EMAIL = process.env.CLOUD_TASKS_SERVICE_ACCOUNT;
  * @param payload The payload to send to the Cloud Function.
  * @param taskType The type of the task to record in the database.
  */
+
 async function queueTask(
   queueName: string,
   functionUrl: string,
   payload: TaskPayload,
   taskType: TaskType,
+  options: { scheduleTime?: Date } = {},
 ): Promise<void> {
   if (!PROJECT_ID || !functionUrl) {
     throw new InternalServerError('Missing required environment variables for Cloud Tasks');
@@ -45,7 +48,7 @@ async function queueTask(
   const taskId = cuid();
   const taskName = `${parent}/tasks/${taskId}`;
 
-  const task = {
+  const task: protos.google.cloud.tasks.v2.ITask = {
     httpRequest: {
       httpMethod: 'POST' as const,
       url: functionUrl,
@@ -61,8 +64,18 @@ async function queueTask(
     name: taskName,
   };
 
+  if (options.scheduleTime) {
+    const milliseconds = options.scheduleTime.getTime();
+    task.scheduleTime = {
+      seconds: Math.floor(milliseconds / 1000),
+      nanos: (milliseconds % 1000) * 1_000_000,
+    };
+  }
+
   const [response] = await client.createTask({ parent, task });
   logger.info({ taskName: response.name, type: taskType }, `Queued ${taskType} task`);
+
+  const runAt = options.scheduleTime ?? new Date();
 
   await prisma.task.create({
     data: {
@@ -70,7 +83,7 @@ async function queueTask(
       userId: payload.userId,
       type: taskType,
       payload,
-      runAt: new Date(),
+      runAt,
     },
   });
 }
@@ -143,6 +156,26 @@ export function queueImageUpload(userId: string, messageId: string): void {
       IMAGE_UPLOAD_FUNCTION_URL,
       { userId, messageId },
       TaskType.UPLOAD_IMAGES,
+    ),
+  );
+}
+
+export function queueFeedbackRequest(userId: string, conversationId: string): void {
+  if (process.env.NODE_ENV === 'development') {
+    logger.debug({ userId, conversationId }, 'Skipping feedback request queueing in development');
+    return;
+  }
+
+  const delayMs = Number(process.env.FEEDBACK_REQUEST_DELAY_MS || 60_000);
+  const scheduleTime = new Date(Date.now() + delayMs);
+
+  runTaskInBackground(TaskType.SEND_FEEDBACK_REQUEST, () =>
+    queueTask(
+      'feedback-request',
+      FEEDBACK_FUNCTION_URL,
+      { userId, conversationId },
+      TaskType.SEND_FEEDBACK_REQUEST,
+      { scheduleTime },
     ),
   );
 }

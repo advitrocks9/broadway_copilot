@@ -301,10 +301,7 @@ export function fetchRelevantMemories(userId: string): Tool {
       .describe(
         'A natural language query describing what you want to know about the user. Examples: "user size preferences", "favorite colors", "style preferences", "budget constraints", "fabric dislikes", "occasion needs", or "fit preferences".',
       ),
-    limit: z
-      .number()
-      .default(5)
-      .describe('Maximum number of relevant memories to return'),
+    limit: z.number().default(5).describe('Maximum number of relevant memories to return'),
   });
 
   return new Tool({

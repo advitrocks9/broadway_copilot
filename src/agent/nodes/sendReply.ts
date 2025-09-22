@@ -5,6 +5,7 @@ import { MessageContent, MessageContentPart } from '../../lib/ai';
 
 import { prisma } from '../../lib/prisma';
 import { redis } from '../../lib/redis';
+import { queueFeedbackRequest } from '../../lib/tasks';
 import { sendImage, sendMenu, sendText } from '../../lib/twilio';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
@@ -88,6 +89,8 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
       pending: pendingToPersist,
     },
   });
+
+  queueFeedbackRequest(user.id, conversationId);
 
   return { ...state };
 }

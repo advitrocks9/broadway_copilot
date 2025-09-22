@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import {
   askUserInfo,
   colorAnalysis,
+  handleFeedback,
   handleGeneral,
   handleStyling,
   ingestMessage,
@@ -31,6 +32,7 @@ export function buildAgentGraph() {
     .addNode('routeGeneral', routeGeneral)
     .addNode('askUserInfo', askUserInfo)
     .addNode('handleStyling', handleStyling)
+    .addNode('handleFeedback', handleFeedback)
     .addNode('vibeCheck', vibeCheck)
     .addNode('colorAnalysis', colorAnalysis)
     .addNode('handleGeneral', handleGeneral)
@@ -43,10 +45,14 @@ export function buildAgentGraph() {
         if (s.pending === PendingType.ASK_USER_INFO) {
           return 'recordUserInfo';
         }
+        if (s.pending === PendingType.FEEDBACK) {
+          return 'handleFeedback';
+        }
         return 'routeIntent';
       },
       {
         recordUserInfo: 'recordUserInfo',
+        handleFeedback: 'handleFeedback',
         routeIntent: 'routeIntent',
       },
     )
@@ -91,6 +97,7 @@ export function buildAgentGraph() {
     .addEdge('handleStyling', 'sendReply')
     .addEdge('colorAnalysis', 'sendReply')
     .addEdge('handleGeneral', 'sendReply')
+    .addEdge('handleFeedback', 'sendReply')
     .addEdge('sendReply', END);
 
   return graph.compile();

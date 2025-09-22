@@ -16,6 +16,10 @@ import {
   IndexWardrobePayload,
   IndexWardrobeResult,
 } from "./handlers/indexWardrobe";
+import {
+  sendFeedbackRequestHandler,
+  SendFeedbackRequestPayload,
+} from "./handlers/sendFeedbackRequest";
 
 const prisma = new PrismaClient();
 
@@ -145,6 +149,17 @@ const indexWardrobeFunction = withTaskLifecycle<IndexWardrobePayload>(
   },
 );
 
+const sendFeedbackRequestFunction = withTaskLifecycle<SendFeedbackRequestPayload>(
+  async (prisma, payload) => {
+    const validated = validatePayload<SendFeedbackRequestPayload>(payload, [
+      "userId",
+      "conversationId",
+    ]);
+    return sendFeedbackRequestHandler(prisma, validated);
+  },
+);
+
 export const imageUpload: HttpFunction = imageUploadFunction;
 export const storeMemories: HttpFunction = storeMemoriesFunction;
 export const indexWardrobe: HttpFunction = indexWardrobeFunction;
+export const sendFeedbackRequest: HttpFunction = sendFeedbackRequestFunction;
