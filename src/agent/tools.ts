@@ -50,7 +50,7 @@ export function searchWardrobe(userId: string): Tool {
       })
       .optional()
       .describe('Optional filters to narrow down search results'),
-    limit: z.number().min(1).max(50).default(20).describe('Maximum number of results to return'),
+    limit: z.number().default(20).describe('Maximum number of results to return'),
   });
 
   return new Tool({
@@ -303,8 +303,6 @@ export function fetchRelevantMemories(userId: string): Tool {
       ),
     limit: z
       .number()
-      .min(1)
-      .max(10)
       .default(5)
       .describe('Maximum number of relevant memories to return'),
   });
