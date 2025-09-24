@@ -93,7 +93,6 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
     }
     const latestMessageId = latestMessage.meta.messageId as string;
 
-    // Dynamically map categories based on headings
     type VibeCheckScores = Pick<
       Prisma.VibeCheckUncheckedCreateInput,
       | 'context_confidence'

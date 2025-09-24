@@ -1,14 +1,14 @@
-import fs from "fs";
-import path from "path";
-import { PrismaClient } from "@prisma/client";
-import { buildSearchDoc, buildKeywords, Item } from "../utils/wardrobe";
-import { getEmbedding, generateJson } from "../utils/openai";
+import { PrismaClient } from '@prisma/client';
+import fs from 'fs';
+import path from 'path';
+import { generateJson, getEmbedding } from '../utils/openai';
+import { buildKeywords, buildSearchDoc, Item } from '../utils/wardrobe';
 
 const WARDROBE_PROMPT = fs.readFileSync(
-  path.join(__dirname, "..", "..", "wardrobe_prompt.txt"),
-  "utf-8",
+  path.join(__dirname, '..', '..', 'wardrobe_prompt.txt'),
+  'utf-8',
 );
-const WARDROBE_MODEL = process.env.OPENAI_WARDROBE_INDEXING_MODEL || "gpt-5";
+const WARDROBE_MODEL = process.env.OPENAI_WARDROBE_INDEXING_MODEL || 'gpt-5';
 
 export type IndexWardrobePayload = {
   userId: string;
@@ -24,7 +24,7 @@ export const indexWardrobeHandler = async (
   payload: IndexWardrobePayload,
 ): Promise<IndexWardrobeResult> => {
   const { userId, messageId } = payload;
-  console.info({ message: "Starting wardrobe indexing", payload });
+  console.info({ message: 'Starting wardrobe indexing', payload });
 
   const message = await prisma.message.findUnique({
     where: { id: messageId },
@@ -33,33 +33,33 @@ export const indexWardrobeHandler = async (
 
   if (!message?.media?.length) {
     console.debug({
-      message: "No media to process for wardrobe indexing",
+      message: 'No media to process for wardrobe indexing',
       payload,
     });
-    return { message: "No media to process" };
+    return { message: 'No media to process' };
   }
 
   console.debug({
-    message: "Processing media for wardrobe indexing",
+    message: 'Processing media for wardrobe indexing',
     mediaCount: message.media.length,
     payload,
   });
   let itemsCreated = 0;
 
   for (const media of message.media) {
-    if (!media.mimeType.startsWith("image/")) continue;
+    if (!media.mimeType.startsWith('image/')) continue;
     console.debug({
-      message: "Processing media item",
+      message: 'Processing media item',
       mediaId: media.id,
       payload,
     });
 
     const result = await generateJson<{ items: Item[] }>(WARDROBE_MODEL, [
       {
-        role: "user",
+        role: 'user',
         content: [
-          { type: "input_text", text: WARDROBE_PROMPT },
-          { type: "input_image", image_url: media.serverUrl, detail: "high" },
+          { type: 'input_text', text: WARDROBE_PROMPT },
+          { type: 'input_image', image_url: media.serverUrl, detail: 'high' },
         ],
       },
     ]);
@@ -91,7 +91,7 @@ export const indexWardrobeHandler = async (
       await prisma.$executeRaw`UPDATE "WardrobeItem" SET embedding = ${embedding}::vector WHERE id = ${createdItem.id}`;
       itemsCreated++;
       console.debug({
-        message: "Created wardrobe item",
+        message: 'Created wardrobe item',
         itemId: createdItem.id,
         payload,
       });
@@ -105,7 +105,7 @@ export const indexWardrobeHandler = async (
 
   const result: IndexWardrobeResult = { message: `Created ${itemsCreated} wardrobe items` };
   console.info({
-    message: "Wardrobe indexing finished",
+    message: 'Wardrobe indexing finished',
     details: result.message,
     payload,
   });

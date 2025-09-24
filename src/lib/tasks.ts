@@ -1,3 +1,10 @@
+/**
+ * @module tasks
+ * @description Cloud Tasks integration for queueing background work to Google Cloud Functions.
+ * Handles wardrobe indexing, memory extraction, image upload, and feedback request tasks.
+ * In development mode, tasks short-circuit and run inline instead of being queued.
+ */
+
 import 'dotenv/config';
 
 import { CloudTasksClient, type protos } from '@google-cloud/tasks';
@@ -24,14 +31,6 @@ const IMAGE_UPLOAD_FUNCTION_URL = `https://${CLOUD_FUNCTION_REGION}-${PROJECT_ID
 const FEEDBACK_FUNCTION_URL = `https://${CLOUD_FUNCTION_REGION}-${PROJECT_ID}.cloudfunctions.net/sendFeedbackRequest`;
 
 const SERVICE_ACCOUNT_EMAIL = process.env.CLOUD_TASKS_SERVICE_ACCOUNT;
-
-/**
- * A generic task queuing function.
- * @param queueName The name of the Cloud Tasks queue.
- * @param functionUrl The URL of the Cloud Function to invoke.
- * @param payload The payload to send to the Cloud Function.
- * @param taskType The type of the task to record in the database.
- */
 
 async function queueTask(
   queueName: string,
@@ -99,10 +98,6 @@ function runTaskInBackground(taskType: TaskType, runner: () => Promise<void>): v
   });
 }
 
-/**
- * Queues a task to index wardrobe from a message by calling the cloud function.
- * @param messageId The ID of the message to process.
- */
 export function queueWardrobeIndex(userId: string, messageId: string): void {
   if (process.env.NODE_ENV === 'development') {
     logger.debug({ userId, messageId }, 'Skipping wardrobe index queueing in development');
@@ -119,10 +114,6 @@ export function queueWardrobeIndex(userId: string, messageId: string): void {
   );
 }
 
-/**
- * Queues a task to extract and save memories for a user by calling the cloud function.
- * @param userId The ID of the user to process.
- */
 export function queueMemoryExtraction(userId: string, conversationId: string): void {
   if (process.env.NODE_ENV === 'development') {
     logger.debug({ userId, conversationId }, 'Skipping memory extraction queueing in development');
@@ -139,11 +130,6 @@ export function queueMemoryExtraction(userId: string, conversationId: string): v
   );
 }
 
-/**
- * Queues a task to upload images for a user by calling the cloud function.
- * @param userId The ID of the user to process.
- * @param messageId The ID of the message containing the images.
- */
 export function queueImageUpload(userId: string, messageId: string): void {
   if (process.env.NODE_ENV === 'development') {
     logger.debug({ userId, messageId }, 'Skipping image upload queueing in development');

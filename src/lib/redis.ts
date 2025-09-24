@@ -1,19 +1,18 @@
+/**
+ * @module redis
+ * @description Redis client module providing a singleton connection with reconnection handling
+ * and event logging. Used for rate limiting, message queues, abort signals, and delivery tracking.
+ */
+
 import { createClient } from 'redis';
 
 import { logger } from '../utils/logger';
 
-/**
- * Global Redis client instance with connection management and error handling.
- * Uses singleton pattern to prevent multiple connections in development.
- */
+// Singleton to prevent connection leaks during hot reload
 const globalForRedis = global as unknown as {
   redis: ReturnType<typeof createClient>;
 };
 
-/**
- * Redis client instance configured with connection URL from environment.
- * Singleton pattern prevents multiple connections during hot reloading in development.
- */
 export const redis =
   globalForRedis.redis ||
   createClient({
@@ -30,12 +29,6 @@ if (process.env.NODE_ENV !== 'production') {
   globalForRedis.redis = redis;
 }
 
-/**
- * Establishes connection to Redis if not already connected.
- * Sets up singleton pattern for development environments to prevent connection leaks.
- *
- * @throws {Error} When Redis connection fails
- */
 export const connectRedis = async (): Promise<void> => {
   if (!redis.isOpen) {
     try {

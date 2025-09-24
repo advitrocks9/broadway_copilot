@@ -1,12 +1,14 @@
+/**
+ * @module prompts
+ * @description Prompt template loading and interpolation. Reads `.txt` prompt files from the
+ * `prompts/` directory and caches them in memory for reuse across agent invocations.
+ */
+
 import { promises as fsp } from 'fs';
 import path from 'path';
 
 import { InternalServerError } from './errors';
 
-/**
- * Loads a prompt template from prompts directory by filename.
- * @param filename The name of the prompt file.
- */
 export async function loadPrompt(filename: string): Promise<string> {
   const promptPath = path.resolve(process.cwd(), 'prompts', filename);
 

@@ -8,10 +8,6 @@ import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, Replies } from '../state';
 import { fetchColorAnalysis, searchWardrobe } from '../tools';
-/**
- * Structured output schema for final styling suggestion from LLM.
- * Defines the format for the generated fashion recommendation response.
- */
 const LLMOutputSchema = z.object({
   message1_text: z.string().describe('The main outfit suggestion.'),
   message2_text: z
@@ -20,14 +16,6 @@ const LLMOutputSchema = z.object({
     .describe('An optional, short follow-up message to ask a question or suggest the next step.'),
 });
 
-/**
- * Handles styling requests by coordinating wardrobe search and color analysis tools.
- * Uses LLM with tool calling to generate personalized fashion suggestions based on
- * user intent (occasion, vacation, pairing, suggest) and available wardrobe data.
- *
- * @param state - Agent graph state containing user data, styling intent, and conversation history
- * @returns Updated state with assistant reply containing styling suggestions
- */
 export async function handleStyling(state: GraphState): Promise<GraphState> {
   const { user, stylingIntent, conversationHistoryTextOnly } = state;
   const userId = user.id;

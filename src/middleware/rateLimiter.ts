@@ -8,16 +8,6 @@ import {
 } from '../utils/constants';
 import { BadRequestError, HttpError, ServiceUnavailableError } from '../utils/errors';
 import { logger } from '../utils/logger';
-/**
- * Express middleware implementing token bucket rate limiting for user requests.
- * Uses Redis to track token counts with automatic refill over time.
- * Allows requests to proceed on rate limiter errors to avoid blocking users.
- *
- * @param req - Express request object containing user ID
- * @param _res - Express response object (unused)
- * @param next - Express next function to continue request processing
- * @throws {HttpError} When rate limit is exceeded (503 Service Unavailable)
- */
 export const rateLimiter = async (req: Request, _res: Response, next: NextFunction) => {
   const webhook = req.body as TwilioWebhookRequest;
   const whatsappId = webhook.WaId;

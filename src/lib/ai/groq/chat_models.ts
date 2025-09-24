@@ -11,30 +11,10 @@ import { BaseChatCompletionsModel } from '../core/base_chat_completions_model';
 import { BaseMessage, SystemMessage, TextPart } from '../core/messages';
 import { GroqChatModelParams, RunOutcome } from '../core/runnables';
 
-/**
- * A chat model that interacts with the Groq API.
- * This class extends `BaseChatCompletionsModel` and is configured for Groq's endpoint.
- *
- * @example
- * ```typescript
- * const model = new ChatGroq({ model: 'llama3-70b-8192' });
- * const result = await model.run(
- *   new SystemMessage('You are a helpful assistant.'),
- *   [new UserMessage('Explain the importance of low-latency LLMs')],
- *   'some-graph-run-id'
- * );
- * console.log(result.assistant.content[0].text);
- * ```
- */
 export class ChatGroq extends BaseChatCompletionsModel {
   protected client: Groq;
   public params: GroqChatModelParams;
 
-  /**
-   * Creates an instance of ChatGroq.
-   * @param params - Optional parameters to override the model defaults.
-   * @param client - An optional Groq client instance, useful for testing or custom configurations.
-   */
   constructor(params: Partial<GroqChatModelParams> = {}) {
     const combinedParams: GroqChatModelParams = {
       model: 'llama3-70b-8192',

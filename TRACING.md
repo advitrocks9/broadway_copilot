@@ -1,6 +1,6 @@
 # Agent Tracing Suite Documentation
 
-This document provides a comprehensive overview of the agent's tracing suite. The system is designed to capture detailed, hierarchical data for every user interaction, enabling in-depth analysis, debugging, and performance monitoring via the admin dashboard.
+This doc covers the tracing setup in Broadway Copilot. The system captures detailed, hierarchical data for every user interaction, enabling in-depth analysis, debugging, and performance monitoring via the admin dashboard.
 
 ## High-Level Overview
 

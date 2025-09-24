@@ -1,12 +1,11 @@
-import { Storage } from "@google-cloud/storage";
-import { randomUUID } from "crypto";
-import fetch from "node-fetch";
-import { createWriteStream } from "fs";
-import { promises as fs } from "fs";
-import os from "os";
-import path from "path";
-import { pipeline } from "stream/promises";
-import { PrismaClient } from "@prisma/client";
+import { Storage } from '@google-cloud/storage';
+import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import { createWriteStream, promises as fs } from 'fs';
+import fetch from 'node-fetch';
+import os from 'os';
+import path from 'path';
+import { pipeline } from 'stream/promises';
 
 const storage = new Storage();
 
@@ -28,14 +27,14 @@ export const imageUploadHandler = async (
   const { userId, messageId } = payload;
   const bucketName = process.env.GCS_BUCKET_NAME;
 
-  console.debug({ message: "Starting image upload", payload });
+  console.debug({ message: 'Starting image upload', payload });
 
   if (!bucketName) {
-    throw new Error("GCS_BUCKET_NAME environment variable not set");
+    throw new Error('GCS_BUCKET_NAME environment variable not set');
   }
 
   const bucket = storage.bucket(bucketName);
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "uploads-"));
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'uploads-'));
 
   try {
     const images = await prisma.media.findMany({
@@ -43,16 +42,16 @@ export const imageUploadHandler = async (
     });
 
     if (images.length === 0) {
-      console.debug({ message: "No new images to upload", payload });
+      console.debug({ message: 'No new images to upload', payload });
       return {
-        message: "No new images to upload",
+        message: 'No new images to upload',
         successCount: 0,
         errorCount: 0,
       };
     }
 
     console.debug({
-      message: "Uploading images",
+      message: 'Uploading images',
       count: images.length,
       payload,
     });
@@ -69,7 +68,7 @@ export const imageUploadHandler = async (
             throw new Error(`Failed to fetch ${image.serverUrl}`);
           }
 
-          const extension = image.mimeType.split("/")[1] || "jpg";
+          const extension = image.mimeType.split('/')[1] || 'jpg';
           tempFilePath = path.join(tempDir, `${randomUUID()}.${extension}`);
 
           await pipeline(response.body, createWriteStream(tempFilePath));
@@ -88,10 +87,9 @@ export const imageUploadHandler = async (
 
           successCount++;
         } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
           console.error({
-            message: "Failed to upload image",
+            message: 'Failed to upload image',
             imageId: image.id,
             error: errorMessage,
             payload,
@@ -110,7 +108,7 @@ export const imageUploadHandler = async (
       successCount,
       errorCount,
     };
-    console.info({ message: "Image upload finished", result, payload });
+    console.info({ message: 'Image upload finished', result, payload });
     return result;
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});

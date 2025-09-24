@@ -1,3 +1,10 @@
+/**
+ * @module twilio
+ * @description Twilio messaging module for WhatsApp communication. Provides helpers for sending
+ * text, menu (quick reply), and image messages, along with webhook signature validation and
+ * delivery status tracking via Redis pub/sub channels.
+ */
+
 import 'dotenv/config';
 
 import { Request } from 'express';
@@ -41,11 +48,6 @@ async function getSubscriber(): Promise<RedisSubscriber> {
 
 let cachedClient: Twilio | undefined;
 
-/**
- * Retrieves or initializes a Twilio client with optimized configuration.
- * @returns The Twilio client instance.
- * @throws {HttpError} If Twilio credentials are missing.
- */
 function getTwilioClient(): Twilio {
   if (cachedClient) return cachedClient;
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -66,13 +68,6 @@ function getTwilioClient(): Twilio {
   return cachedClient;
 }
 
-/**
- * Sends a text message via Twilio WhatsApp API, optionally with an image.
- * @param to - Recipient's WhatsApp identifier.
- * @param body - Message text.
- * @param imageUrl - Optional image URL.
- * @throws {HttpError} If sending fails.
- */
 export async function sendText(to: string, body: string, imageUrl?: string): Promise<void> {
   const client = getTwilioClient();
   const fromNumber = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
@@ -94,14 +89,6 @@ export async function sendText(to: string, body: string, imageUrl?: string): Pro
   }
 }
 
-/**
- * Sends a menu message with quick reply buttons via Twilio.
- * Falls back to plain text if button count is invalid.
- * @param to - Recipient's WhatsApp identifier.
- * @param replyText - Message text.
- * @param buttons - Array of 2-3 quick reply buttons.
- * @throws {HttpError} If sending fails.
- */
 export async function sendMenu(
   to: string,
   replyText: string,
@@ -159,22 +146,11 @@ export async function sendMenu(
   }
 }
 
-/**
- * Sends an image message with optional caption via Twilio.
- * @param to - Recipient's WhatsApp identifier.
- * @param imageUrl - Image URL.
- * @param caption - Optional caption text.
- * @throws {HttpError} If sending fails.
- */
 export async function sendImage(to: string, imageUrl: string, caption?: string): Promise<void> {
   await sendText(to, caption || '', imageUrl);
   logger.debug({ to, imageUrl }, 'Sent image message');
 }
 
-/**
- * Waits for message status updates with timeouts.
- * @param sid - Message SID.
- */
 async function awaitStatuses(sid: string): Promise<void> {
   const configuredToWait = process.env.TWILIO_WAIT_FOR_STATUS === 'true';
   if (!configuredToWait) return;
@@ -238,10 +214,6 @@ async function awaitStatuses(sid: string): Promise<void> {
   redis.del(seenStatusesKey);
 }
 
-/**
- * Adds status callback URL to message options if configured.
- * @param options - Message options to modify.
- */
 function addStatusCallback(options: TwilioMessageOptions): void {
   const serverUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
   if (serverUrl) {
@@ -249,11 +221,6 @@ function addStatusCallback(options: TwilioMessageOptions): void {
   }
 }
 
-/**
- * Handles Twilio API errors and throws appropriate HttpError.
- * @param err - The Twilio error.
- * @throws {HttpError} Normalized error.
- */
 function handleTwilioError(err: TwilioApiError): never {
   if (err && err.code === 20003) {
     logger.error('Twilio auth failed (401). Verify TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.');
@@ -274,11 +241,6 @@ function handleTwilioError(err: TwilioApiError): never {
   throw new ServiceUnavailableError('Message delivery failed');
 }
 
-/**
- * Validates incoming Twilio request authenticity.
- * @param req - Express request object.
- * @returns True if valid, false otherwise.
- */
 export function validateTwilioRequest(req: Request): boolean {
   try {
     const signature = req.header('X-Twilio-Signature') || req.header('x-twilio-signature');
@@ -306,10 +268,6 @@ export function validateTwilioRequest(req: Request): boolean {
   }
 }
 
-/**
- * Processes Twilio status callback and resolves promises.
- * @param payload - Status callback payload.
- */
 export function processStatusCallback(payload: TwilioStatusCallbackPayload): void {
   if (!payload) {
     logger.warn('Empty callback payload received');

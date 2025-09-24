@@ -3,32 +3,7 @@ import { TraceBuffer } from '../../../agent/tracing';
 import { BaseChatModel } from './base_chat_model';
 import { BaseMessage, SystemMessage, TextPart } from './messages';
 
-/**
- * A runnable that wraps a chat model and forces it to produce a JSON object
- * that conforms to a provided Zod schema. It handles JSON extraction, parsing,
- * and validation, returning a typed object on success.
- *
- * @template T The Zod type of the schema.
- *
- * @example
- * ```typescript
- * const schema = z.object({
- *   name: z.string().describe('The name of the user'),
- *   age: z.number().describe('The age of the user'),
- * });
- *
- * const structuredModel = model.withStructuredOutput(schema);
- * const result = await structuredModel.run(
- *   [new UserMessage('Extract info from: John Doe is 30 years old.')]
- * );
- * // result is { name: 'John Doe', age: 30 }
- * ```
- */
 export class StructuredOutputRunnable<T extends ZodType> {
-  /**
-   * @param runner The model runner to wrap.
-   * @param schema The Zod schema to validate the output against.
-   */
   constructor(
     private runner: BaseChatModel,
     private schema: T,
@@ -43,22 +18,6 @@ export class StructuredOutputRunnable<T extends ZodType> {
     return schema;
   }
 
-  /**
-   * Executes the model and parses the output according to the schema.
-   *
-   * @param messages The messages to send to the model.
-   * @returns A promise that resolves to the parsed and validated output object.
-   * @throws An error if the model output is not valid JSON or does not
-   * match the provided schema.
-   *
-   * @example
-   * ```typescript
-   * const result = await structuredModel.run(
-   *   [new UserMessage('My name is Jane, I am 25.')]
-   * );
-   * // result is fully typed and validated: { name: 'Jane', age: 25 }
-   * ```
-   */
   async run(
     systemPrompt: SystemMessage,
     messages: BaseMessage[],

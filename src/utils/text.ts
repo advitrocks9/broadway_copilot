@@ -1,16 +1,5 @@
-/**
- * Text utilities for normalization and comparison.
- */
-
 import type { MessageContent, MessageContentPart } from '../lib/ai';
 
-/**
- * Extracts text content from message content array, replacing images with [IMAGE] placeholders.
- * Handles both structured message content arrays and plain text strings.
- *
- * @param content - Message content from LangChain (array of parts or plain string)
- * @returns Extracted text with image placeholders for multimodal content
- */
 export function extractTextContent(content: MessageContent | string): string {
   if (Array.isArray(content)) {
     return content

@@ -9,20 +9,12 @@ import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, Replies } from '../state';
 
-/**
- * Schema for LLM output when asking user for profile information.
- */
 const LLMOutputSchema = z.object({
   text: z
     .string()
     .describe('The natural language sentence asking the user for the missing information.'),
 });
 
-/**
- * Handles user onboarding by asking for missing profile information.
- * Generates a contextual response requesting the missing profile field (gender or age group)
- * and sets the conversation to pending state for the next user response.
- */
 export async function askUserInfo(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
   const messageId = state.input.MessageSid;

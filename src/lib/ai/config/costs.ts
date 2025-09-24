@@ -1,6 +1,4 @@
-/**
- * A centralized map of model costs per million tokens.
- */
+// Cost per million tokens
 export const MODEL_COSTS: Record<string, { input: number; output: number }> = {
   'gpt-5-mini': {
     input: 0.25,

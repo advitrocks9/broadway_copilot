@@ -1,3 +1,10 @@
+/**
+ * @module media
+ * @description Media download and processing utilities. Handles downloading images from Twilio
+ * media URLs, storing them locally in the uploads directory, and creating database records
+ * for tracking media through the processing pipeline.
+ */
+
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
@@ -13,13 +20,6 @@ const twilioAuth = {
   token: process.env.TWILIO_AUTH_TOKEN || '',
 };
 
-/**
- * Downloads media from Twilio and saves it locally
- * @param url - Twilio media URL
- * @param whatsappId - WhatsApp ID for user directory
- * @param mimeType - MIME type (e.g., 'image/jpeg')
- * @returns Public URL to the downloaded file
- */
 export async function downloadTwilioMedia(
   url: string,
   whatsappId: string,

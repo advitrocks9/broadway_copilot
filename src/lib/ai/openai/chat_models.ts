@@ -18,30 +18,10 @@ import { AssistantMessage, BaseMessage, SystemMessage, TextPart } from '../core/
 import { OpenAIChatModelParams, RunOutcome } from '../core/runnables';
 import { ToolCall, toOpenAIToolSpec } from '../core/tools';
 
-/**
- * A chat model that interacts with the OpenAI API.
- * This class extends `BaseChatCompletionsModel` and is configured for the OpenAI endpoint.
- *
- * @example
- * ```typescript
- * const model = new ChatOpenAI({ model: 'gpt-4o-mini' });
- * const result = await model.run(
- *   new SystemMessage('You are a helpful assistant.'),
- *   [new UserMessage('What is the capital of France?')],
- *   'some-graph-run-id'
- * );
- * console.log(result.assistant.content[0].text);
- * ```
- */
 export class ChatOpenAI extends BaseChatCompletionsModel {
   protected client: OpenAI;
   public params: OpenAIChatModelParams;
 
-  /**
-   * Creates an instance of ChatOpenAI.
-   * @param params - Optional parameters to override the model defaults.
-   * @param client - An optional OpenAI client instance, useful for testing or custom configurations.
-   */
   constructor(params: Partial<OpenAIChatModelParams> = {}) {
     const combinedParams: OpenAIChatModelParams = {
       model: 'gpt-4.1',

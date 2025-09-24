@@ -1,17 +1,17 @@
+/**
+ * @module prisma
+ * @description Database client module providing a singleton Prisma instance with connection
+ * management and event logging. Uses a global reference to prevent connection leaks during
+ * hot reloading in development.
+ */
+
 import { Prisma, PrismaClient } from '@prisma/client';
 
 import { logger } from '../utils/logger';
 
-/**
- * Global Prisma client instance for database operations.
- * Uses singleton pattern to prevent connection leaks in development.
- */
+// Singleton to prevent connection leaks during hot reload
 const globalForPrisma = globalThis as typeof globalThis & { prisma?: PrismaClient };
 
-/**
- * Prisma database client configured with error and warning event logging.
- * Singleton pattern prevents multiple connections during hot reloading in development.
- */
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
@@ -38,11 +38,6 @@ registerLogHandler('warn', (e: Prisma.LogEvent) => {
   logger.warn({ message: e.message }, 'Database warning');
 });
 
-/**
- * Connects to the database and logs the outcome.
- * Should be called at application startup to proactively initialize the connection pool.
- * @throws {Error} If the connection fails.
- */
 export async function connectPrisma() {
   try {
     await prisma.$connect();

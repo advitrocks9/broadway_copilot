@@ -12,7 +12,10 @@
     "prestart": "npm run build",
     "test:imageUpload": "npm run build && functions-framework --source=dist --target=imageUpload --port=8080",
     "test:storeMemories": "npm run build && functions-framework --source=dist --target=storeMemories --port=8081",
-    "test:indexWardrobe": "npm run build && functions-framework --source=dist --target=indexWardrobe --port=8082"
+    "test:indexWardrobe": "npm run build && functions-framework --source=dist --target=indexWardrobe --port=8082",
+    "lint": "eslint \"src/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\""
   },
   "dependencies": {
     "@google-cloud/functions-framework": "^4.0.0",
@@ -25,6 +28,12 @@
   "devDependencies": {
     "@types/node": "^24.3.1",
     "@types/node-fetch": "^2.6.13",
+    "@typescript-eslint/eslint-plugin": "^8.44.0",
+    "@typescript-eslint/parser": "^8.44.0",
+    "eslint": "^9.35.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "prettier": "^3.6.2",
     "prisma": "^6.16.0",
     "typescript": "^5.9.2"
   }

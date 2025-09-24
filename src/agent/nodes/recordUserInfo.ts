@@ -10,9 +10,6 @@ import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState } from '../state';
 
-/**
- * Structured output schema for confirming user profile fields.
- */
 const LLMOutputSchema = z.object({
   confirmed_gender: z
     .enum(Gender)
@@ -24,10 +21,6 @@ const LLMOutputSchema = z.object({
     ),
 });
 
-/**
- * Extracts and persists confirmed user profile fields inferred from recent conversation.
- * Resets pending state to NONE when complete.
- */
 export async function recordUserInfo(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
   try {

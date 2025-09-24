@@ -10,10 +10,6 @@ import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, IntentLabel } from '../state';
 
-/**
- * Schema for LLM output defining the routing decision.
- * Determines the primary intent and any missing profile requirements.
- */
 const LLMOutputSchema = z.object({
   intent: z
     .enum(['general', 'vibe_check', 'color_analysis', 'styling'])
@@ -28,19 +24,12 @@ const LLMOutputSchema = z.object({
     ),
 });
 
-/**
- * Routes the user's message to the appropriate handler based on intent analysis.
- * Uses a hierarchical routing strategy: button payloads → pending intents → LLM analysis.
- *
- * @param state - The current state of the agent graph containing user data and conversation history
- * @returns The determined intent and any new missing profile field that needs to be collected
- */
+/** Routes via: button payloads -> pending image intents -> LLM classification. */
 export async function routeIntent(state: GraphState): Promise<GraphState> {
   const { user, input, conversationHistoryWithImages, pending } = state;
   const userId = user.id;
   const buttonPayload = input.ButtonPayload;
 
-  // Priority 1: Handle explicit button payload routing
   if (buttonPayload) {
     const stylingRelated: string[] = ['styling', 'occasion', 'vacation', 'pairing'];
     const otherValid: string[] = ['general', 'vibe_check', 'color_analysis', 'suggest'];
@@ -59,7 +48,6 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
     return { ...state, intent, missingProfileField: null };
   }
 
-  // Priority 2: Handle pending image-based intents
   const imageCount = numImagesInMessage(conversationHistoryWithImages);
   if (imageCount > 0) {
     if (pending === PendingType.VIBE_CHECK_IMAGE) {
@@ -74,7 +62,7 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
     }
   }
 
-  // Calculate cooldown periods for premium services (30-minute cooldown)
+  // 30-minute cooldown between premium service uses
   const now = Date.now();
   const lastVibeCheckAt = user.lastVibeCheckAt?.getTime() ?? null;
   const vibeMinutesAgo = lastVibeCheckAt ? Math.floor((now - lastVibeCheckAt) / (1000 * 60)) : -1;
@@ -86,7 +74,6 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
     : -1;
   const canDoColorAnalysis = colorMinutesAgo === -1 || colorMinutesAgo >= 30;
 
-  // Priority 3: Use LLM for intelligent intent classification
   try {
     const systemPromptText = await loadPrompt('routing/route_intent.txt');
     const formattedSystemPrompt = systemPromptText

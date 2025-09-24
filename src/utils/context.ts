@@ -1,3 +1,10 @@
+/**
+ * @module context
+ * @description User and conversation context management. Resolves active sessions, rotates
+ * stale conversations after a configurable timeout, and builds structured context objects
+ * for the agent graph from database records.
+ */
+
 import { Conversation, ConversationStatus, Prisma, User } from '@prisma/client';
 
 import { BaseMessage } from '../lib/ai/core/messages';
@@ -7,13 +14,6 @@ import { logger } from './logger';
 
 const CONVERSATION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
-/**
- * Handles a stale conversation by closing it and creating a new one.
- *
- * @param user - The user for whom to handle the stale conversation.
- * @param conversation - The stale conversation to close.
- * @returns The new conversation.
- */
 async function handleStaleConversation(
   user: User,
   conversation: Conversation,
@@ -42,15 +42,6 @@ async function handleStaleConversation(
   return newConversation;
 }
 
-/**
- * Retrieves or creates a user and their active conversation.
- * This function handles user lookup/creation, finds the last open conversation,
- * closes stale conversations, and creates new ones if needed.
- *
- * @param whatsappId - The user's WhatsApp ID.
- * @param profileName - The user's profile name.
- * @returns An object containing the user and their active conversation.
- */
 export async function getOrCreateUserAndConversation(
   whatsappId: string,
   profileName: string,
@@ -91,13 +82,6 @@ export async function getOrCreateUserAndConversation(
   return { user, conversation: newConversation };
 }
 
-/**
- * Counts the number of image attachments in the most recent message.
- * Used to determine if image processing features should be triggered.
- *
- * @param conversationHistoryWithImages - Array of conversation messages with image data
- * @returns Number of image URLs in the latest message
- */
 export function numImagesInMessage(conversationHistoryWithImages: BaseMessage[]): number {
   if (!conversationHistoryWithImages || conversationHistoryWithImages.length === 0) {
     return 0;

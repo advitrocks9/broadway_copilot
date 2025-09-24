@@ -25,10 +25,6 @@ async function getSubscriber() {
   return subscriber;
 }
 
-/**
- * Builds and compiles the agent's state graph. This function should be called
- * once at application startup.
- */
 export async function initializeAgent(): Promise<void> {
   logger.info('Compiling agent graph...');
   try {
@@ -111,12 +107,6 @@ async function logGraphResult(
   }
 }
 
-/**
- * Executes the agent graph for a single message with proper error handling and abort support.
- *
- * @param input - Raw Twilio webhook payload containing message data
- * @param options - Optional configuration including abort signal
- */
 export async function runAgent(
   userId: string,
   messageId: string,

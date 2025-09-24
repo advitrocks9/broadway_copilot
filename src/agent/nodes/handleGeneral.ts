@@ -19,10 +19,6 @@ const LLMOutputSchema = z.object({
   message2_text: z.string().describe('The second text message response to the user.').nullable(),
 });
 
-/**
- * Handles general conversation intents such as greeting, menu, or open chat.
- * @param state Agent state containing user, conversation history, and routing info.
- */
 export async function handleGeneral(state: GraphState): Promise<GraphState> {
   const { user, conversationHistoryTextOnly, generalIntent, input } = state;
   const userId = user.id;

@@ -30,7 +30,6 @@ export async function routeGeneral(state: GraphState): Promise<GraphState> {
   logger.debug({ userId, messageId, lastMessage }, 'Routing general intent');
 
   try {
-    // Regex routing for common cases
     if (GREETING_REGEX.test(lastMessage)) {
       logger.debug({ userId }, 'General intent routed to "greeting" by regex');
       return { ...state, generalIntent: 'greeting' as GeneralIntent };
@@ -40,7 +39,6 @@ export async function routeGeneral(state: GraphState): Promise<GraphState> {
       return { ...state, generalIntent: 'menu' as GeneralIntent };
     }
 
-    // LLM routing for other cases
     const systemPromptText = await loadPrompt('routing/route_general.txt');
     const systemPrompt = new SystemMessage(systemPromptText);
 

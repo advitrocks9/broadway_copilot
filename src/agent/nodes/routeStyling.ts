@@ -7,9 +7,6 @@ import { loadPrompt } from '../../utils/prompts';
 
 import { InternalServerError } from '../../utils/errors';
 import { GraphState, Replies, StylingIntent } from '../state';
-/**
- * Routes the input to the appropriate styling handler based on the sub-router prompt.
- */
 const LLMOutputSchema = z.object({
   stylingIntent: z
     .enum(['occasion', 'vacation', 'pairing', 'suggest'])

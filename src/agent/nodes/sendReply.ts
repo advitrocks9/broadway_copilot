@@ -11,13 +11,6 @@ import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { GraphState, Replies } from '../state';
 
-/**
- * Sends the reply via Twilio based on the assistant's generated replies.
- * Records the assistant's message in the database and updates processing status.
- * Schedules memory extraction after sending.
- * @param state The current agent state containing reply and user info.
- * @returns An empty object as no state updates are needed.
- */
 export async function sendReply(state: GraphState): Promise<GraphState> {
   const { input, user, conversationId } = state;
   const messageId = input.MessageSid;

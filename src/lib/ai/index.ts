@@ -1,8 +1,3 @@
-/**
- * @module
- * This module exports the core components of the LLM library.
- */
-
 export * from './agents/executor';
 export * from './config/costs';
 export * from './config/llm';

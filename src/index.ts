@@ -35,10 +35,6 @@ const getUserActiveKey = (id: string) => `user_active:${id}`;
 const getUserQueueKey = (id: string) => `user_queue:${id}`;
 const getUserAbortChannel = (id: string) => `user_abort:${id}`;
 
-/**
- * Main Twilio webhook handler for incoming WhatsApp messages.
- * Handles message queuing, duplicate detection, and concurrency control.
- */
 app.post(
   '/twilio/',
   authenticateRequest,
@@ -116,9 +112,6 @@ app.post(
   },
 );
 
-/**
- * Twilio callback handler for message delivery status updates.
- */
 app.post(
   '/twilio/callback/',
   authenticateRequest,
@@ -134,14 +127,6 @@ app.post(
 
 app.use(errorHandler);
 
-/**
- * Processes a single message through the agent graph with concurrency control.
- * Manages message status, handles aborts, and processes queued messages.
- *
- * @param userId - The WhatsApp user ID
- * @param messageId - The Twilio message SID
- * @param input - The raw Twilio webhook payload
- */
 async function processMessage(
   userId: string,
   messageId: string,
@@ -201,10 +186,6 @@ async function processMessage(
   }
 }
 
-/**
- * Bootstrap function to initialize the server and connect to services.
- * Sets up Redis connection and starts the Express server.
- */
 void (async function bootstrap() {
   try {
     await connectRedis();

@@ -26,11 +26,6 @@ type SemanticResultRow = WardrobeRow & { distance: number };
 type KeywordResultRow = WardrobeRow & { keyword_matches: number | null };
 type TextResultRow = WardrobeRow;
 
-/**
- * Dynamic tool for searching user wardrobe using hybrid search approach.
- * Combines semantic similarity, keyword matching, and text search with optional filters.
- * Optimized for LLM styling suggestions and outfit recommendations.
- */
 export function searchWardrobe(userId: string): Tool {
   const searchWardrobeSchema = z.object({
     query: z
@@ -94,7 +89,6 @@ export function searchWardrobe(userId: string): Tool {
           { item: WardrobeRow; score: number; sources: string[] }
         >();
 
-        // 1. Semantic Search (Vector Similarity)
         const embeddingCount = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
           'SELECT COUNT(*) as count FROM "WardrobeItem" WHERE "userId" = $1 AND "embedding" IS NOT NULL',
           userId,
@@ -130,7 +124,6 @@ export function searchWardrobe(userId: string): Tool {
           }
         }
 
-        // 2. Keyword Search (Array overlap and text search)
         if (filters?.keywords && filters.keywords.length > 0) {
           const keywordQuery = `
             SELECT id, name, description, category, type, subtype, "mainColor", "secondaryColor", attributes, keywords, "searchDoc",
@@ -168,7 +161,6 @@ export function searchWardrobe(userId: string): Tool {
           }
         }
 
-        // 3. Text Search (Name and description)
         const searchTerms = query
           .toLowerCase()
           .split(/\s+/)
@@ -214,7 +206,6 @@ export function searchWardrobe(userId: string): Tool {
           }
         }
 
-        // Sort by combined score and return top results
         const sortedResults = Array.from(resultsMap.values())
           .sort((a, b) => b.score - a.score)
           .slice(0, limit)
@@ -249,10 +240,6 @@ export function searchWardrobe(userId: string): Tool {
   });
 }
 
-/**
- * Dynamic tool for retrieving user's latest color analysis results.
- * Provides color palette information, undertone analysis, and color recommendations.
- */
 export function fetchColorAnalysis(userId: string): Tool {
   const fetchColorAnalysisSchema = z
     .object({})
@@ -290,10 +277,6 @@ export function fetchColorAnalysis(userId: string): Tool {
   });
 }
 
-/**
- * Dynamic tool for retrieving user memories using semantic similarity search.
- * Optimized for fashion styling context - finds user preferences, sizes, style tastes, and constraints.
- */
 export function fetchRelevantMemories(userId: string): Tool {
   const fetchRelevantMemoriesSchema = z.object({
     query: z
