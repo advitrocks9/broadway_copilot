@@ -5,10 +5,12 @@
 /**
  * Twilio constants
  */
-export const TWILIO_WHATSAPP_FROM = 'whatsapp:+14155238886';
-export const TWILIO_QUICKREPLY2_SID = 'HXd3617403bdef70f5979d498fcfb82165';
-export const TWILIO_QUICKREPLY3_SID = 'HX60e62906ce18d4b64ac6d214fac74d8a';
 
+export const TWILIO_WHATSAPP_FROM = 'whatsapp:+14155238886';
+export const TWILIO_QUICKREPLY2_SID = 'HX76104ef8e7b6743389eb3ef7edef4f36';
+export const TWILIO_QUICKREPLY3_SID = 'HXb5079fd3669f4dde19bcdf35e07fcb58';
+export const TWILIO_QUICKREPLY_TONALITY_SID = 'HX7cd648ff1e4ac1011e0a1bb40aadac5c';
+export const TWILIO_QUICKREPLY_STYLING_SID = 'HX5329a0735b9238170541d6ef2a8a3e9b';
 /**
  * Media links
  */

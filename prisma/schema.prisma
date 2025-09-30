@@ -36,6 +36,7 @@ enum PendingType {
   COLOR_ANALYSIS_IMAGE
   ASK_USER_INFO
   FEEDBACK
+  TONALITY_SELECTION
 }
 
 enum TaskType {
@@ -182,22 +183,26 @@ model Memory {
 }
 
 model VibeCheck {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                      Int      @id @default(autoincrement())
+  userId                  Int
+  comment                 String
+  fit_silhouette_score    Float
+  fit_silhouette_explanation String
+  color_harmony_score     Float
+  color_harmony_explanation String
+  styling_details_score   Float
+  styling_details_explanation String
+  context_confidence_score Float
+  context_confidence_explanation String
+  overall_score           Float
+  recommendations         String[]
+  prompt                  String
+  follow_up               String
+  tonality                String?   // Add this line, optional if nullable
 
-  fit_silhouette      Float?
-  color_harmony       Float?
-  styling_details     Float?
-  accessories_texture Float?
-  context_confidence  Float?
-  overall_score       Float?
-  comment             String?
-
-  createdAt DateTime @default(now())
-
-  @@index([userId, createdAt])
+  @@map("vibe_check")
 }
+
 
 model ColorAnalysis {
   id     String @id @default(cuid())

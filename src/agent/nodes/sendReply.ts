@@ -44,6 +44,7 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
   });
 
   const pendingToPersist = (state.pending as PendingType | undefined) ?? PendingType.NONE;
+  const selectedTonalityToPersist = state.selectedTonality ?? null; // save tonality if present
 
   let success = true;
   try {
@@ -59,7 +60,21 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
           'Sent text message',
         );
       } else if (r.reply_type === 'quick_reply') {
-        await sendMenu(whatsappId, r.reply_text, r.buttons);
+        if (r.buttons.length === 4) {
+          await sendMenu(whatsappId, r.reply_text, r.buttons);
+        } else if (r.buttons.length === 3 || r.buttons.length === 2) {
+          await sendMenu(whatsappId, r.reply_text, r.buttons);
+        } else {
+          logger.warn(
+            {
+              whatsappId,
+              buttonCount: r.buttons.length,
+              replyIndex: index + 1,
+            },
+            'Unexpected button count - falling back to text',
+          );
+          await sendText(whatsappId, r.reply_text);
+        }
         logger.debug(
           { whatsappId, replyIndex: index + 1, buttonCount: r.buttons.length },
           'Sent menu message',
@@ -81,12 +96,14 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
     await redis.hSet(messageKey, { status: success ? 'delivered' : 'failed' });
   }
 
+  // Persist both pending and selectedTonality!
   await prisma.message.create({
     data: {
       conversationId,
       role: MessageRole.AI,
       content: formattedContent,
       pending: pendingToPersist,
+      selectedTonality: selectedTonalityToPersist, // <-- persist latest tonality
     },
   });
 

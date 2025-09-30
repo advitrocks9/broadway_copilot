@@ -49,7 +49,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     }
   }
 
-  const { savedMessage, messages, pending } = await prisma.$transaction(async (tx) => {
+  const { savedMessage, messages, pending: dbPending, selectedTonality: dbSelectedTonality } = await prisma.$transaction(async (tx) => {
     const [lastMessage, latestAssistantMessage] = await Promise.all([
       tx.message.findFirst({
         where: { conversationId },
@@ -62,11 +62,23 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
           role: MessageRole.AI,
         },
         orderBy: { createdAt: 'desc' },
-        select: { pending: true },
+        select: { pending: true, selectedTonality: true }, // <-- now selecting selectedTonality
       }),
     ]);
 
-    const pendingState = latestAssistantMessage?.pending ?? PendingType.NONE;
+    // Pull from DB
+    const pendingStateDB = latestAssistantMessage?.pending ?? PendingType.NONE;
+    const selectedTonalityDB = latestAssistantMessage?.selectedTonality ?? null;
+
+    logger.debug({
+      whatsappId,
+      pendingStateDB,
+      selectedTonalityDB,
+      conversationId,
+      graphRunId,
+      buttonPayload,
+      text,
+    }, 'IngestMessage: Current pending, selectedTonality, and input');
 
     let savedMessage;
     if (lastMessage && lastMessage.role === MessageRole.USER) {
@@ -126,8 +138,15 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
       })
       .then((msgs) => msgs.reverse());
 
-    return { savedMessage, messages, pending: pendingState };
+    // Return both pending and selectedTonality from DB (for fallback/merge)
+    return { savedMessage, messages, pending: pendingStateDB, selectedTonality: selectedTonalityDB };
   });
+
+  logger.debug({
+    pending: state.pending ?? dbPending,
+    selectedTonality: state.selectedTonality ?? dbSelectedTonality ?? null,
+    messagesCount: messages.length,
+  }, 'IngestMessage: Final state before returning');
 
   queueImageUpload(user.id, savedMessage.id);
 
@@ -164,11 +183,16 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
 
   logger.debug({ whatsappId, graphRunId }, 'Message ingested successfully');
 
+  /**
+   * The key: PREFER the latest computed state for pending/selectedTonality (from routing/handler).
+   * Use fallback from DB only if handler did not provide them.
+   */
   return {
     ...state,
     conversationHistoryWithImages,
     conversationHistoryTextOnly,
-    pending,
+    pending: state.pending ?? dbPending, // prioritize latest logic/state
+    selectedTonality: state.selectedTonality ?? dbSelectedTonality, // prioritize latest logic/state
     user,
     input,
   };

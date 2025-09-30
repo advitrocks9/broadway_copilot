@@ -54,6 +54,9 @@ export interface GraphState {
 
   /** The pending action type, if the agent is waiting for user input */
   pending: PendingType | null;
+
+  /** User's selected tonality for vibe check */
+  selectedTonality: string | null;
 }
 
 // ============================================================================
