@@ -79,7 +79,7 @@ export type StylingIntent = 'occasion' | 'vacation' | 'pairing' | 'suggest';
  * General conversation intents for non-styling related interactions.
  * These handle basic conversational flows like greetings and menu navigation.
  */
-export type GeneralIntent = 'greeting' | 'menu' | 'chat';
+export type GeneralIntent = 'greeting' | 'menu' | 'chat' | 'tonality';
 
 /**
  * Available services that can be offered to users.

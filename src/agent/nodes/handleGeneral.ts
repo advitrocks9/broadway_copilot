@@ -1,13 +1,13 @@
 import { z } from 'zod';
-import { GraphState, Replies } from '../state';
-import { InternalServerError } from '../../utils/errors';
-import { logger } from '../../utils/logger';
-import { WELCOME_IMAGE_URL } from '../../utils/constants';
-import { fetchRelevantMemories } from '../tools';
-import { loadPrompt } from '../../utils/prompts';
-import { SystemMessage } from '../../lib/ai/core/messages';
 import { getTextLLM } from '../../lib/ai';
 import { agentExecutor } from '../../lib/ai/agents/executor';
+import { SystemMessage } from '../../lib/ai/core/messages';
+import { WELCOME_IMAGE_URL } from '../../utils/constants';
+import { InternalServerError } from '../../utils/errors';
+import { logger } from '../../utils/logger';
+import { loadPrompt } from '../../utils/prompts';
+import { GraphState, Replies } from '../state';
+import { fetchRelevantMemories } from '../tools';
 
 // Define the output schema for chat responses locally
 const LLMOutputSchema = z.object({
@@ -43,9 +43,7 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
         { text: 'Color analysis', id: 'color_analysis' },
         { text: 'Styling', id: 'styling' },
       ];
-      const replies: Replies = [
-        { reply_type: 'quick_reply', reply_text: menuText, buttons },
-      ];
+      const replies: Replies = [{ reply_type: 'quick_reply', reply_text: menuText, buttons }];
       logger.debug({ userId, messageId }, 'Menu handled with static response');
       return { ...state, assistantReply: replies };
     }
@@ -57,9 +55,7 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
         { text: 'Friendly 🙂', id: 'friendly' },
         { text: 'Savage 😈', id: 'savage' },
       ];
-      const replies: Replies = [
-        { reply_type: 'quick_reply', reply_text: tonalityText, buttons },
-      ];
+      const replies: Replies = [{ reply_type: 'quick_reply', reply_text: tonalityText, buttons }];
       logger.debug({ userId, messageId }, 'Tonality handled with static response');
       return { ...state, assistantReply: replies };
     }
@@ -88,7 +84,6 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
     }
 
     throw new InternalServerError(`Unhandled general intent: ${generalIntent}`);
-
   } catch (err: unknown) {
     throw new InternalServerError('Failed to handle general intent', {
       cause: err,

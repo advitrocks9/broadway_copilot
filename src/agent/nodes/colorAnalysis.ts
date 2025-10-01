@@ -28,7 +28,9 @@ const ColorObjectSchema = z.object({
  * Schema for the LLM output in color analysis.
  */
 const LLMOutputSchema = z.object({
-  compliment: z.string().describe("A short compliment for the user (e.g., 'Looking sharp and confident!')."),
+  compliment: z
+    .string()
+    .describe("A short compliment for the user (e.g., 'Looking sharp and confident!')."),
   palette_name: z
     .string()
     .nullable()
@@ -36,17 +38,21 @@ const LLMOutputSchema = z.object({
   palette_description: z
     .string()
     .nullable()
-    .describe("Why this palette suits the user (e.g., 'Your strong contrast and cool undertones shine in the Deep Winter palette...')."),
+    .describe(
+      "Why this palette suits the user (e.g., 'Your strong contrast and cool undertones shine in the Deep Winter palette...').",
+    ),
   colors_suited: z
     .array(ColorObjectSchema)
-    .describe("Main representative colors from the palette."),
+    .describe('Main representative colors from the palette.'),
   colors_to_wear: z.object({
-    clothing: z.array(z.string()).describe("Recommended clothing colors."),
-    jewelry: z.array(z.string()).describe("Recommended jewelry tones (e.g., Silver, Rose Gold, White Gold)."),
+    clothing: z.array(z.string()).describe('Recommended clothing colors.'),
+    jewelry: z
+      .array(z.string())
+      .describe('Recommended jewelry tones (e.g., Silver, Rose Gold, White Gold).'),
   }),
   colors_to_avoid: z
     .array(ColorObjectSchema)
-    .describe("Colors that clash with the palette and should be avoided."),
+    .describe('Colors that clash with the palette and should be avoided.'),
 });
 
 const NoImageLLMOutputSchema = z.object({
@@ -127,12 +133,10 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
 
 👗 *Colors to Wear:* ${output.colors_to_wear.clothing.join(', ')}
 💍 *Jewelry:* ${output.colors_to_wear.jewelry.join(', ')}
-⚠️ *Colors to Avoid:* ${output.colors_to_avoid.map(c => c.name).join(', ')}
+⚠️ *Colors to Avoid:* ${output.colors_to_avoid.map((c) => c.name).join(', ')}
 `;
 
-    const replies: Replies = [
-      { reply_type: 'text', reply_text: formattedMessage.trim() },
-    ];
+    const replies: Replies = [{ reply_type: 'text', reply_text: formattedMessage.trim() }];
 
     logger.debug({ userId, messageId, replies }, 'Color analysis completed successfully');
 

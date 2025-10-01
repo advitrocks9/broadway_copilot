@@ -4,7 +4,12 @@ import { Request } from 'express';
 import twilio, { Twilio } from 'twilio';
 
 import RequestClient from 'twilio/lib/base/RequestClient';
-import { TWILIO_QUICKREPLY2_SID, TWILIO_QUICKREPLY3_SID } from '../utils/constants';
+import {
+  TWILIO_QUICKREPLY2_SID,
+  TWILIO_QUICKREPLY3_SID,
+  TWILIO_QUICKREPLY_STYLING_SID,
+  TWILIO_QUICKREPLY_TONALITY_SID,
+} from '../utils/constants';
 import {
   BadRequestError,
   InternalServerError,
@@ -41,11 +46,6 @@ async function getSubscriber(): Promise<RedisSubscriber> {
 
 let cachedClient: Twilio | undefined;
 
-/**
- * Retrieves or initializes a Twilio client with optimized configuration.
- * @returns The Twilio client instance.
- * @throws {HttpError} If Twilio credentials are missing.
- */
 function getTwilioClient(): Twilio {
   if (cachedClient) return cachedClient;
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -66,13 +66,6 @@ function getTwilioClient(): Twilio {
   return cachedClient;
 }
 
-/**
- * Sends a text message via Twilio WhatsApp API, optionally with an image.
- * @param to - Recipient's WhatsApp identifier.
- * @param body - Message text.
- * @param imageUrl - Optional image URL.
- * @throws {HttpError} If sending fails.
- */
 export async function sendText(to: string, body: string, imageUrl?: string): Promise<void> {
   const client = getTwilioClient();
   const fromNumber = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
@@ -94,87 +87,69 @@ export async function sendText(to: string, body: string, imageUrl?: string): Pro
   }
 }
 
-/**
- * Sends a menu message with quick reply buttons via Twilio.
- * Falls back to plain text if button count is invalid.
- * @param to - Recipient's WhatsApp identifier.
- * @param replyText - Message text.
- * @param buttons - Array of 2-3 quick reply buttons.
- * @throws {HttpError} If sending fails.
- */
 export async function sendMenu(
   to: string,
   replyText: string,
   buttons: readonly QuickReplyButton[],
 ): Promise<void> {
   const client = getTwilioClient();
+  const fromNumber = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
 
   if (buttons.length < 2 || buttons.length > 3) {
-    logger.warn(
-      `Invalid button count ${buttons.length}; must be 2-3 buttons. Falling back to text`,
-    );
+    logger.warn(`Invalid button count ${buttons.length}; must be 2 or 3. Falling back to text`);
     await sendText(to, replyText);
     return;
   }
 
-  const contentSid = buttons.length === 2 ? TWILIO_QUICKREPLY2_SID : TWILIO_QUICKREPLY3_SID;
-  const fromNumber = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
+  const tonalityOptions = ['Hype BFF', 'Friendly', 'Savage'];
+  const isTonality =
+    buttons.length === 3 && buttons.every((b) => tonalityOptions.includes(b.text.trim()));
 
-  const [firstButton, secondButton, thirdButton] = buttons as [
-    QuickReplyButton,
-    QuickReplyButton,
-    QuickReplyButton?,
-  ];
+  // Updated template SID selection to include your custom styling template SID
+  const contentSid = isTonality
+    ? TWILIO_QUICKREPLY_TONALITY_SID
+    : buttons.length === 2
+      ? TWILIO_QUICKREPLY2_SID
+      : buttons.length === 3 &&
+          buttons.some((b) => ['Occasion', 'Pairing', 'Vacation'].includes(b.text))
+        ? TWILIO_QUICKREPLY_STYLING_SID
+        : TWILIO_QUICKREPLY3_SID;
 
-  const contentVariables: Record<string, string> = {
-    '1': replyText,
-    '2': firstButton.text,
-    '3': firstButton.id,
-    '4': secondButton.text,
-    '5': secondButton.id,
+  const templateLocales: Record<string, string> = {
+    [TWILIO_QUICKREPLY_TONALITY_SID]: 'en',
+    [TWILIO_QUICKREPLY2_SID]: 'en',
+    [TWILIO_QUICKREPLY3_SID]: 'en',
+    [TWILIO_QUICKREPLY_STYLING_SID]: 'en',
   };
 
-  if (thirdButton) {
-    contentVariables['6'] = thirdButton.text;
-    contentVariables['7'] = thirdButton.id;
-  }
+  const localeCode = templateLocales[contentSid] || 'en';
+
+  const contentVariables: Record<string, string> = {};
+
+  const payload = {
+    contentSid,
+    contentVariables: JSON.stringify(contentVariables),
+    from: fromNumber,
+    to: `whatsapp:+${to}`,
+    language: { code: localeCode },
+  } as unknown as TwilioMessageOptions;
+
+  addStatusCallback(payload);
 
   try {
-    const payload: TwilioMessageOptions = {
-      contentSid,
-      contentVariables: JSON.stringify(contentVariables),
-      from: fromNumber,
-      to: `whatsapp:+${to}`,
-    };
-
-    addStatusCallback(payload);
     const resp = await client.messages.create(payload);
-    logger.debug(
-      { sid: resp.sid, to, buttonCount: buttons.length },
-      'Sent menu message with buttons',
-    );
+    logger.debug({ sid: resp.sid, to, buttonCount: buttons.length }, 'Sent menu message');
     await awaitStatuses(resp.sid);
   } catch (err: unknown) {
     handleTwilioError(err as TwilioApiError);
   }
 }
 
-/**
- * Sends an image message with optional caption via Twilio.
- * @param to - Recipient's WhatsApp identifier.
- * @param imageUrl - Image URL.
- * @param caption - Optional caption text.
- * @throws {HttpError} If sending fails.
- */
 export async function sendImage(to: string, imageUrl: string, caption?: string): Promise<void> {
   await sendText(to, caption || '', imageUrl);
   logger.debug({ to, imageUrl }, 'Sent image message');
 }
 
-/**
- * Waits for message status updates with timeouts.
- * @param sid - Message SID.
- */
 async function awaitStatuses(sid: string): Promise<void> {
   const configuredToWait = process.env.TWILIO_WAIT_FOR_STATUS === 'true';
   if (!configuredToWait) return;
@@ -207,7 +182,6 @@ async function awaitStatuses(sid: string): Promise<void> {
 
   await sub.subscribe(channel, listener);
 
-  // Check for statuses that arrived before we subscribed
   const preSeenStatuses = await redis.sMembers(seenStatusesKey);
   if (preSeenStatuses.includes('sent')) {
     resolveSent();
@@ -238,10 +212,6 @@ async function awaitStatuses(sid: string): Promise<void> {
   redis.del(seenStatusesKey);
 }
 
-/**
- * Adds status callback URL to message options if configured.
- * @param options - Message options to modify.
- */
 function addStatusCallback(options: TwilioMessageOptions): void {
   const serverUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
   if (serverUrl) {
@@ -249,11 +219,6 @@ function addStatusCallback(options: TwilioMessageOptions): void {
   }
 }
 
-/**
- * Handles Twilio API errors and throws appropriate HttpError.
- * @param err - The Twilio error.
- * @throws {HttpError} Normalized error.
- */
 function handleTwilioError(err: TwilioApiError): never {
   if (err && err.code === 20003) {
     logger.error('Twilio auth failed (401). Verify TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.');
@@ -274,11 +239,6 @@ function handleTwilioError(err: TwilioApiError): never {
   throw new ServiceUnavailableError('Message delivery failed');
 }
 
-/**
- * Validates incoming Twilio request authenticity.
- * @param req - Express request object.
- * @returns True if valid, false otherwise.
- */
 export function validateTwilioRequest(req: Request): boolean {
   try {
     const signature = req.header('X-Twilio-Signature') || req.header('x-twilio-signature');
@@ -306,10 +266,6 @@ export function validateTwilioRequest(req: Request): boolean {
   }
 }
 
-/**
- * Processes Twilio status callback and resolves promises.
- * @param payload - Status callback payload.
- */
 export function processStatusCallback(payload: TwilioStatusCallbackPayload): void {
   if (!payload) {
     logger.warn('Empty callback payload received');
@@ -330,7 +286,6 @@ export function processStatusCallback(payload: TwilioStatusCallbackPayload): voi
 
   redis.publish(channel, statusLower);
 
-  // Store status in case callback arrives before listener is ready
   redis.sAdd(seenStatusesKey, statusLower);
   redis.expire(seenStatusesKey, 300); // 5 minutes TTL
 

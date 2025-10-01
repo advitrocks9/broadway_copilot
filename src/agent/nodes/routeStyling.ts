@@ -11,7 +11,9 @@ import { GraphState, Replies, StylingIntent } from '../state';
 const LLMOutputSchema = z.object({
   stylingIntent: z
     .enum(['occasion', 'vacation', 'pairing', 'suggest'])
-    .describe("The specific styling intent of the user's message, used to route to the appropriate styling handler."),
+    .describe(
+      "The specific styling intent of the user's message, used to route to the appropriate styling handler.",
+    ),
 });
 
 export async function routeStyling(state: GraphState): Promise<GraphState> {
@@ -53,7 +55,10 @@ export async function routeStyling(state: GraphState): Promise<GraphState> {
       .withStructuredOutput(LLMOutputSchema)
       .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'routeStyling');
 
-    logger.debug({ userId, stylingIntent: response.stylingIntent }, 'Styling intent determined from LLM');
+    logger.debug(
+      { userId, stylingIntent: response.stylingIntent },
+      'Styling intent determined from LLM',
+    );
 
     return { ...state, ...response };
   } catch (err: unknown) {

@@ -10,10 +10,12 @@ import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, IntentLabel } from '../state';
 
-/**
- * Schema for LLM output defining the routing decision.
- * Determines the primary intent and any missing profile requirements.
- */
+// --- Shared constants section ---
+const validTonalities: string[] = ['friendly', 'savage', 'hype_bff'];
+const stylingRelated: string[] = ['styling', 'occasion', 'vacation', 'pairing'];
+const otherValid: string[] = ['general', 'vibe_check', 'color_analysis', 'suggest'];
+
+// --- LLM Output Schema ---
 const LLMOutputSchema = z.object({
   intent: z
     .enum(['general', 'vibe_check', 'color_analysis', 'styling'])
@@ -28,22 +30,16 @@ const LLMOutputSchema = z.object({
     ),
 });
 
-const validTonalities = ['friendly', 'savage', 'hype_bff'];
-
-/**
- * Routes the user's message to the appropriate handler based on intent analysis.
- * Uses a hierarchical routing strategy: button payloads → pending intents → LLM analysis.
- *
- * @param state - The current state of the agent graph containing user data and conversation history
- * @returns The determined intent and any new missing profile field that needs to be collected
- */
 export async function routeIntent(state: GraphState): Promise<GraphState> {
-  logger.debug({
-    buttonPayload: state.input.ButtonPayload,
-    pending: state.pending,
-    selectedTonality: state.selectedTonality,
-    userId: state.user.id,
-  }, 'Routing intent with current state');
+  logger.debug(
+    {
+      buttonPayload: state.input.ButtonPayload,
+      pending: state.pending,
+      selectedTonality: state.selectedTonality,
+      userId: state.user.id,
+    },
+    'Routing intent with current state',
+  );
 
   const { user, input, conversationHistoryWithImages, pending } = state;
   const userId = user.id;
@@ -51,10 +47,6 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
 
   // Priority 1: Handle explicit button payload routing
   if (buttonPayload) {
-    const stylingRelated: string[] = ['styling', 'occasion', 'vacation', 'pairing'];
-    const otherValid: string[] = ['general', 'vibe_check', 'color_analysis', 'suggest'];
-    const validTonalities: string[] = ['friendly', 'savage', 'hype_bff'];
-
     let intent: IntentLabel = 'general';
 
     if (stylingRelated.includes(buttonPayload)) {
@@ -62,17 +54,20 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
     } else if (otherValid.includes(buttonPayload)) {
       intent = buttonPayload as IntentLabel;
       if (intent === 'vibe_check') {
-        logger.debug({
-          selectedTonality: state.selectedTonality,
-          pending: state.pending,
-          buttonPayload,
-        }, 'Received vibe_check buttonPayload - resetting selectedTonality and pending');
+        logger.debug(
+          {
+            selectedTonality: state.selectedTonality,
+            pending: state.pending,
+            buttonPayload,
+          },
+          'Received vibe_check buttonPayload - resetting selectedTonality and pending',
+        );
         // Force fresh tonality selection!
         return {
           ...state,
           intent: 'vibe_check',
-          pending: PendingType.TONALITY_SELECTION,   // Prompt for tonality
-          selectedTonality: null,                    // Reset previous tonality
+          pending: PendingType.TONALITY_SELECTION, // No redundant comment
+          selectedTonality: null,
           missingProfileField: null,
         };
       }
@@ -150,36 +145,47 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
       const formattedSystemPrompt = systemPromptText
         .replace('{can_do_vibe_check}', canDoVibeCheck.toString())
         .replace('{can_do_color_analysis}', canDoColorAnalysis.toString());
-    
+
       const systemPrompt = new SystemMessage(formattedSystemPrompt);
-    
+
       const response = await getTextLLM()
         .withStructuredOutput(LLMOutputSchema)
         .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'routeIntent');
-    
+
       let { intent, missingProfileField } = response;
-    
+
       if (missingProfileField) {
-        logger.debug({ userId, missingProfileField }, 'Checking if missingProfileField can be cleared based on user profile');
-    
+        logger.debug(
+          { userId, missingProfileField },
+          'Checking if missingProfileField can be cleared based on user profile',
+        );
+
         if (missingProfileField === 'gender' && (user.inferredGender || user.confirmedGender)) {
-          logger.debug({ userId }, 'Clearing missingProfileField gender because user already has it.');
+          logger.debug(
+            { userId },
+            'Clearing missingProfileField gender because user already has it.',
+          );
           missingProfileField = null;
         } else if (
           missingProfileField === 'age_group' &&
           (user.inferredAgeGroup || user.confirmedAgeGroup)
         ) {
-          logger.debug({ userId }, 'Clearing missingProfileField age_group because user already has it.');
+          logger.debug(
+            { userId },
+            'Clearing missingProfileField age_group because user already has it.',
+          );
           missingProfileField = null;
         }
       }
-    
-      // Set generalIntent for the tonality menu when vibe_check intent and TONALITY_SELECTION pending
+
       if (intent === 'vibe_check' && state.pending === PendingType.TONALITY_SELECTION) {
         state.generalIntent = 'tonality';
-        logger.debug({ userId, intent, pending: state.pending, generalIntent: state.generalIntent }, 'Set generalIntent to tonality for vibe_check with TONALITY_SELECTION');
+        logger.debug(
+          { userId, intent, pending: state.pending, generalIntent: state.generalIntent },
+          'Set generalIntent to tonality for vibe_check with TONALITY_SELECTION',
+        );
       }
-    
+
       return { ...state, intent, missingProfileField, generalIntent: state.generalIntent };
     } catch (err: unknown) {
       throw new InternalServerError('Failed to route intent', { cause: err });

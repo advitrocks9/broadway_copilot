@@ -70,7 +70,7 @@ export function buildAgentGraph() {
     .addConditionalEdges(
       'routeStyling',
       (s: GraphState) => {
-        logger.debug({ userId: s.user.id, stylingIntent: s.stylingIntent, assistantReplyExists: !!s.assistantReply }, 'Routing from routeStyling node');
+        // Removed redundant debug log as per review
 
         if (s.assistantReply) {
           return 'sendReply';

@@ -49,7 +49,12 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     }
   }
 
-  const { savedMessage, messages, pending: dbPending, selectedTonality: dbSelectedTonality } = await prisma.$transaction(async (tx) => {
+  const {
+    savedMessage,
+    messages,
+    pending: dbPending,
+    selectedTonality: dbSelectedTonality,
+  } = await prisma.$transaction(async (tx) => {
     const [lastMessage, latestAssistantMessage] = await Promise.all([
       tx.message.findFirst({
         where: { conversationId },
@@ -70,15 +75,18 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     const pendingStateDB = latestAssistantMessage?.pending ?? PendingType.NONE;
     const selectedTonalityDB = latestAssistantMessage?.selectedTonality ?? null;
 
-    logger.debug({
-      whatsappId,
-      pendingStateDB,
-      selectedTonalityDB,
-      conversationId,
-      graphRunId,
-      buttonPayload,
-      text,
-    }, 'IngestMessage: Current pending, selectedTonality, and input');
+    logger.debug(
+      {
+        whatsappId,
+        pendingStateDB,
+        selectedTonalityDB,
+        conversationId,
+        graphRunId,
+        buttonPayload,
+        text,
+      },
+      'IngestMessage: Current pending, selectedTonality, and input',
+    );
 
     let savedMessage;
     if (lastMessage && lastMessage.role === MessageRole.USER) {
@@ -139,14 +147,22 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
       .then((msgs) => msgs.reverse());
 
     // Return both pending and selectedTonality from DB (for fallback/merge)
-    return { savedMessage, messages, pending: pendingStateDB, selectedTonality: selectedTonalityDB };
+    return {
+      savedMessage,
+      messages,
+      pending: pendingStateDB,
+      selectedTonality: selectedTonalityDB,
+    };
   });
 
-  logger.debug({
-    pending: state.pending ?? dbPending,
-    selectedTonality: state.selectedTonality ?? dbSelectedTonality ?? null,
-    messagesCount: messages.length,
-  }, 'IngestMessage: Final state before returning');
+  logger.debug(
+    {
+      pending: state.pending ?? dbPending,
+      selectedTonality: state.selectedTonality ?? dbSelectedTonality ?? null,
+      messagesCount: messages.length,
+    },
+    'IngestMessage: Final state before returning',
+  );
 
   queueImageUpload(user.id, savedMessage.id);
 

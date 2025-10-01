@@ -5,9 +5,9 @@ import { getTextLLM, getVisionLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
 import { prisma } from '../../lib/prisma';
 import { queueWardrobeIndex } from '../../lib/tasks';
+import type { QuickReplyButton } from '../../lib/twilio/types';
 import { numImagesInMessage } from '../../utils/context';
 import { loadPrompt } from '../../utils/prompts';
-import type { QuickReplyButton } from '../../lib/twilio/types';
 
 import { PendingType, Prisma } from '@prisma/client';
 import { InternalServerError } from '../../utils/errors';
@@ -20,17 +20,21 @@ const ScoringCategorySchema = z.object({
 
 const LLMOutputSchema = z.object({
   comment: z.string().describe("Overall comment or reason summarizing the outfit's vibe."),
-  fit_silhouette: ScoringCategorySchema.describe("Assessment of fit & silhouette."),
-  color_harmony: ScoringCategorySchema.describe("Assessment of color coordination."),
-  styling_details: ScoringCategorySchema.describe("Assessment of accessories, layers, and details."),
-  context_confidence: ScoringCategorySchema.describe("How confident the outfit fits the occasion."),
-  overall_score: z.number().min(0).max(10).describe("Overall fractional score for the outfit."),
-  recommendations: z.array(z.string()).describe("Actionable style suggestions."),
-  prompt: z.string().describe("The original input prompt or context."),
+  fit_silhouette: ScoringCategorySchema.describe('Assessment of fit & silhouette.'),
+  color_harmony: ScoringCategorySchema.describe('Assessment of color coordination.'),
+  styling_details: ScoringCategorySchema.describe(
+    'Assessment of accessories, layers, and details.',
+  ),
+  context_confidence: ScoringCategorySchema.describe('How confident the outfit fits the occasion.'),
+  overall_score: z.number().min(0).max(10).describe('Overall fractional score for the outfit.'),
+  recommendations: z.array(z.string()).describe('Actionable style suggestions.'),
+  prompt: z.string().describe('The original input prompt or context.'),
 });
 
 const NoImageLLMOutputSchema = z.object({
-  reply_text: z.string().describe('The text to send to the user explaining they need to send an image.'),
+  reply_text: z
+    .string()
+    .describe('The text to send to the user explaining they need to send an image.'),
 });
 
 const tonalityButtons: QuickReplyButton[] = [
@@ -40,27 +44,32 @@ const tonalityButtons: QuickReplyButton[] = [
 ];
 
 export async function vibeCheck(state: GraphState): Promise<GraphState> {
-  logger.debug({
-    userId: state.user.id,
-    pending: state.pending,
-    selectedTonality: state.selectedTonality,
-    intent: state.intent,
-  }, 'Entering vibeCheck node with state');
+  logger.debug(
+    {
+      userId: state.user.id,
+      pending: state.pending,
+      selectedTonality: state.selectedTonality,
+      intent: state.intent,
+    },
+    'Entering vibeCheck node with state',
+  );
 
   const userId = state.user.id;
 
   try {
     // If user hasn't chosen tonality yet, prompt for it
     if (!state.selectedTonality) {
-      const replies: Replies = [{
-        reply_type: 'quick_reply',
-        reply_text: 'Choose a tonality for your vibe check:',
-        buttons: tonalityButtons,
-      }];
+      const replies: Replies = [
+        {
+          reply_type: 'quick_reply',
+          reply_text: 'Choose a tonality for your vibe check:',
+          buttons: tonalityButtons,
+        },
+      ];
       return {
         ...state,
         assistantReply: replies,
-        pending: PendingType.TONALITY_SELECTION, // Add this to your PendingType enum
+        pending: PendingType.TONALITY_SELECTION,
       };
     }
 

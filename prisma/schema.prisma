@@ -1,7 +1,7 @@
 datasource db {
-  provider   = "postgresql"
-  url        = env("DATABASE_URL")
-  extensions = [vector(version: "0.8.0")]
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  extensions = [ vector(version: "0.8.1") ]
 }
 
 generator client {
@@ -15,12 +15,10 @@ enum MessageRole {
   SYSTEM
   TOOL
 }
-
 enum Gender {
   MALE
   FEMALE
 }
-
 enum AgeGroup {
   AGE_13_17
   AGE_18_25
@@ -29,7 +27,6 @@ enum AgeGroup {
   AGE_46_55
   AGE_55_PLUS
 }
-
 enum PendingType {
   NONE
   VIBE_CHECK_IMAGE
@@ -38,33 +35,28 @@ enum PendingType {
   FEEDBACK
   TONALITY_SELECTION
 }
-
 enum TaskType {
   SEND_FEEDBACK_REQUEST
   SCHEDULE_WARDROBE_INDEX
   PROCESS_MEMORIES
   UPLOAD_IMAGES
 }
-
 enum TaskStatus {
   QUEUED
   IN_PROGRESS
   COMPLETED
   FAILED
 }
-
 enum GraphRunStatus {
   RUNNING
   COMPLETED
   ERROR
   ABORTED
 }
-
 enum ConversationStatus {
   OPEN
   CLOSED
 }
-
 enum WardrobeItemCategory {
   TOP
   BOTTOM
@@ -122,14 +114,16 @@ model Conversation {
 }
 
 model Message {
-  id             String       @id @default(cuid())
-  conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  id              String      @id @default(cuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  role          MessageRole
-  intent        String?
-  buttonPayload String?
-  pending       PendingType? @default(NONE)
+  role            MessageRole
+  intent          String?
+  buttonPayload   String?
+  pending         PendingType? @default(NONE)
+
+  selectedTonality String? 
 
   content          Json[] @default([])
   additionalKwargs Json?
@@ -183,44 +177,46 @@ model Memory {
 }
 
 model VibeCheck {
-  id                      Int      @id @default(autoincrement())
-  userId                  Int
-  comment                 String
-  fit_silhouette_score    Float
-  fit_silhouette_explanation String
-  color_harmony_score     Float
-  color_harmony_explanation String
-  styling_details_score   Float
+  id                          Int      @id @default(autoincrement())
+  userId                      String
+  user                        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment                     String
+  fit_silhouette_score        Float
+  fit_silhouette_explanation  String
+  color_harmony_score         Float
+  color_harmony_explanation   String
+  styling_details_score       Float
   styling_details_explanation String
-  context_confidence_score Float
+  context_confidence_score    Float
   context_confidence_explanation String
-  overall_score           Float
-  recommendations         String[]
-  prompt                  String
-  follow_up               String
-  tonality                String?   // Add this line, optional if nullable
-
+  overall_score               Float
+  recommendations             String[]
+  prompt                      String
+  tonality                    String?   // optional
   @@map("vibe_check")
 }
-
-
 model ColorAnalysis {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  skin_tone     String?
-  eye_color     String?
-  hair_color    String?
-  undertone     String?
-  palette_name  String?
-  top3_colors   Json?
-  avoid3_colors Json?
+  skin_tone        String?
+  eye_color        String?
+  hair_color       String?
+  undertone        String?
+  compliment       String?   // New field to store compliment
+  palette_name     String?
+  palette_description String?
+  colors_suited    Json?
+  colors_to_wear   Json?
+  colors_to_avoid  Json?
 
-  createdAt DateTime @default(now())
+  createdAt        DateTime @default(now())
 
   @@index([userId, createdAt])
 }
+
+
 
 model WardrobeItem {
   id     String @id @default(cuid())

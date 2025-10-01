@@ -294,7 +294,6 @@ export function fetchColorAnalysis(userId: string): Tool {
   });
 }
 
-
 /**
  * Dynamic tool for retrieving user memories using semantic similarity search.
  * Optimized for fashion styling context - finds user preferences, sizes, style tastes, and constraints.
