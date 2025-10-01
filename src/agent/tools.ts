@@ -262,23 +262,27 @@ export function fetchColorAnalysis(userId: string): Tool {
   return new Tool({
     name: 'fetchColorAnalysis',
     description:
-      "Retrieves the user's most recent color analysis results. This includes their recommended color palette, skin undertone, and specific colors that flatter them or that they should avoid. Use this to give personalized style advice based on colors.",
+      "Retrieves the user's most recent color analysis results. Includes their recommended color palette, skin undertone, colors to wear, and colors to avoid. Use for personalized style advice.",
     schema: fetchColorAnalysisSchema,
     func: async () => {
       try {
         const result = await prisma.colorAnalysis.findFirst({
           select: {
             palette_name: true,
-            top3_colors: true,
-            avoid3_colors: true,
-            undertone: true,
+            palette_description: true,
+            compliment: true,
+            colors_suited: true,
+            colors_to_wear: true,
+            colors_to_avoid: true,
           },
           where: { userId },
           orderBy: { createdAt: 'desc' },
         });
+
         if (!result) {
           return 'No color analysis found for the user.';
         }
+
         return result;
       } catch (err: unknown) {
         logger.error({ userId, err: (err as Error)?.message }, 'Failed to fetch color analysis');

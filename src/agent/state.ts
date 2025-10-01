@@ -54,6 +54,9 @@ export interface GraphState {
 
   /** The pending action type, if the agent is waiting for user input */
   pending: PendingType | null;
+
+  /** User's selected tonality for vibe check */
+  selectedTonality: string | null;
 }
 
 // ============================================================================
@@ -76,7 +79,7 @@ export type StylingIntent = 'occasion' | 'vacation' | 'pairing' | 'suggest';
  * General conversation intents for non-styling related interactions.
  * These handle basic conversational flows like greetings and menu navigation.
  */
-export type GeneralIntent = 'greeting' | 'menu' | 'chat';
+export type GeneralIntent = 'greeting' | 'menu' | 'chat' | 'tonality';
 
 /**
  * Available services that can be offered to users.

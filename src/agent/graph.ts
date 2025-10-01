@@ -17,13 +17,6 @@ import {
 } from './nodes';
 import { GraphState } from './state';
 
-/**
- * Builds and compiles the agent's state graph defining all nodes and their transitions.
- * The graph orchestrates the conversation flow from message ingestion through routing
- * and handling to final response generation.
- *
- * @returns Compiled StateGraph instance ready for execution
- */
 export function buildAgentGraph() {
   const graph = new StateGraph<GraphState>()
     .addNode('ingestMessage', ingestMessage)
@@ -77,6 +70,8 @@ export function buildAgentGraph() {
     .addConditionalEdges(
       'routeStyling',
       (s: GraphState) => {
+        // Removed redundant debug log as per review
+
         if (s.assistantReply) {
           return 'sendReply';
         }

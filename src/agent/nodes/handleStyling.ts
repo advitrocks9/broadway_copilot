@@ -8,10 +8,7 @@ import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, Replies } from '../state';
 import { fetchColorAnalysis, searchWardrobe } from '../tools';
-/**
- * Structured output schema for final styling suggestion from LLM.
- * Defines the format for the generated fashion recommendation response.
- */
+
 const LLMOutputSchema = z.object({
   message1_text: z.string().describe('The main outfit suggestion.'),
   message2_text: z
@@ -20,14 +17,6 @@ const LLMOutputSchema = z.object({
     .describe('An optional, short follow-up message to ask a question or suggest the next step.'),
 });
 
-/**
- * Handles styling requests by coordinating wardrobe search and color analysis tools.
- * Uses LLM with tool calling to generate personalized fashion suggestions based on
- * user intent (occasion, vacation, pairing, suggest) and available wardrobe data.
- *
- * @param state - Agent graph state containing user data, styling intent, and conversation history
- * @returns Updated state with assistant reply containing styling suggestions
- */
 export async function handleStyling(state: GraphState): Promise<GraphState> {
   const { user, stylingIntent, conversationHistoryTextOnly } = state;
   const userId = user.id;
@@ -44,7 +33,7 @@ export async function handleStyling(state: GraphState): Promise<GraphState> {
       const systemPrompt = new SystemMessage(systemPromptText);
       const response = await getTextLLM()
         .withStructuredOutput(LLMOutputSchema)
-        .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'handleStyling');
+        .run(systemPrompt, conversationHistoryTextOnly, state.traceBuffer, 'handleStyling');
       const reply_text = response.message1_text as string;
       logger.debug({ userId, reply_text }, 'Returning with default LLM reply');
       const replies: Replies = [{ reply_type: 'text', reply_text }];
@@ -79,6 +68,7 @@ export async function handleStyling(state: GraphState): Promise<GraphState> {
     logger.debug({ userId, replies }, 'Returning styling response');
     return { ...state, assistantReply: replies };
   } catch (err: unknown) {
+    logger.error({ userId, err }, 'Error in handleStyling');
     throw new InternalServerError('Failed to handle styling request', {
       cause: err,
     });
