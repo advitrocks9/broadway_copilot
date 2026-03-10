@@ -1,14 +1,7 @@
 export type Item = {
   name: string;
   description: string;
-  category:
-    | "TOP"
-    | "BOTTOM"
-    | "ONE_PIECE"
-    | "OUTERWEAR"
-    | "SHOES"
-    | "BAG"
-    | "ACCESSORY";
+  category: 'TOP' | 'BOTTOM' | 'ONE_PIECE' | 'OUTERWEAR' | 'SHOES' | 'BAG' | 'ACCESSORY';
   type: string;
   subtype: string | null;
   mainColor: string;
@@ -27,28 +20,28 @@ export type Item = {
 };
 
 const normalize = (text?: string | null): string => {
-  if (!text) return "";
+  if (!text) return '';
 
   return text
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s-]/gu, "")
-    .replace(/\s+/g, " ")
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .replace(/\s+/g, ' ')
     .trim();
 };
 
-const categoryToken = (category: Item["category"]): string =>
-  category.toLowerCase().replace("_", "-");
+const categoryToken = (category: Item['category']): string =>
+  category.toLowerCase().replace('_', '-');
 
 const splitDetails = (details?: string): string[] => {
   const text = normalize(details);
   if (!text) return [];
 
   return text
-    .split(",")
+    .split(',')
     .map((phrase) => phrase.trim())
     .filter(Boolean)
     .flatMap((phrase) => {
-      const words = phrase.split(" ").filter(Boolean);
+      const words = phrase.split(' ').filter(Boolean);
       // Keep phrase and individual words for short phrases
       return words.length <= 3 ? [phrase, ...words] : [phrase];
     })
@@ -56,16 +49,8 @@ const splitDetails = (details?: string): string[] => {
 };
 
 export const buildKeywords = (item: Item, maxLen = 12): string[] => {
-  const {
-    type,
-    subtype,
-    category,
-    mainColor,
-    secondaryColor,
-    attributes = {},
-  } = item;
-  const { style, material, pattern, fit, length, occasion, season, details } =
-    attributes;
+  const { type, subtype, category, mainColor, secondaryColor, attributes = {} } = item;
+  const { style, material, pattern, fit, length, occasion, season, details } = attributes;
 
   const tokens: string[] = [];
 
@@ -77,7 +62,7 @@ export const buildKeywords = (item: Item, maxLen = 12): string[] => {
     const subtypeNorm = normalize(subtype);
     tokens.push(subtypeNorm);
     // Split multiword subtypes
-    const words = subtypeNorm.split(" ").filter(Boolean);
+    const words = subtypeNorm.split(' ').filter(Boolean);
     if (words.length > 1) tokens.push(...words);
   }
 
@@ -105,7 +90,7 @@ export const buildKeywords = (item: Item, maxLen = 12): string[] => {
     .map((token) =>
       token
         .toLowerCase()
-        .replace(/[^\w\s-]/g, "")
+        .replace(/[^\w\s-]/g, '')
         .trim(),
     )
     .filter(Boolean);
@@ -115,16 +100,8 @@ export const buildKeywords = (item: Item, maxLen = 12): string[] => {
 };
 
 export const buildSearchDoc = (item: Item): string => {
-  const {
-    type,
-    subtype,
-    category,
-    mainColor,
-    secondaryColor,
-    attributes = {},
-  } = item;
-  const { style, pattern, material, fit, length, occasion, season, details } =
-    attributes;
+  const { type, subtype, category, mainColor, secondaryColor, attributes = {} } = item;
+  const { style, pattern, material, fit, length, occasion, season, details } = attributes;
 
   const typeNorm = normalize(type);
   const subtypeNorm = normalize(subtype);
@@ -132,7 +109,7 @@ export const buildSearchDoc = (item: Item): string => {
   // Expand details lightly - split by comma, keep short phrases
   const detailTokens = details
     ? normalize(details)
-        .split(",")
+        .split(',')
         .map((phrase) => phrase.trim())
         .filter((phrase) => phrase.length > 0 && phrase.length <= 20) // Skip very long phrases
         .slice(0, 3) // Keep max 3 detail phrases
@@ -140,9 +117,9 @@ export const buildSearchDoc = (item: Item): string => {
 
   const parts = [
     normalize(mainColor),
-    secondaryColor ? normalize(secondaryColor) : "",
+    secondaryColor ? normalize(secondaryColor) : '',
     subtypeNorm || typeNorm,
-    subtypeNorm ? typeNorm : "", // Include type if subtype present
+    subtypeNorm ? typeNorm : '', // Include type if subtype present
     categoryToken(category),
     normalize(style),
     normalize(pattern),
@@ -162,5 +139,5 @@ export const buildSearchDoc = (item: Item): string => {
     return true;
   });
 
-  return deduplicated.join(" ");
+  return deduplicated.join(' ');
 };

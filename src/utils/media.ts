@@ -1,3 +1,10 @@
+/**
+ * @module media
+ * @description Media download and processing utilities. Handles downloading images from Twilio
+ * media URLs, storing them locally in the uploads directory, and creating database records
+ * for tracking media through the processing pipeline.
+ */
+
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';

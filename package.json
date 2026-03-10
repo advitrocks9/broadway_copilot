@@ -1,20 +1,37 @@
 {
   "name": "broadway-copilot",
   "version": "1.0.0",
-  "description": "",
+  "description": "AI-powered personal stylist on WhatsApp, built with a LangGraph state machine, OpenAI/Groq, and Express",
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
     "graph": "ts-node-dev --transpile-only scripts/visualizeGraph.ts",
     "prune": "ts-prune",
-    "format": "prettier --write \"src/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.ts\" \"functions/src/**/*.ts\"",
     "lint": "eslint \"src/**/*.ts\""
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "langgraph",
+    "whatsapp-bot",
+    "ai-stylist",
+    "fashion-ai",
+    "typescript",
+    "nodejs",
+    "postgresql",
+    "pgvector",
+    "redis",
+    "google-cloud-run",
+    "twilio",
+    "openai",
+    "computer-vision"
+  ],
+  "author": "Advit Arora",
+  "license": "MIT",
   "engines": {
     "node": ">=22.0.0"
   },
@@ -49,6 +66,7 @@
     "prisma": "^6.15.0",
     "ts-node-dev": "^2.0.0",
     "ts-prune": "^0.10.3",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^3.1.0"
   }
 }

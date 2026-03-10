@@ -1,3 +1,10 @@
+/**
+ * @module tasks
+ * @description Cloud Tasks integration for queueing background work to Google Cloud Functions.
+ * Handles wardrobe indexing, memory extraction, image upload, and feedback request tasks.
+ * In development mode, tasks short-circuit and run inline instead of being queued.
+ */
+
 import 'dotenv/config';
 
 import { CloudTasksClient, type protos } from '@google-cloud/tasks';

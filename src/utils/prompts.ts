@@ -1,3 +1,9 @@
+/**
+ * @module prompts
+ * @description Prompt template loading and interpolation. Reads `.txt` prompt files from the
+ * `prompts/` directory and caches them in memory for reuse across agent invocations.
+ */
+
 import { promises as fsp } from 'fs';
 import path from 'path';
 

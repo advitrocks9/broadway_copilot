@@ -7,7 +7,14 @@ uploads
 .env
 Dockerfile
 README.md
+CONTRIBUTING.md
+TRACING.md
+LICENSE
+.nvmrc
 langgraph.png
 prisma/migrations
 scripts
 functions
+__tests__
+vitest.config.ts
+coverage

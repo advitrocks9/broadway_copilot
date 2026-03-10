@@ -1,3 +1,9 @@
+/**
+ * @module redis
+ * @description Redis client module providing a singleton connection with reconnection handling
+ * and event logging. Used for rate limiting, message queues, abort signals, and delivery tracking.
+ */
+
 import { createClient } from 'redis';
 
 import { logger } from '../utils/logger';

@@ -1,14 +1,13 @@
-import { PrismaClient, Message, Prisma } from "@prisma/client";
-import fs from "fs";
-import path from "path";
-import { getEmbedding, generateJson, isTextContentPart } from "../utils/openai";
+import { Message, Prisma, PrismaClient } from '@prisma/client';
+import fs from 'fs';
+import path from 'path';
+import { generateJson, getEmbedding, isTextContentPart } from '../utils/openai';
 
 const MEMORY_EXTRACTION_PROMPT = fs.readFileSync(
-  path.join(__dirname, "..", "..", "memories_prompt.txt"),
-  "utf-8",
+  path.join(__dirname, '..', '..', 'memories_prompt.txt'),
+  'utf-8',
 );
-const MEMORY_EXTRACTION_MODEL =
-  process.env.OPENAI_MEMORY_EXTRACTION_MODEL || "gpt-5-mini";
+const MEMORY_EXTRACTION_MODEL = process.env.OPENAI_MEMORY_EXTRACTION_MODEL || 'gpt-5-mini';
 
 export type StoreMemoriesPayload = {
   userId: string;
@@ -20,23 +19,19 @@ export type StoreMemoriesResult = {
 };
 
 type Memory = { memory: string };
-type MessageContent = Pick<Message, "role" | "content">;
+type MessageContent = Pick<Message, 'role' | 'content'>;
 
 const formatMessageContent = (content: Prisma.JsonValue[]): string => {
-  const textParts = content
-    .filter(isTextContentPart)
-    .map((part) => part.text.trim());
+  const textParts = content.filter(isTextContentPart).map((part) => part.text.trim());
 
-  return textParts.join(" ") || "";
+  return textParts.join(' ') || '';
 };
 
-const extractMemories = async (
-  messages: MessageContent[],
-): Promise<Memory[]> => {
+const extractMemories = async (messages: MessageContent[]): Promise<Memory[]> => {
   const formattedMessages = messages
-    .filter((m) => m.role === "USER" || m.role === "AI")
+    .filter((m) => m.role === 'USER' || m.role === 'AI')
     .map((m) => ({
-      role: m.role === "USER" ? ("user" as const) : ("assistant" as const),
+      role: m.role === 'USER' ? ('user' as const) : ('assistant' as const),
       text: formatMessageContent(m.content),
     }))
     .filter((m) => m.text.length > 0);
@@ -45,32 +40,22 @@ const extractMemories = async (
 
   const result = await generateJson<Memory[]>(MEMORY_EXTRACTION_MODEL, [
     {
-      role: "system",
-      content: [{ type: "input_text", text: MEMORY_EXTRACTION_PROMPT }],
+      role: 'system',
+      content: [{ type: 'input_text', text: MEMORY_EXTRACTION_PROMPT }],
     },
     {
-      role: "user",
-      content: [
-        { type: "input_text", text: JSON.stringify(formattedMessages) },
-      ],
+      role: 'user',
+      content: [{ type: 'input_text', text: JSON.stringify(formattedMessages) }],
     },
   ]);
 
-  return result.filter(
-    (m): m is Memory => typeof m.memory === "string" && m.memory.length > 0,
-  );
+  return result.filter((m): m is Memory => typeof m.memory === 'string' && m.memory.length > 0);
 };
 
-const saveMemories = async (
-  prisma: PrismaClient,
-  userId: string,
-  memories: Memory[],
-) => {
+const saveMemories = async (prisma: PrismaClient, userId: string, memories: Memory[]) => {
   await Promise.all(
     memories.map(async (memory) => {
-      const { embedding, model, dimensions } = await getEmbedding(
-        memory.memory,
-      );
+      const { embedding, model, dimensions } = await getEmbedding(memory.memory);
 
       const createdMemory = await prisma.memory.create({
         data: {
@@ -101,23 +86,23 @@ export const storeMemoriesHandler = async (
   payload: StoreMemoriesPayload,
 ): Promise<StoreMemoriesResult> => {
   const { userId, conversationId } = payload;
-  console.debug({ message: "Starting memory storage", payload });
+  console.debug({ message: 'Starting memory storage', payload });
 
   const messages = await prisma.message.findMany({
     where: { conversationId, memoriesProcessed: false },
-    orderBy: { createdAt: "asc" },
+    orderBy: { createdAt: 'asc' },
   });
 
   if (messages.length === 0) {
     console.debug({
-      message: "No new messages to process for memories",
+      message: 'No new messages to process for memories',
       payload,
     });
-    return { message: "No new messages to process" };
+    return { message: 'No new messages to process' };
   }
 
   console.debug({
-    message: "Processing messages for memories",
+    message: 'Processing messages for memories',
     count: messages.length,
     payload,
   });
@@ -125,13 +110,13 @@ export const storeMemoriesHandler = async (
 
   if (memories.length > 0) {
     console.debug({
-      message: "Extracted memories",
+      message: 'Extracted memories',
       count: memories.length,
       payload,
     });
     await saveMemories(prisma, userId, memories);
   } else {
-    console.debug({ message: "No memories extracted", payload });
+    console.debug({ message: 'No memories extracted', payload });
   }
 
   await markProcessed(
@@ -143,7 +128,7 @@ export const storeMemoriesHandler = async (
     message: `Processed ${messages.length} messages, extracted ${memories.length} memories`,
   };
   console.info({
-    message: "Memory storage finished",
+    message: 'Memory storage finished',
     details: result.message,
     payload,
   });

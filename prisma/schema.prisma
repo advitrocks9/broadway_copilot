@@ -1,3 +1,20 @@
+// =============================================================================
+// Broadway Copilot — Prisma Schema
+// =============================================================================
+//
+// Data model for the Broadway Copilot AI stylist application, organized as:
+//
+//   CORE           User, Conversation, Message — primary entities
+//   MEDIA          Media attachments linked to messages
+//   USER PROFILE   Memory, VibeCheck, ColorAnalysis, WardrobeItem
+//   TRACING        GraphRun, NodeRun, LLMTrace — agent execution tracing
+//   BACKGROUND     Task — Cloud Tasks lifecycle tracking
+//   ADMIN          UserWhitelist, admin auth tables
+//
+// The authoritative copy lives at functions/prisma/schema.prisma.
+// This copy is used for local development and Prisma client generation.
+// =============================================================================
+
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")

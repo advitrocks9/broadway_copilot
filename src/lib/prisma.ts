@@ -1,3 +1,10 @@
+/**
+ * @module prisma
+ * @description Database client module providing a singleton Prisma instance with connection
+ * management and event logging. Uses a global reference to prevent connection leaks during
+ * hot reloading in development.
+ */
+
 import { Prisma, PrismaClient } from '@prisma/client';
 
 import { logger } from '../utils/logger';

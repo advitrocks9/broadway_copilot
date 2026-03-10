@@ -1,3 +1,10 @@
+/**
+ * @module twilio
+ * @description Twilio messaging module for WhatsApp communication. Provides helpers for sending
+ * text, menu (quick reply), and image messages, along with webhook signature validation and
+ * delivery status tracking via Redis pub/sub channels.
+ */
+
 import 'dotenv/config';
 
 import { Request } from 'express';

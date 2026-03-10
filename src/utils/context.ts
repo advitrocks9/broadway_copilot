@@ -1,3 +1,10 @@
+/**
+ * @module context
+ * @description User and conversation context management. Resolves active sessions, rotates
+ * stale conversations after a configurable timeout, and builds structured context objects
+ * for the agent graph from database records.
+ */
+
 import { Conversation, ConversationStatus, Prisma, User } from '@prisma/client';
 
 import { BaseMessage } from '../lib/ai/core/messages';

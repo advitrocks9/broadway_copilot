@@ -66,10 +66,5 @@ Thumbs.db
 # Uploads (user content)
 uploads/
 
-# Tests
-**/__tests__/
-**/*.test.*
-**/*.spec.*
-
 # TypeScript
 *.tsbuildinfo
